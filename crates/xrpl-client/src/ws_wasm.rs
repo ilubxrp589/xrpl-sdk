@@ -151,9 +151,10 @@ impl XrplWsClient {
         let (tx, rx) = futures::channel::oneshot::channel();
 
         {
-            let mut map = self.pending.lock().map_err(|_| {
-                ClientError::UnexpectedResponse("mutex lock poisoned".into())
-            })?;
+            let mut map = self
+                .pending
+                .lock()
+                .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
             map.insert(id, tx);
         }
 
@@ -180,9 +181,10 @@ impl XrplWsClient {
     pub async fn subscribe_ledger(&self) -> Result<(), ClientError> {
         let params = json!({"streams": ["ledger"]});
         self.request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().map_err(|_| {
-            ClientError::UnexpectedResponse("mutex lock poisoned".into())
-        })?;
+        let mut subs = self
+            .active_subs
+            .lock()
+            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
         if !subs.contains(&params) {
             subs.push(params);
         }
@@ -193,9 +195,10 @@ impl XrplWsClient {
     pub async fn subscribe_transactions(&self) -> Result<(), ClientError> {
         let params = json!({"streams": ["transactions"]});
         self.request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().map_err(|_| {
-            ClientError::UnexpectedResponse("mutex lock poisoned".into())
-        })?;
+        let mut subs = self
+            .active_subs
+            .lock()
+            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
         if !subs.contains(&params) {
             subs.push(params);
         }
@@ -206,9 +209,10 @@ impl XrplWsClient {
     pub async fn subscribe_account(&self, account: &str) -> Result<(), ClientError> {
         let params = json!({"accounts": [account]});
         self.request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().map_err(|_| {
-            ClientError::UnexpectedResponse("mutex lock poisoned".into())
-        })?;
+        let mut subs = self
+            .active_subs
+            .lock()
+            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
         if !subs.contains(&params) {
             subs.push(params);
         }
