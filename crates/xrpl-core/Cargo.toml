@@ -1,0 +1,40 @@
+[package]
+name = "xrpl-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core types, binary codec, and cryptography for the XRP Ledger"
+license = "MIT"
+repository = "https://github.com/xrpl-rust/xrpl-sdk"
+authors = ["XRPL Rust SDK Contributors"]
+keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
+categories = ["cryptography", "api-bindings"]
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["std"]
+std = ["serde/std", "serde_json", "hex/std", "rand", "thiserror/std", "bs58/std"]
+wasm = ["wasm-bindgen", "js-sys", "getrandom", "std"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+ripemd = { workspace = true }
+hmac = { workspace = true }
+bs58 = { workspace = true }
+ed25519-dalek = { workspace = true }
+k256 = { workspace = true }
+rand = { workspace = true, optional = true }
+zeroize = { workspace = true }
+
+# WASM support
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

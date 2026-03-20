@@ -1,0 +1,50 @@
+[package]
+name = "xrpl-client"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP and WebSocket clients for the XRP Ledger"
+license = "MIT"
+repository = "https://github.com/xrpl-rust/xrpl-sdk"
+authors = ["XRPL Rust SDK Contributors"]
+keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
+categories = ["cryptography", "api-bindings"]
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+xrpl-core = { path = "../xrpl-core", version = "0.1" }
+serde = { workspace = true, features = ["std"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true, features = ["std"] }
+tracing = { workspace = true }
+futures = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
+tokio-tungstenite = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "WebSocket",
+    "MessageEvent",
+    "CloseEvent",
+    "ErrorEvent",
+    "EventTarget",
+    "BinaryType",
+    "console",
+] }
+futures = "0.3"
+
+[features]
+default = ["http"]
+http = []
+ws = []
+full = ["http", "ws"]
+live-tests = []
+wasm = ["xrpl-core/wasm"]

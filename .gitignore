@@ -1,0 +1,11 @@
+target/
+pkg/
+fuzz/target/
+fuzz/corpus/
+*.mp4
+.env
+.env.*
+.DS_Store
+*.swp
+*.swo
+*~

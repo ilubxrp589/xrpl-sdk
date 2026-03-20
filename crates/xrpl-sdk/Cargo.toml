@@ -1,0 +1,28 @@
+[package]
+name = "xrpl-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Production-grade Rust SDK for the XRP Ledger"
+license = "MIT"
+repository = "https://github.com/xrpl-rust/xrpl-sdk"
+authors = ["XRPL Rust SDK Contributors"]
+keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
+categories = ["cryptography", "api-bindings"]
+
+[dependencies]
+xrpl-core = { path = "../xrpl-core", version = "0.1" }
+xrpl-client = { path = "../xrpl-client", version = "0.1" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true }
+
+[features]
+default = ["http"]
+http = ["xrpl-client/http"]
+ws = ["xrpl-client/ws"]
+full = ["http", "ws"]
+live-tests = ["xrpl-client/live-tests"]

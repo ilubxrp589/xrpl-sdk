@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>XRPL Rust SDK — Browser Demo</title>
+    <style>
+        body { font-family: monospace; max-width: 900px; margin: 40px auto; padding: 20px; }
+        pre { background: #1a1a1a; color: #00ff00; padding: 16px; border-radius: 4px; overflow-x: auto; }
+        button { padding: 8px 16px; margin: 8px 0; cursor: pointer; }
+        input { width: 100%; padding: 8px; margin: 4px 0; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>XRPL Rust SDK — Browser Demo</h1>
+    <p>All operations run in WebAssembly compiled from Rust.</p>
+
+    <h2>1. Validate Address</h2>
+    <input id="addr-input" type="text" value="rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh" />
+    <button onclick="validateAddr()">Validate</button>
+    <pre id="addr-output"></pre>
+
+    <h2>2. Generate Seed</h2>
+    <button onclick="genSeed('ed25519')">Generate Ed25519 Seed</button>
+    <button onclick="genSeed('secp256k1')">Generate Secp256k1 Seed</button>
+    <pre id="seed-output"></pre>
+
+    <h2>3. Decode Transaction Blob</h2>
+    <input id="blob-input" type="text"
+        value="1200002200000000240000000361D4838D7EA4C6800000000000000000000000000055534400000000004B4E9C06F24296074F7BC48F92A97916C6DC5EA968400000000000000C732103AB40A0490F9B7ED8DF29D246BF2D6269820A0EE7742ACDD457BEA7C7D0931EDB7446304402204CD0F6C73D4DF1BC7E18AC1C77CF3E2C2B88E9F3A1BB4CA36C252C5DE0C33840220481C78BE88E9DB1F2EA7D32EB5CB8C8B9AB1B7F4EB5D929FE48E8F7F0E6F0B581146B5B7BAC9A22F8B8B89B97282E36E0B1B4DFA58E8314F667B0CA50CC7709A220B0561B85E53A48461FA8" />
+    <button onclick="decodeBlob()">Decode</button>
+    <pre id="decode-output"></pre>
+
+    <h2>4. Encode Transaction</h2>
+    <button onclick="encodeExample()">Encode Example Payment</button>
+    <pre id="encode-output"></pre>
+
+    <script type="module">
+        import init, {
+            is_valid_address,
+            address_to_account_id,
+            generate_seed,
+            seed_to_address,
+            decode_transaction,
+            encode_transaction,
+        } from '../../pkg/xrpl-core/xrpl_core.js';
+
+        await init();
+
+        window.validateAddr = () => {
+            const addr = document.getElementById('addr-input').value;
+            const valid = is_valid_address(addr);
+            let out = `Address: ${addr}\nValid: ${valid}`;
+            if (valid) {
+                try {
+                    const id = address_to_account_id(addr);
+                    out += `\nAccountID (hex): ${id}`;
+                } catch (e) { out += `\nError: ${e}`; }
+            }
+            document.getElementById('addr-output').textContent = out;
+        };
+
+        window.genSeed = (keyType) => {
+            try {
+                const seed = generate_seed(keyType);
+                const address = seed_to_address(seed);
+                document.getElementById('seed-output').textContent =
+                    `Key Type: ${keyType}\nSeed: ${seed}\nAddress: ${address}`;
+            } catch (e) {
+                document.getElementById('seed-output').textContent = `Error: ${e}`;
+            }
+        };
+
+        window.decodeBlob = () => {
+            const blob = document.getElementById('blob-input').value.trim();
+            try {
+                const json = decode_transaction(blob);
+                const parsed = JSON.parse(json);
+                document.getElementById('decode-output').textContent =
+                    JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                document.getElementById('decode-output').textContent = `Error: ${e}`;
+            }
+        };
+
+        window.encodeExample = () => {
+            const tx = {
+                TransactionType: "Payment",
+                Account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+                Destination: "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+                Amount: "1000000",
+                Fee: "12",
+                Sequence: 1,
+                Flags: 0,
+                SigningPubKey: ""
+            };
+            try {
+                const blob = encode_transaction(JSON.stringify(tx));
+                document.getElementById('encode-output').textContent =
+                    `Input JSON:\n${JSON.stringify(tx, null, 2)}\n\nEncoded blob:\n${blob}`;
+            } catch (e) {
+                document.getElementById('encode-output').textContent = `Error: ${e}`;
+            }
+        };
+    </script>
+</body>
+</html>
