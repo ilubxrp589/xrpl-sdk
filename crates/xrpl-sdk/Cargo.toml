@@ -2,7 +2,7 @@
 name = "xrpl-sdk"
 version = "0.1.0"
 edition = "2021"
-description = "Production-grade Rust SDK for the XRP Ledger"
+description = "Community-built Rust SDK for the XRP Ledger"
 license = "MIT"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["XRPL Rust SDK Contributors"]

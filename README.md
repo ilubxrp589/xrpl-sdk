@@ -1,6 +1,6 @@
 # xrpl-sdk
 
-Production-grade Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
+Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
 ## Crates
 
