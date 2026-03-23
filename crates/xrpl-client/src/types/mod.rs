@@ -173,13 +173,19 @@ pub struct BookOffersResult {
 /// A single order book offer.
 #[derive(Debug, Clone, Deserialize)]
 pub struct BookOffer {
+    #[serde(rename = "Account")]
     pub account: String,
+    #[serde(rename = "Flags")]
     pub flags: u32,
+    #[serde(rename = "Sequence")]
     pub sequence: u32,
+    #[serde(rename = "TakerGets")]
     pub taker_gets: Value,
+    #[serde(rename = "TakerPays")]
     pub taker_pays: Value,
     pub quality: Option<String>,
     pub owner_funds: Option<String>,
+    #[serde(rename = "Expiration")]
     pub expiration: Option<u32>,
     #[serde(rename = "BookDirectory")]
     pub book_directory: Option<String>,

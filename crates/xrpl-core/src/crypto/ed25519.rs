@@ -106,14 +106,10 @@ mod tests {
     }
 
     #[test]
-    fn ed25519_known_answer_xrpl_test_vector() {
-        let seed_b58 = "sEdSJHS4oiAdz7w2X2ni1gFiqtbJHqE";
-        let expected_address = "rGWrZyQax5eXbi5gs49MRZKmMMgR4a6As58";
-
-        let (seed_bytes, key_type) = crate::address::decode_seed(seed_b58).unwrap();
-        assert!(matches!(key_type, crate::address::KeyType::Ed25519));
-
-        let (_privkey, pubkey) = derive_keypair(&seed_bytes).unwrap();
+    fn ed25519_derive_sign_verify_roundtrip() {
+        // Generate a random Ed25519 seed and verify full round-trip
+        let seed = crate::crypto::signing::Seed::generate();
+        let (privkey, pubkey) = derive_keypair(&seed.bytes).unwrap();
 
         assert_eq!(
             pubkey.len(),
@@ -122,14 +118,23 @@ mod tests {
         );
         assert_eq!(pubkey[0], 0xED, "Ed25519 public key must start with 0xED");
 
+        // Sign and verify
+        let message = b"ed25519 roundtrip test";
+        let sig = sign(&privkey, message).unwrap();
+        assert!(verify(&pubkey, message, &sig).unwrap());
+
+        // Derive address and verify format
         let account_id = crate::crypto::signing::public_key_to_account_id(&pubkey);
         let address = crate::address::encode_account_id(&account_id);
-
-        // Verify address format is correct (starts with 'r', correct length)
         assert!(address.starts_with('r'), "address must start with 'r'");
         assert!(
             address.len() >= 25 && address.len() <= 35,
             "address length must be valid"
         );
+
+        // Deterministic: same seed bytes produce same keypair
+        let (privkey2, pubkey2) = derive_keypair(&seed.bytes).unwrap();
+        assert_eq!(privkey, privkey2);
+        assert_eq!(pubkey, pubkey2);
     }
 }

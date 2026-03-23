@@ -136,10 +136,37 @@ fn decode_fields(
         let field_name = match &field_def {
             Some(fd) => fd.name.clone(),
             None => {
-                return Err(CoreError::CodecError(format!(
-                    "unknown field: type_code={}, field_code={}",
-                    field_id.type_code, field_id.field_code
-                )));
+                // Skip unknown fields instead of failing.
+                // Determine byte length based on type code and skip.
+                let remaining = get_slice_from(bytes, pos, "buffer underflow skipping unknown")?;
+                let skip_len = match field_id.type_code {
+                    // Fixed-size types
+                    1 => 2,   // UINT16
+                    2 => 4,   // UINT32
+                    3 => 8,   // UINT64
+                    4 => 16,  // HASH128
+                    5 => 32,  // HASH256
+                    6 => {
+                        // AMOUNT: 8 bytes for XRP, 48 for IOU
+                        // High bit: 0=XRP(8), 1=IOU(48)
+                        if !remaining.is_empty() && (remaining[0] & 0x80) != 0 { 48 } else { 8 }
+                    }
+                    8 => 20,  // ACCOUNTID
+                    // Variable-length types
+                    7 | 18 | 19 => {
+                        // VL (blob), Transaction, Validation — length-prefixed
+                        match decode_vl(remaining) {
+                            Ok((vl_len, vl_header)) => vl_header + vl_len,
+                            Err(_) => break, // can't determine length, stop parsing
+                        }
+                    }
+                    // STObject end marker or STArray
+                    14 | 15 => 0, // handled by markers
+                    _ => break, // unknown type, stop parsing
+                };
+                if skip_len > remaining.len() { break; }
+                pos += skip_len;
+                continue;
             }
         };
 
