@@ -19,21 +19,17 @@ impl Wallet {
     /// `unwrap_or_else` is used as a defensive fallback that should never trigger.
     pub fn generate() -> Self {
         let seed = Seed::generate();
-        Self::from_keypair(Keypair::from_seed(&seed).unwrap_or_else(|_| Keypair {
-            private_key: vec![0; 32],
-            public_key: vec![0xED; 1].into_iter().chain(vec![0; 32]).collect(),
-            key_type: KeyType::Ed25519,
-        }))
+        Self::from_keypair(
+            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair")
+        )
     }
 
     /// Generate a new random wallet with a specific key type.
     pub fn generate_with_type(key_type: KeyType) -> Self {
         let seed = Seed::generate_with_type(key_type);
-        Self::from_keypair(Keypair::from_seed(&seed).unwrap_or_else(|_| Keypair {
-            private_key: vec![0; 32],
-            public_key: vec![0; 33],
-            key_type,
-        }))
+        Self::from_keypair(
+            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair")
+        )
     }
 
     /// Create a wallet from a base58-encoded seed string.
@@ -151,15 +147,23 @@ mod tests {
     }
 
     #[test]
-    fn wallet_from_seed() {
-        let wallet = Wallet::from_seed("sn3nxiW7v8KXzPzAqzyHXbSSKNuN9").unwrap();
+    fn wallet_from_seed_round_trip() {
+        let seed = Seed::generate_with_type(KeyType::Secp256k1);
+        let seed_str = seed.to_base58();
+        let wallet = Wallet::from_seed(&seed_str).unwrap();
         assert!(wallet.address.starts_with('r'));
         assert_eq!(wallet.keypair.key_type, KeyType::Secp256k1);
+        // Round-trip: recreate from same seed and verify identical address
+        let wallet2 = Wallet::from_seed(&seed_str).unwrap();
+        assert_eq!(wallet.address, wallet2.address);
+        assert_eq!(wallet.public_key_hex(), wallet2.public_key_hex());
     }
 
     #[test]
-    fn wallet_sign_transaction() {
-        let wallet = Wallet::from_seed("sn3nxiW7v8KXzPzAqzyHXbSSKNuN9").unwrap();
+    fn wallet_sign_transaction_round_trip() {
+        let seed = Seed::generate_with_type(KeyType::Secp256k1);
+        let seed_str = seed.to_base58();
+        let wallet = Wallet::from_seed(&seed_str).unwrap();
         let tx = serde_json::json!({
             "TransactionType": "Payment",
             "Account": wallet.classic_address(),
@@ -173,6 +177,13 @@ mod tests {
         let signed = wallet.sign_transaction(&tx).unwrap();
         assert!(signed["TxnSignature"].is_string());
         assert!(signed["SigningPubKey"].is_string());
+        // Round-trip: same seed produces identical signature
+        let wallet2 = Wallet::from_seed(&seed_str).unwrap();
+        let signed2 = wallet2.sign_transaction(&tx).unwrap();
+        assert_eq!(
+            signed["TxnSignature"].as_str().unwrap(),
+            signed2["TxnSignature"].as_str().unwrap()
+        );
     }
 
     #[test]
@@ -195,8 +206,10 @@ mod tests {
     }
 
     #[test]
-    fn multisign_creates_signer_entry() {
-        let wallet = Wallet::from_seed("sn3nxiW7v8KXzPzAqzyHXbSSKNuN9").unwrap();
+    fn multisign_creates_signer_entry_round_trip() {
+        let seed = Seed::generate_with_type(KeyType::Secp256k1);
+        let seed_str = seed.to_base58();
+        let wallet = Wallet::from_seed(&seed_str).unwrap();
         let tx = serde_json::json!({
             "TransactionType": "Payment",
             "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
@@ -211,6 +224,17 @@ mod tests {
         assert!(signer["Signer"]["Account"].is_string());
         assert!(signer["Signer"]["SigningPubKey"].is_string());
         assert!(signer["Signer"]["TxnSignature"].is_string());
+        // Round-trip: same seed produces identical multisig signer entry
+        let wallet2 = Wallet::from_seed(&seed_str).unwrap();
+        let signer2 = wallet2.sign_for_multisigning(&tx).unwrap();
+        assert_eq!(
+            signer["Signer"]["TxnSignature"].as_str().unwrap(),
+            signer2["Signer"]["TxnSignature"].as_str().unwrap()
+        );
+        assert_eq!(
+            signer["Signer"]["Account"].as_str().unwrap(),
+            signer2["Signer"]["Account"].as_str().unwrap()
+        );
     }
 
     #[test]

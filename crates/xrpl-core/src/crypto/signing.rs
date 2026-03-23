@@ -123,9 +123,8 @@ fn generate_random_bytes_16() -> [u8; 16] {
 #[cfg(all(feature = "std", target_arch = "wasm32"))]
 fn generate_random_bytes_16() -> [u8; 16] {
     let mut bytes = [0u8; 16];
-    // getrandom failure on WASM means no CSPRNG available — fall back to zeros
-    // (callers should handle this, but seed generation should not panic)
-    let _ = getrandom::getrandom(&mut bytes);
+    getrandom::getrandom(&mut bytes)
+        .expect("CSPRNG not available — cannot generate secure random bytes");
     bytes
 }
 
