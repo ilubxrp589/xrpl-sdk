@@ -63,7 +63,7 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> 
     let inter_scalar = <Scalar as Reduce<U256>>::reduce(U256::from_be_slice(&intermediate_bytes));
     let account_scalar = root_scalar + inter_scalar;
 
-    let account_private_bytes = account_scalar.to_bytes();
+    let mut account_private_bytes = account_scalar.to_bytes();
     let account_secret = SecretKey::from_slice(&account_private_bytes)
         .map_err(|_| CoreError::KeyDerivationFailed)?;
     let account_public = account_secret.public_key();
@@ -74,6 +74,7 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> 
     // Zeroize intermediate key material before drop
     root_private_bytes.zeroize();
     intermediate_bytes.zeroize();
+    account_private_bytes.zeroize();
 
     Ok((result_private, account_public_compressed))
 }
