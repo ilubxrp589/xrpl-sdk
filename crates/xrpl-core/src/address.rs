@@ -1,5 +1,6 @@
 use crate::CoreError;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -153,7 +154,7 @@ pub fn decode_account_id(addr: &str) -> Result<[u8; 20], CoreError> {
     let expected_checksum = checksum(payload);
     let actual_checksum: [u8; 4] = [decoded[21], decoded[22], decoded[23], decoded[24]];
 
-    if expected_checksum != actual_checksum {
+    if expected_checksum.ct_eq(&actual_checksum).unwrap_u8() != 1 {
         return Err(CoreError::InvalidChecksum {
             expected: expected_checksum,
             got: actual_checksum,
@@ -199,7 +200,7 @@ pub fn decode_seed(seed: &str) -> Result<([u8; 16], KeyType), CoreError> {
             let payload = &d[..19];
             let expected_cksum = checksum(payload);
             let actual_cksum: [u8; 4] = [d[19], d[20], d[21], d[22]];
-            if expected_cksum != actual_cksum {
+            if expected_cksum.ct_eq(&actual_cksum).unwrap_u8() != 1 {
                 return Err(CoreError::InvalidChecksum {
                     expected: expected_cksum,
                     got: actual_cksum,
@@ -217,7 +218,7 @@ pub fn decode_seed(seed: &str) -> Result<([u8; 16], KeyType), CoreError> {
             let payload = &d[..17];
             let expected_cksum = checksum(payload);
             let actual_cksum: [u8; 4] = [d[17], d[18], d[19], d[20]];
-            if expected_cksum != actual_cksum {
+            if expected_cksum.ct_eq(&actual_cksum).unwrap_u8() != 1 {
                 return Err(CoreError::InvalidChecksum {
                     expected: expected_cksum,
                     got: actual_cksum,

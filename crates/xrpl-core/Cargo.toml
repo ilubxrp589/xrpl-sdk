@@ -30,6 +30,7 @@ ed25519-dalek = { workspace = true }
 k256 = { workspace = true }
 rand = { workspace = true, optional = true }
 zeroize = { workspace = true }
+subtle = { workspace = true }
 
 # WASM support
 wasm-bindgen = { version = "0.2", optional = true }

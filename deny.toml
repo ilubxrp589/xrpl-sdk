@@ -22,8 +22,8 @@ multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
 deny = [
-    { name = "openssl", reason = "use rustls instead" },
-    { name = "openssl-sys", reason = "use rustls instead" },
+    # openssl/openssl-sys are allowed because xrpl-node needs openssl for
+    # SSL_get_finished (XRPL peer protocol session cookie derivation).
 ]
 
 [sources]

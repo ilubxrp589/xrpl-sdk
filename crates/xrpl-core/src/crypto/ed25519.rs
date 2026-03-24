@@ -10,7 +10,7 @@ use alloc::{string::ToString, vec::Vec};
 /// XRPL Ed25519: SHA512(seed) → first 32 bytes → scalar → keypair.
 /// Public key is prefixed with 0xED (33 bytes total on wire).
 pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> {
-    let hash: [u8; 64] = Sha512::digest(seed).into();
+    let mut hash: [u8; 64] = Sha512::digest(seed).into();
     let mut secret_bytes = [0u8; 32];
     secret_bytes.copy_from_slice(&hash[..32]);
 
@@ -27,6 +27,7 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> 
 
     // Zeroize intermediate key material
     secret_bytes.zeroize();
+    hash.zeroize();
 
     Ok((private_key, public_key))
 }
@@ -45,6 +46,7 @@ pub fn sign(private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, CoreError> {
     key_bytes.copy_from_slice(private_key);
     let signing_key = SigningKey::from_bytes(&key_bytes);
     let signature = signing_key.sign(message);
+    key_bytes.zeroize();
 
     Ok(signature.to_bytes().to_vec())
 }
