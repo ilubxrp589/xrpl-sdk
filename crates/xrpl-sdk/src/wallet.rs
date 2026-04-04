@@ -20,7 +20,7 @@ impl Wallet {
     pub fn generate() -> Self {
         let seed = Seed::generate();
         Self::from_keypair(
-            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair")
+            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair"),
         )
     }
 
@@ -28,7 +28,7 @@ impl Wallet {
     pub fn generate_with_type(key_type: KeyType) -> Self {
         let seed = Seed::generate_with_type(key_type);
         Self::from_keypair(
-            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair")
+            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair"),
         )
     }
 

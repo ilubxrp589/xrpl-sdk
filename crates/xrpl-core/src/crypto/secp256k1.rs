@@ -151,12 +151,15 @@ mod tests {
     #[test]
     fn secp256k1_derive_sign_verify_roundtrip() {
         // Generate a random secp256k1 seed and verify full round-trip
-        let seed = crate::crypto::signing::Seed::generate_with_type(
-            crate::address::KeyType::Secp256k1,
-        );
+        let seed =
+            crate::crypto::signing::Seed::generate_with_type(crate::address::KeyType::Secp256k1);
         let (privkey, pubkey) = derive_keypair(&seed.bytes).unwrap();
 
-        assert_eq!(pubkey.len(), 33, "secp256k1 public key must be 33 bytes (compressed)");
+        assert_eq!(
+            pubkey.len(),
+            33,
+            "secp256k1 public key must be 33 bytes (compressed)"
+        );
         // Compressed secp256k1 keys start with 0x02 or 0x03
         assert!(
             pubkey[0] == 0x02 || pubkey[0] == 0x03,
