@@ -9,3 +9,7 @@ fuzz/corpus/
 *.swp
 *.swo
 *~
+
+# AI context files
+CLAUDE.md
+**/CLAUDE.md

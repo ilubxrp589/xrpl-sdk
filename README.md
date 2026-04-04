@@ -33,7 +33,7 @@ use xrpl_sdk::*;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
-    let wallet = Wallet::from_seed("sEdTM1uX8pu2do5XvTnutH6HsouMaM2")?;
+    let wallet = Wallet::from_seed("sEdTM1uX8pu2do5XvTnutH6HsouMaM2")?; // Example testnet seed — do not use on mainnet
 
     let mut tx = serde_json::json!({
         "TransactionType": "Payment",
