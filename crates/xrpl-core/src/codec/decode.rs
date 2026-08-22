@@ -207,7 +207,7 @@ fn decode_field_value(
         Some(TypeCode::UInt8) => decode_uint8(buf),
         Some(TypeCode::UInt16) => decode_uint16(buf, field_name),
         Some(TypeCode::UInt32) => decode_uint32(buf),
-        Some(TypeCode::UInt64) => decode_uint64(buf),
+        Some(TypeCode::UInt64) => decode_uint64(buf, field_name),
         Some(TypeCode::Hash128) => decode_hash(buf, 16),
         Some(TypeCode::Hash160) => decode_hash(buf, 20),
         Some(TypeCode::Hash256) => decode_hash(buf, 32),
@@ -280,10 +280,22 @@ fn decode_uint32(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     Ok((Value::Number(val.into()), 4))
 }
 
-fn decode_uint64(buf: &[u8]) -> Result<(Value, usize), CoreError> {
+fn decode_uint64(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreError> {
     let bytes = buf
         .get(..8)
         .ok_or_else(|| CoreError::CodecError("buffer too short for UInt64".to_string()))?;
+    // kSmdBaseTen UInt64 fields render as base-10 strings in rippled JSON
+    // (sfields.macro); every other UInt64 renders as padded hex.
+    const BASE_TEN: &[&str] = &[
+        "MaximumAmount",
+        "OutstandingAmount",
+        "MPTAmount",
+        "LockedAmount",
+    ];
+    if BASE_TEN.contains(&field_name) {
+        let arr: [u8; 8] = bytes.try_into().expect("length checked");
+        return Ok((Value::String(u64::from_be_bytes(arr).to_string()), 8));
+    }
     let hex_str = hex::encode_upper(bytes);
     Ok((Value::String(hex_str), 8))
 }
@@ -304,6 +316,25 @@ fn decode_amount_field(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     let &first_byte = buf
         .first()
         .ok_or_else(|| CoreError::CodecError("buffer too short for Amount".to_string()))?;
+
+    if first_byte & 0x80 == 0 && first_byte & 0x20 != 0 {
+        // MPT amount (STAmount::add): lead byte (0x20 marker, 0x40 positive)
+        // + 8-byte value + 192-bit MPTokenIssuanceID = 33 bytes.
+        let bytes = buf
+            .get(..33)
+            .ok_or_else(|| CoreError::CodecError("buffer too short for MPT amount".to_string()))?;
+        let value = u64::from_be_bytes(bytes[1..9].try_into().expect("length checked"));
+        let sign = if first_byte & 0x40 == 0 && value != 0 {
+            "-"
+        } else {
+            ""
+        };
+        let obj = json!({
+            "mpt_issuance_id": hex::encode_upper(&bytes[9..33]),
+            "value": format!("{sign}{value}"),
+        });
+        return Ok((obj, 33));
+    }
 
     if first_byte & 0x80 == 0 {
         // XRP amount: 8 bytes

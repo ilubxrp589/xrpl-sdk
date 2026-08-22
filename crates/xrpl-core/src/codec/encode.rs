@@ -274,11 +274,12 @@ fn encode_mpt_amount(obj: &serde_json::Map<String, Value>) -> Result<Vec<u8>, Co
 
     let mut result = Vec::with_capacity(41);
 
-    // First byte: 0x60 for positive, 0x00 for zero/negative
-    if value > 0 {
+    // Lead byte (STAmount::add): 0x20 MPT marker, plus 0x40 unless negative.
+    // Zero is non-negative, so it carries 0x60 too.
+    if value >= 0 {
         result.push(0x60);
     } else {
-        result.push(0x00);
+        result.push(0x20);
     }
 
     // 8 bytes big-endian value (unsigned magnitude)

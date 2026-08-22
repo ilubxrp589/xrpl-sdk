@@ -7,11 +7,15 @@ pub const MAX_XRP_DROPS: u64 = 100_000_000_000_000_000;
 
 /// Encode XRP amount to 8-byte wire format.
 /// Bit 63 = 0 (XRP), Bit 62 = 1 (positive), Bits 0-61 = drops.
-/// Returns an error if drops exceeds the maximum XRP supply.
+///
+/// The wire field holds 62 bits, and serialization must accept the full
+/// range: mainnet ledger objects exist whose XRP amounts exceed the
+/// nominal supply (e.g. an Offer asking 10× total supply). Supply-range
+/// VALIDATION is a transaction-preflight concern, not a codec concern.
 pub fn encode_amount_xrp(drops: u64) -> Result<[u8; 8], CoreError> {
-    if drops > MAX_XRP_DROPS {
+    if drops > 0x3FFF_FFFF_FFFF_FFFF {
         return Err(CoreError::InvalidAmount(format!(
-            "XRP amount {drops} drops exceeds maximum supply of {MAX_XRP_DROPS} drops"
+            "XRP amount {drops} drops exceeds the 62-bit wire field"
         )));
     }
     // Set bit 62 (positive flag). Bit 63 stays 0 (XRP marker).
@@ -285,9 +289,16 @@ mod tests {
     }
 
     #[test]
-    fn encode_xrp_exceeds_max_supply_rejected() {
-        let result = encode_amount_xrp(MAX_XRP_DROPS + 1);
-        assert!(result.is_err(), "must reject amount above max supply");
+    fn encode_xrp_above_supply_roundtrips() {
+        // Mainnet ledger objects can carry XRP amounts above nominal supply
+        // (an Offer asking 10× supply exists at #106455034); the codec must
+        // round-trip the full 62-bit wire range and reject only overflow.
+        let bytes = encode_amount_xrp(MAX_XRP_DROPS + 1).expect("wire range accepts above-supply");
+        assert_eq!(decode_amount_xrp(&bytes).unwrap(), MAX_XRP_DROPS + 1);
+        assert!(
+            encode_amount_xrp(0x4000_0000_0000_0000).is_err(),
+            "63rd bit must reject"
+        );
     }
 
     #[test]

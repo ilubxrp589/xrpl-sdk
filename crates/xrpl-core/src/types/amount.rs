@@ -114,11 +114,17 @@ impl IouAmount {
         if combined.is_empty() {
             return Ok(Self::zero());
         }
+        // Trailing zeros carry no precision — fold them into the exponent
+        // before parsing, so a plain expansion of a huge value (e.g. 1e27
+        // written as 28 digits) fits u64.
+        let stripped = combined.trim_end_matches('0');
+        let zeros = (combined.len() - stripped.len()) as i16;
+        let combined = stripped;
 
         let mantissa: u64 = combined.parse().map_err(|e: core::num::ParseIntError| {
             crate::CoreError::InvalidAmount(e.to_string())
         })?;
-        let base_exp = -(decimal_part.len() as i16) + sci_exp;
+        let base_exp = -(decimal_part.len() as i16) + sci_exp + zeros;
 
         // Clamp to i8 range for IouAmount::new
         if !(-128..=127).contains(&base_exp) {
@@ -145,6 +151,12 @@ impl IouAmount {
         let sign = if self.is_negative { "-" } else { "" };
         let mut s = self.mantissa.to_string();
         let exp = self.exponent as i32;
+
+        // rippled STAmount::getText: extreme exponents print as
+        // "<mantissa>e<exponent>" (STAmount.cpp:696).
+        if exp != 0 && (exp < -25 || exp > -5) {
+            return format!("{sign}{s}e{exp}");
+        }
 
         // The effective number is mantissa * 10^exponent
         // mantissa has 16 digits (since normalized to [10^15, 10^16))
@@ -353,5 +365,39 @@ mod tests {
     #[test]
     fn amount_xrp_exceeds_max() {
         assert!(Amount::xrp(MAX_XRP_DROPS + 1).is_err());
+    }
+}
+
+#[cfg(test)]
+mod getext_tests {
+    use super::*;
+
+    // rippled STAmount::getText parity on extreme exponents + lossless re-parse.
+    #[test]
+    fn scientific_spelling_round_trips() {
+        for (m, e, expect) in [
+            (1_000_000_000_000_000i64, 12i8, "1000000000000000e12"),
+            (1_000_000_000_000_000, -96, "1000000000000000e-96"),
+            (9_999_999_999_999_999, 80, "9999999999999999e80"),
+            (1_234_567_890_123_456, -4, "1234567890123456e-4"),
+            (-1_000_000_000_000_000, 12, "-1000000000000000e12"),
+            (1_234_560_000_000_000, -13, "123.456"),
+            (1_000_000_000_000_000, 0, "1000000000000000e0"),
+        ] {
+            let a = IouAmount::new(m, e).unwrap();
+            let s = a.to_decimal();
+            let b = IouAmount::from_decimal(&s).unwrap();
+            assert_eq!(
+                (b.mantissa, b.exponent, b.is_negative),
+                (a.mantissa, a.exponent, a.is_negative),
+                "{s}"
+            );
+            if e != 0 {
+                assert_eq!(s, expect);
+            }
+        }
+        // plain giant expansion parses losslessly too
+        let c = IouAmount::from_decimal("1000000000000000000000000000").unwrap();
+        assert_eq!((c.mantissa, c.exponent), (1_000_000_000_000_000, 12));
     }
 }
