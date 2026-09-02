@@ -15,6 +15,16 @@ pub enum Currency {
     NonStandard([u8; 20]),
 }
 
+/// rippled `detail::isoCharSet` (UintTypes.cpp:39-43): the characters a
+/// three-letter currency code may use — letters, digits and the symbols
+/// `<>(){}[]|?!@#$%^&*`. Mainnet carries codes such as `W&B`; rejecting the
+/// symbols made the validator unable to re-encode such a trust line
+/// (#106699694), and would render the line's code as hex where rippled
+/// renders the ISO string.
+pub fn is_iso_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b"<>(){}[]|?!@#$%^&*".contains(&b)
+}
+
 impl Currency {
     /// The special XRP currency (20 zero bytes). Only used in PathStep, never in Amount.
     pub fn xrp() -> Self {
@@ -28,9 +38,9 @@ impl Currency {
                 "standard currency must be 3 chars, got '{s}'"
             )));
         }
-        if !s.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        if !s.bytes().all(is_iso_char) {
             return Err(crate::CoreError::InvalidCurrency(format!(
-                "standard currency must be ASCII alphanumeric, got '{s}'"
+                "standard currency must use rippled's ISO character set, got '{s}'"
             )));
         }
         let mut arr = [0u8; 3];
@@ -74,9 +84,14 @@ impl Currency {
         }
 
         // Check standard format: bytes 0-11 = 0, bytes 15-19 = 0, bytes 12-14 = ASCII
+        // rippled `to_string(Currency)` (UintTypes.cpp:60-80): the three bytes
+        // must all be ISO characters, and the ISO spelling of the system
+        // currency ("XRP" in the code position) is never rendered as ISO —
+        // it falls through to hex.
         let is_standard = bytes[..12].iter().all(|&b| b == 0)
             && bytes[15..].iter().all(|&b| b == 0)
-            && bytes[12..15].iter().all(|&b| b.is_ascii_alphanumeric());
+            && bytes[12..15].iter().all(|&b| is_iso_char(b))
+            && &bytes[12..15] != b"XRP";
 
         if is_standard {
             Currency::Standard([bytes[12], bytes[13], bytes[14]])
@@ -194,6 +209,36 @@ mod tests {
         assert_eq!(json, "\"USD\"");
         let back: Currency = serde_json::from_str(&json).unwrap();
         assert_eq!(usd, back);
+    }
+
+    #[test]
+    fn iso_symbol_currency_roundtrip() {
+        // rippled's isoCharSet admits symbols; "W&B" is live on mainnet.
+        let c = Currency::from_ascii("W&B").unwrap();
+        let bytes = c.to_bytes();
+        assert_eq!(&bytes[12..15], b"W&B");
+        assert_eq!(Currency::from_bytes(bytes), c);
+        assert_eq!(c.to_string(), "W&B");
+        assert_eq!(serde_json::to_string(&c).unwrap(), "\"W&B\"");
+        for good in ["<>(", "){}", "[]|", "?!@", "#$%", "^&*", "a1Z"] {
+            assert!(Currency::from_ascii(good).is_ok(), "{good}");
+        }
+        for bad in ["A B", "A.B", "A,B", "A-B", "A_B", "A/B", "A\\B", "A~B", "A`B", "A'B", "A\"B", "A;B", "A:B", "A+B", "A=B"] {
+            assert!(Currency::from_ascii(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn iso_xrp_spelling_renders_as_hex() {
+        // rippled never renders the system currency's ISO spelling as ISO.
+        let mut bytes = [0u8; 20];
+        bytes[12..15].copy_from_slice(b"XRP");
+        let c = Currency::from_bytes(bytes);
+        assert_eq!(c, Currency::NonStandard(bytes));
+        assert_eq!(c.to_string(), "0000000000000000000000005852500000000000");
+        // A non-ISO byte in the code position is hex too.
+        bytes[12..15].copy_from_slice(b"A B");
+        assert_eq!(Currency::from_bytes(bytes), Currency::NonStandard(bytes));
     }
 
     #[test]
