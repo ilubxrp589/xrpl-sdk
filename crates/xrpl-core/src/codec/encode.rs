@@ -621,6 +621,15 @@ fn encode_currency_type(value: &Value) -> Result<Vec<u8>, CoreError> {
         return Ok(vec![0u8; 20]);
     }
 
+    // rippled's to_string(Currency) spells noCurrency (0x00…01) "1"
+    // (UintTypes.cpp) — an Oracle BaseAsset/QuoteAsset can carry it
+    // (xrpl-validator finding 369).
+    if s == "1" {
+        let mut b = vec![0u8; 20];
+        b[19] = 1;
+        return Ok(b);
+    }
+
     if s.len() == 3 {
         let c = crate::types::Currency::from_ascii(s)?;
         Ok(c.to_bytes().to_vec())
