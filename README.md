@@ -150,4 +150,4 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ## License
 
-MIT
+MIT, with an attribution requirement: if you use, copy or modify this code, credit James Turner with a link to https://github.com/ilubxrp589/xrpl-sdk. See [LICENSE](LICENSE).
