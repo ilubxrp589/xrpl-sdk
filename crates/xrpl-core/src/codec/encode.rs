@@ -305,6 +305,11 @@ fn encode_account_id_field(value: &Value) -> Result<Vec<u8>, CoreError> {
     let s = value
         .as_str()
         .ok_or_else(|| CoreError::CodecError("AccountID must be a string".to_string()))?;
+    // "" is an account never set: an empty VL (rippled's default STAccount, e.g. a UNLModify
+    // pseudo-transaction's Account). The zero account, set, is rrrrrrrrrrrrrrrrrrrrrhoLvTp.
+    if s.is_empty() {
+        return Ok(encode_vl(0));
+    }
     let account = AccountId::from_address(s)?;
     let mut result = encode_vl(20);
     result.extend_from_slice(account.as_bytes());
@@ -808,6 +813,27 @@ pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Mainnet pseudo-transactions round-trip byte for byte. A UNLModify's Account is never set: an empty
+    /// VL (`81 00`), "" in JSON (#107068416). An EnableAmendment's is set to the zero account: a 20-byte VL
+    /// (`81 14` and twenty zeros), rrrrrrrrrrrrrrrrrrrrrhoLvTp (#106911489).
+    #[test]
+    fn pseudo_transaction_accounts_round_trip_byte_exact() {
+        let cases = [
+            ("1200662400000000260661BC006840000000000000007300701321ED9AE4F5887BA029EB7C0884486D23CF\
+              281975F773F44BD213054219882C411CC7810000101101", ""),
+            ("120064240000000026065F570150133298D47E1F3A8A24FECAA30F699B8FE1DD234E072834BA099AD8180F\
+              FCE0FEC4684000000000000000730081140000000000000000000000000000000000000000",
+             "rrrrrrrrrrrrrrrrrrrrrhoLvTp"),
+        ];
+        for (blob_hex, account) in cases {
+            let blob = hex::decode(blob_hex).unwrap();
+            let json = crate::codec::decode::decode_transaction_binary(&blob).unwrap();
+            assert_eq!(json["Account"], account, "{json}");
+            assert_eq!(encode_transaction_json(&json, false).unwrap(), blob, "{json}");
+        }
+        assert_eq!(encode_account_id_field(&json!("")).unwrap(), vec![0x00]);
+    }
 
     #[test]
     fn encode_simple_payment() {

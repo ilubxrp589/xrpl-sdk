@@ -386,6 +386,11 @@ fn decode_blob(buf: &[u8]) -> Result<(Value, usize), CoreError> {
 
 fn decode_account_id_field(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     let (len, vl_consumed) = decode_vl(buf)?;
+    // An account field never set is an empty VL (rippled's default STAccount: a UNLModify
+    // pseudo-transaction's Account), which rippled's JSON shows as "".
+    if len == 0 {
+        return Ok((Value::String(String::new()), vl_consumed));
+    }
     if len != 20 {
         return Err(CoreError::CodecError(format!(
             "AccountID VL length must be 20, got {len}"
