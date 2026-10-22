@@ -1,8 +1,13 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 (2026-10-22)
 
-### Added
+The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
+`halcyon-xrpl-sdk`. v0.1.0 (below) was released on GitHub only.
+
+### Typed requests
+
+#### Added
 - **A typed request and response for every public `rippled` method and the Clio-only ones**: 43
   requests (25 new), grouped as on xrpl.org. New: `noripple_check`, `ledger_closed`, `ledger_data`,
   `simulate`, `submit_multisigned`, `transaction_entry`, `book_changes`, `deposit_authorized`,
@@ -20,22 +25,19 @@
   `nft_sell_offers`, `get_aggregate_price` and (Clio) `mpt_holders` answers; with
   `XRPL_RECORD_DIR` it records them.
 
-### Fixed
+#### Fixed
 - `ledger` failed against `rippled`: API version 1 writes the header's `ledger_index` as a string.
 
-### Changed (breaking)
+#### Changed
 - Response types derive `Serialize` and `PartialEq`; several gained fields (e.g. `AccountInfo`,
   `ServerInfo`, `AmmInfo`). `LedgerEntryResult::node` is an `Option` (absent with `binary: true`);
   `AmmInfoRequest`'s assets are `Option`s (a pool can be named by `amm_account`);
   `AccountTxResult` gained `ledger_index_min` / `ledger_index_max`.
 - `LedgerIndex` is `Copy` and defaults to `Validated`.
 
-## v0.2.0 (2026-10-22)
+### Foundations
 
-The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
-`halcyon-xrpl-sdk`. v0.1.0 (below) was released on GitHub only.
-
-### Changed (first crates.io release)
+#### Changed (first crates.io release)
 - **The crates are published as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
   `halcyon-xrpl-sdk`** (`xrpl-sdk` is taken on crates.io). The library names stay `xrpl_core`,
   `xrpl_client` and `xrpl_sdk`, so `use` lines do not change; a path dependency needs
@@ -47,7 +49,7 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
   validation that never came. `telINSUF_FEE_P` and `telCAN_NOT_QUEUE*` are retries (resubmitted by
   `submit_and_wait`); the other `tel`s are failures.
 
-### Added (utilities)
+#### Added (utilities)
 - `hashes`: `hash_signed_tx`, `hash_signed_tx_blob`, `transaction_id`, and `keylet::*`, the ID of
   every ledger entry type in rippled 3.4.1.
 - `crypto::{sign_payment_channel_claim, verify_payment_channel_claim}` and
@@ -59,7 +61,7 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
 - A live Testnet test (`--features live-tests`) that checks keylets, hashes, NFTokenIDs, balance
   changes and channel claims against what the network records.
 
-### Fixed (found by the live Testnet test)
+#### Fixed (found by the live Testnet test)
 - `fee` (and so `autofill` and `submit_transaction`) failed against real rippled servers: rippled
   sends `current_ledger_size`, `current_queue_size`, `expected_ledger_size` and `max_queue_size` as
   strings. Both forms are accepted now; `max_queue_size` and `levels` are added.
@@ -67,12 +69,12 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
   integer, or hex of any length that fits, and base 10 for `MaximumAmount`, `OutstandingAmount`,
   `MPTAmount` and `LockedAmount` (an MPTokenIssuanceCreate's `MaximumAmount` was refused).
 
-### Removed
+#### Removed
 - `codec::field::{FieldCode, FIELD_DEFS, lookup_field, lookup_field_by_id}`: an unused, stale copy of
   the field registry. `codec::definitions` (`lookup_field_def`, `lookup_field_def_by_id`) is the one
   the codec uses.
 
-### Added
+#### Added
 - Typed ledger objects: `types::ledger_object` has a struct for each of rippled 3.4.1's 31 ledger entry
   types, generated from its `LEDGER_ENTRY_FORMATS` (`scripts/gen_ledger_objects.py`), and
   `LedgerObject` over them (unknown types → `Other`). 1,207 mainnet entries of 15 types parse typed
@@ -87,7 +89,7 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
   Account/Destination (tag → SourceTag/DestinationTag), as xrpl.js does.
 - `TypeCode::{Int32, Int64}` (a breaking change for exhaustive matches on `TypeCode`).
 
-### Changed
+#### Changed
 - **xrpl-client: one `Client` trait over HTTP, WebSocket and wasm WebSocket** (breaking: `use
   xrpl_client::Client;` to call the RPC methods). A transport implements `raw_request`; every
   method, `autofill`, `submit_and_wait` and the `_all` paginators are written once. New typed layer:
@@ -108,7 +110,7 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
   rippled. It used to be skipped, with a guessed length that was wrong for AccountID, PathSet, MPT
   amounts and nested objects, and the field vanished from the JSON.
 
-### Fixed
+#### Fixed
 - Ed25519 signing: transactions and multisign Signer entries were signed over SHA512Half of the signing
   data; rippled verifies Ed25519 over the data itself, so every Ed25519 signature was rejected.
   New `Keypair::sign_signing_data` signs the way rippled verifies (secp256k1 signing is unchanged).

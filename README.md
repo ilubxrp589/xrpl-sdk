@@ -1,5 +1,11 @@
 # Halcyon XRPL SDK
 
+[![crates.io](https://img.shields.io/crates/v/halcyon-xrpl-sdk.svg)](https://crates.io/crates/halcyon-xrpl-sdk)
+[![docs.rs](https://docs.rs/halcyon-xrpl-sdk/badge.svg)](https://docs.rs/halcyon-xrpl-sdk)
+[![CI](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/ci.yml)
+[![downloads](https://img.shields.io/crates/d/halcyon-xrpl-sdk.svg)](https://crates.io/crates/halcyon-xrpl-sdk)
+[![license](https://img.shields.io/badge/license-MIT%20%2B%20attribution-blue.svg)](LICENSE)
+
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
 [Documentation](https://docs.rs/halcyon-xrpl-sdk) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) ·
