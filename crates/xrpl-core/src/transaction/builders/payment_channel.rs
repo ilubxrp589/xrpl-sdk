@@ -5,12 +5,19 @@ use serde_json::{json, Value};
 /// PaymentChannelCreate transaction.
 #[derive(Debug, Clone)]
 pub struct PaymentChannelCreate {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// How much (`Amount`).
     pub amount: String,
+    /// The account that receives it (`Destination`).
     pub destination: String,
+    /// Seconds the source must wait before closing a channel with unclaimed XRP (`SettleDelay`).
     pub settle_delay: u32,
+    /// A public key, hex (`PublicKey`).
     pub public_key: String,
+    /// The time after which it can be cancelled (ledger time) (`CancelAfter`).
     pub cancel_after: Option<u32>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`).
     pub destination_tag: Option<u32>,
 }
 impl Transaction for PaymentChannelCreate {
@@ -37,6 +44,7 @@ impl Transaction for PaymentChannelCreate {
         Ok(())
     }
 }
+/// Builds a [`PaymentChannelCreate`] (from [`PaymentChannelCreate::builder`]); `build` checks the required fields.
 pub struct PaymentChannelCreateBuilder {
     common: TxCommon,
     amount: Option<String>,
@@ -47,6 +55,7 @@ pub struct PaymentChannelCreateBuilder {
     destination_tag: Option<u32>,
 }
 impl PaymentChannelCreateBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -58,42 +67,52 @@ impl PaymentChannelCreateBuilder {
             destination_tag: None,
         }
     }
+    /// Set `Amount`.
     pub fn amount(mut self, a: impl Into<String>) -> Self {
         self.amount = Some(a.into());
         self
     }
+    /// Set `Destination`.
     pub fn destination(mut self, d: impl Into<String>) -> Self {
         self.destination = Some(d.into());
         self
     }
+    /// Set `SettleDelay`.
     pub fn settle_delay(mut self, s: u32) -> Self {
         self.settle_delay = Some(s);
         self
     }
+    /// Set `PublicKey`.
     pub fn public_key(mut self, p: impl Into<String>) -> Self {
         self.public_key = Some(p.into());
         self
     }
+    /// Set `CancelAfter`.
     pub fn cancel_after(mut self, ca: u32) -> Self {
         self.cancel_after = Some(ca);
         self
     }
+    /// Set `DestinationTag`.
     pub fn destination_tag(mut self, dt: u32) -> Self {
         self.destination_tag = Some(dt);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<PaymentChannelCreate, CoreError> {
         let amount = self.amount.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelCreate: amount is required".into())
@@ -119,6 +138,7 @@ impl PaymentChannelCreateBuilder {
     }
 }
 impl PaymentChannelCreate {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> PaymentChannelCreateBuilder {
         PaymentChannelCreateBuilder::new(account)
     }
@@ -127,9 +147,13 @@ impl PaymentChannelCreate {
 /// PaymentChannelFund transaction.
 #[derive(Debug, Clone)]
 pub struct PaymentChannelFund {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The payment channel's ID (`Channel`).
     pub channel: String,
+    /// How much (`Amount`).
     pub amount: String,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
     pub expiration: Option<u32>,
 }
 impl Transaction for PaymentChannelFund {
@@ -151,6 +175,7 @@ impl Transaction for PaymentChannelFund {
         Ok(())
     }
 }
+/// Builds a [`PaymentChannelFund`] (from [`PaymentChannelFund::builder`]); `build` checks the required fields.
 pub struct PaymentChannelFundBuilder {
     common: TxCommon,
     channel: Option<String>,
@@ -158,6 +183,7 @@ pub struct PaymentChannelFundBuilder {
     expiration: Option<u32>,
 }
 impl PaymentChannelFundBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -166,30 +192,37 @@ impl PaymentChannelFundBuilder {
             expiration: None,
         }
     }
+    /// Set `Channel`.
     pub fn channel(mut self, c: impl Into<String>) -> Self {
         self.channel = Some(c.into());
         self
     }
+    /// Set `Amount`.
     pub fn amount(mut self, a: impl Into<String>) -> Self {
         self.amount = Some(a.into());
         self
     }
+    /// Set `Expiration`.
     pub fn expiration(mut self, e: u32) -> Self {
         self.expiration = Some(e);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<PaymentChannelFund, CoreError> {
         let channel = self.channel.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelFund: channel is required".into())
@@ -206,6 +239,7 @@ impl PaymentChannelFundBuilder {
     }
 }
 impl PaymentChannelFund {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> PaymentChannelFundBuilder {
         PaymentChannelFundBuilder::new(account)
     }
@@ -214,11 +248,17 @@ impl PaymentChannelFund {
 /// PaymentChannelClaim transaction.
 #[derive(Debug, Clone)]
 pub struct PaymentChannelClaim {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The payment channel's ID (`Channel`).
     pub channel: String,
+    /// The balance (`Balance`).
     pub balance: Option<String>,
+    /// How much (`Amount`).
     pub amount: Option<String>,
+    /// A signature, hex (`Signature`).
     pub signature: Option<String>,
+    /// A public key, hex (`PublicKey`).
     pub public_key: Option<String>,
 }
 impl Transaction for PaymentChannelClaim {
@@ -248,6 +288,7 @@ impl Transaction for PaymentChannelClaim {
         Ok(())
     }
 }
+/// Builds a [`PaymentChannelClaim`] (from [`PaymentChannelClaim::builder`]); `build` checks the required fields.
 pub struct PaymentChannelClaimBuilder {
     common: TxCommon,
     channel: Option<String>,
@@ -257,6 +298,7 @@ pub struct PaymentChannelClaimBuilder {
     public_key: Option<String>,
 }
 impl PaymentChannelClaimBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -267,42 +309,52 @@ impl PaymentChannelClaimBuilder {
             public_key: None,
         }
     }
+    /// Set `Channel`.
     pub fn channel(mut self, c: impl Into<String>) -> Self {
         self.channel = Some(c.into());
         self
     }
+    /// Set `Balance`.
     pub fn balance(mut self, b: impl Into<String>) -> Self {
         self.balance = Some(b.into());
         self
     }
+    /// Set `Amount`.
     pub fn amount(mut self, a: impl Into<String>) -> Self {
         self.amount = Some(a.into());
         self
     }
+    /// Set `Signature`.
     pub fn signature(mut self, s: impl Into<String>) -> Self {
         self.signature = Some(s.into());
         self
     }
+    /// Set `PublicKey`.
     pub fn public_key(mut self, p: impl Into<String>) -> Self {
         self.public_key = Some(p.into());
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Set `Flags`.
     pub fn flags(mut self, f: u32) -> Self {
         self.common.flags = Some(f);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<PaymentChannelClaim, CoreError> {
         let channel = self.channel.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelClaim: channel is required".into())
@@ -318,6 +370,7 @@ impl PaymentChannelClaimBuilder {
     }
 }
 impl PaymentChannelClaim {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> PaymentChannelClaimBuilder {
         PaymentChannelClaimBuilder::new(account)
     }

@@ -21,8 +21,11 @@ pub const IOU_EXPONENT_MAX: i8 = 80;
 /// Mantissa is normalized to [10^15, 10^16).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IouAmount {
+    /// The significant digits.
     pub mantissa: u64,
+    /// The power of ten.
     pub exponent: i8,
+    /// Whether it is negative.
     pub is_negative: bool,
 }
 
@@ -214,12 +217,20 @@ pub enum Amount {
     Xrp(u64),
     /// IOU amount with value, currency, and issuer.
     Iou {
+        /// The value.
         value: IouAmount,
+        /// The currency code.
         currency: Currency,
+        /// The issuer.
         issuer: AccountId,
     },
     /// MPT amount: rippled's JSON is `{"mpt_issuance_id": <hex>, "value": "<integer>"}`.
-    Mpt { value: i64, issuance_id: Hash192 },
+    Mpt {
+        /// The amount, in the issuance's smallest unit.
+        value: i64,
+        /// The MPTokenIssuanceID.
+        issuance_id: Hash192,
+    },
 }
 
 impl Amount {
@@ -236,6 +247,95 @@ impl Amount {
     /// Returns true if this is an XRP amount.
     pub fn is_xrp(&self) -> bool {
         matches!(self, Amount::Xrp(_))
+    }
+
+    /// A token amount: `value` in decimal, a currency code and its issuer.
+    /// Codes longer than three characters (`"RLUSD"`) are written as hex,
+    /// as the ledger stores them; 40 hex digits are taken as they are.
+    ///
+    /// ```
+    /// use xrpl_core::types::Amount;
+    /// let usd = Amount::token("10.5", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
+    /// assert_eq!(serde_json::to_value(&usd).unwrap()["value"], "10.5");
+    /// let rlusd = Amount::token("1", "RLUSD", "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De").unwrap();
+    /// assert_eq!(serde_json::to_value(&rlusd).unwrap()["currency"], "524C555344000000000000000000000000000000");
+    /// ```
+    pub fn token(value: &str, currency: &str, issuer: &str) -> Result<Self, crate::CoreError> {
+        let currency = if currency.len() == 40 && currency.bytes().all(|b| b.is_ascii_hexdigit()) {
+            Currency::from_hex(currency)?
+        } else if currency.len() == 3 {
+            Currency::from_ascii(currency)?
+        } else if !currency.is_empty() && currency.len() <= 20 && currency.is_ascii() {
+            let mut bytes = [0u8; 20];
+            for (slot, b) in bytes.iter_mut().zip(currency.bytes()) {
+                *slot = b;
+            }
+            Currency::from_bytes(bytes)
+        } else {
+            return Err(crate::CoreError::InvalidCurrency(currency.to_string()));
+        };
+        Ok(Amount::Iou {
+            value: IouAmount::from_decimal(value)?,
+            currency,
+            issuer: AccountId::from_address(issuer)?,
+        })
+    }
+
+    /// An MPT amount: `value` in the issuance's smallest unit (an
+    /// `AssetScale` of 2 makes 12345 mean 123.45), and its
+    /// MPTokenIssuanceID (48 hex digits).
+    pub fn mpt(value: i64, mpt_issuance_id: &str) -> Result<Self, crate::CoreError> {
+        Ok(Amount::Mpt {
+            value,
+            issuance_id: Hash192::from_hex(mpt_issuance_id)?,
+        })
+    }
+}
+
+/// For people, not for the ledger: `25 XRP`, `50 USD.rIssuer…`,
+/// `1.5 RLUSD.rIssuer…` (a hex code that spells text is shown as the text),
+/// `12345 MPT:00000001…`. Use the `Serialize` form for `rippled`.
+///
+/// ```
+/// use xrpl_core::types::Amount;
+/// assert_eq!(Amount::Xrp(1_500_000).to_string(), "1.5 XRP");
+/// let rlusd = Amount::token("10", "RLUSD", "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De").unwrap();
+/// assert_eq!(rlusd.to_string(), "10 RLUSD.rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De");
+/// ```
+impl fmt::Display for Amount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Amount::Xrp(drops) => {
+                let (whole, frac) = (drops / 1_000_000, drops % 1_000_000);
+                if frac == 0 {
+                    write!(f, "{whole} XRP")
+                } else {
+                    let frac = format!("{frac:06}");
+                    write!(f, "{whole}.{} XRP", frac.trim_end_matches('0'))
+                }
+            }
+            Amount::Iou {
+                value,
+                currency,
+                issuer,
+            } => {
+                let bytes = currency.to_bytes();
+                let text_len = bytes.iter().take_while(|b| b.is_ascii_graphic()).count();
+                let spelled = text_len >= 3
+                    && bytes
+                        .get(text_len..)
+                        .is_some_and(|rest| rest.iter().all(|b| *b == 0))
+                    && !matches!(currency, Currency::Standard(_));
+                match (spelled, bytes.get(..text_len)) {
+                    (true, Some(text)) => {
+                        let text = core::str::from_utf8(text).unwrap_or("?");
+                        write!(f, "{} {text}.{issuer}", value.to_decimal())
+                    }
+                    _ => write!(f, "{} {currency}.{issuer}", value.to_decimal()),
+                }
+            }
+            Amount::Mpt { value, issuance_id } => write!(f, "{value} MPT:{issuance_id}"),
+        }
     }
 }
 

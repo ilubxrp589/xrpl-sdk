@@ -13,7 +13,9 @@ use alloc::{string::String, vec::Vec};
 /// Seed bytes are zeroed on drop via `ZeroizeOnDrop`.
 #[derive(Debug, Clone, zeroize::ZeroizeOnDrop)]
 pub struct Seed {
+    /// The bytes.
     pub bytes: [u8; 16],
+    /// The key type.
     #[zeroize(skip)]
     pub key_type: KeyType,
 }
@@ -57,8 +59,11 @@ impl Seed {
 /// Private key bytes are zeroed on drop via `ZeroizeOnDrop`.
 #[derive(Debug, Clone, zeroize::ZeroizeOnDrop)]
 pub struct Keypair {
+    /// The private key (wiped on drop).
     pub private_key: Vec<u8>,
+    /// A public key, hex (`PublicKey`).
     pub public_key: Vec<u8>,
+    /// The key type.
     #[zeroize(skip)]
     pub key_type: KeyType,
 }

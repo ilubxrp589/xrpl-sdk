@@ -10,15 +10,21 @@ use xrpl_core::types::Amount;
 /// an order book, best offer first.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BookOffersResult {
+    /// The offers.
     pub offers: Vec<BookOffer>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
+    /// The open ledger the answer is from (when not a validated one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -27,14 +33,19 @@ pub struct BookOffersResult {
 /// actually fund.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BookOffer {
+    /// The offer's owner.
     #[serde(rename = "Account")]
     pub account: String,
+    /// Flag bits (`Flags`).
     #[serde(rename = "Flags")]
     pub flags: u32,
+    /// The sequence number (`Sequence`).
     #[serde(rename = "Sequence")]
     pub sequence: u32,
+    /// What the offer gives (`TakerGets`).
     #[serde(rename = "TakerGets")]
     pub taker_gets: Amount,
+    /// What the offer wants in return (`TakerPays`).
     #[serde(rename = "TakerPays")]
     pub taker_pays: Amount,
     /// TakerPays ÷ TakerGets.
@@ -49,12 +60,14 @@ pub struct BookOffer {
     /// TakerPays scaled to `taker_gets_funded`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub taker_pays_funded: Option<Amount>,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
     #[serde(
         rename = "Expiration",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub expiration: Option<u32>,
+    /// The order book directory page holding the offer (`BookDirectory`).
     #[serde(
         rename = "BookDirectory",
         default,
@@ -71,13 +84,18 @@ pub struct BookOffer {
 /// an automated market maker's pool.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AmmInfoResult {
+    /// The pool.
     pub amm: AmmInfo,
+    /// The open ledger the answer is from (when not a validated one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -91,10 +109,13 @@ pub struct AmmInfo {
     /// The pool's balance of the first asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
+    /// The second asset's amount (`Amount2`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount2: Option<Amount>,
+    /// Whether the first asset is frozen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asset_frozen: Option<bool>,
+    /// Whether the second asset is frozen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asset2_frozen: Option<bool>,
     /// LP tokens outstanding.
@@ -103,8 +124,10 @@ pub struct AmmInfo {
     /// In units of 1/100,000 (1000 = 1%).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trading_fee: Option<u32>,
+    /// The auction slot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auction_slot: Option<AuctionSlot>,
+    /// The fee votes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vote_slots: Option<Vec<VoteSlot>>,
 }
@@ -112,28 +135,36 @@ pub struct AmmInfo {
 /// The AMM's auction slot: who holds the discounted fee, until when.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuctionSlot {
+    /// The slot holder.
     pub account: String,
     /// Accounts the holder lets trade at the discounted fee too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_accounts: Option<Vec<AuthAccount>>,
+    /// The slot holder's trading fee, in 1/100,000.
     pub discounted_fee: u32,
     /// ISO 8601.
     pub expiration: String,
+    /// What the slot cost.
     pub price: Amount,
+    /// Which 72-minute interval of the 24-hour slot is current (0–19).
     pub time_interval: u32,
 }
 
 /// An account the auction slot holder authorised.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuthAccount {
+    /// The account.
     pub account: String,
 }
 
 /// A liquidity provider's trading-fee vote.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VoteSlot {
+    /// The voting liquidity provider.
     pub account: String,
+    /// The trading fee, in 1/100,000 (1000 = 1%) (`TradingFee`).
     pub trading_fee: u32,
+    /// The voter's weight, in 1/100,000 of the LP tokens.
     pub vote_weight: u32,
 }
 
@@ -141,16 +172,21 @@ pub struct VoteSlot {
 /// each order book's open, high, low, close and volume in one ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BookChangesResult {
+    /// Each book's trading.
     pub changes: Vec<BookChange>,
     /// Always `"bookChanges"`.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// When the ledger closed (ledger time).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_time: Option<u64>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -159,13 +195,21 @@ pub struct BookChangesResult {
 /// `issuer/currency`; rates are B per A.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BookChange {
+    /// The first currency (`XRP_drops` or `issuer/currency`).
     pub currency_a: String,
+    /// The second currency.
     pub currency_b: String,
+    /// How much of the first currency traded.
     pub volume_a: String,
+    /// How much of the second currency traded.
     pub volume_b: String,
+    /// The highest rate.
     pub high: String,
+    /// The lowest rate.
     pub low: String,
+    /// The first rate.
     pub open: String,
+    /// The last rate.
     pub close: String,
     /// The permissioned domain the book belongs to, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -176,18 +220,25 @@ pub struct BookChange {
 /// whether one account may pay another directly.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DepositAuthorizedResult {
+    /// Whether the source may pay the destination.
     pub deposit_authorized: bool,
+    /// The sending account.
     pub source_account: String,
+    /// The receiving account.
     pub destination_account: String,
     /// Credentials the check took into account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credentials: Option<Vec<String>>,
+    /// The open ledger the answer is from (when not a validated one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -196,19 +247,25 @@ pub struct DepositAuthorizedResult {
 /// statistics over several price oracles' prices for one pair.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AggregatePriceResult {
+    /// Statistics over every price.
     pub entire_set: PriceStats,
     /// The set without outliers (`trim` in the request).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trimmed_set: Option<PriceStats>,
+    /// The median price.
     pub median: String,
     /// The latest `LastUpdateTime` among the prices used (Unix time).
     pub time: u64,
+    /// The open ledger the answer is from (when not a validated one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -216,8 +273,11 @@ pub struct AggregatePriceResult {
 /// Mean, count and standard deviation of a set of prices.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PriceStats {
+    /// The mean price.
     pub mean: String,
+    /// How many prices.
     pub size: u32,
+    /// The standard deviation.
     pub standard_deviation: String,
 }
 
@@ -226,18 +286,26 @@ pub struct PriceStats {
 /// the open offers for one NFT.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NftOffersResult {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The offers.
     pub offers: Vec<NftOffer>,
+    /// The most entries per page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
+    /// The open ledger the answer is from (when not a validated one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -245,14 +313,18 @@ pub struct NftOffersResult {
 /// One NFT offer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NftOffer {
+    /// The price.
     pub amount: Amount,
     /// 1 (`tfSellNFToken`) for a sell offer.
     pub flags: u32,
     /// The offer's ID, for NFTokenAcceptOffer / NFTokenCancelOffer.
     pub nft_offer_index: String,
+    /// The offer's owner.
     pub owner: String,
+    /// The account that receives it (`Destination`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<String>,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expiration: Option<u32>,
 }
@@ -261,22 +333,31 @@ pub struct NftOffer {
 /// ways to deliver an amount, and what each costs the sender.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RipplePathFindResult {
+    /// The ways to pay.
     pub alternatives: Vec<PathAlternative>,
+    /// The receiving account.
     pub destination_account: String,
+    /// What the destination receives.
     pub destination_amount: Amount,
     /// Currencies the destination can receive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination_currencies: Option<Vec<String>>,
+    /// The sending account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_account: Option<String>,
+    /// Whether the search finished.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_reply: Option<bool>,
+    /// The open ledger the answer is from (when not a validated one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -285,7 +366,9 @@ pub struct RipplePathFindResult {
 /// costs (`SendMax`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PathAlternative {
+    /// The paths to use.
     pub paths_computed: Vec<Vec<PathStep>>,
+    /// Rippled's canonical paths (usually empty).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paths_canonical: Option<Vec<Value>>,
     /// What the sender spends. Kept as JSON: path finding can quote a token
@@ -301,15 +384,19 @@ pub struct PathAlternative {
 /// (and issuer) to convert into on the DEX.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PathStep {
+    /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    /// A currency code, to convert into on the DEX.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
+    /// The issuer (`Issuer`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
     /// Bits for which of the fields above are set (1 account, 16 currency, 32 issuer).
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub step_type: Option<u32>,
+    /// The step's type, hex.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_hex: Option<String>,
 }

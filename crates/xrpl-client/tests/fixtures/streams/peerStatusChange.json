@@ -1,0 +1,20 @@
+[
+ {
+  "action": "CLOSING_LEDGER",
+  "date": 846007770,
+  "ledger_hash": "58285DC77DC5BFB01235CA4005EE8C3FF6CB8F8E2A1D8754D4D6DD72DA8EF756",
+  "ledger_index": 107832393,
+  "ledger_index_max": 107832310,
+  "ledger_index_min": 106701967,
+  "type": "peerStatusChange"
+ },
+ {
+  "action": "ACCEPTED_LEDGER",
+  "date": 846007770,
+  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
+  "ledger_index": 107832394,
+  "ledger_index_max": 107832393,
+  "ledger_index_min": 107812393,
+  "type": "peerStatusChange"
+ }
+]

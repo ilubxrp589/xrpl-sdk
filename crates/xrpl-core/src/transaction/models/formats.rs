@@ -21,14 +21,19 @@ pub struct AMMBid {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// The pool's second asset (`Asset2`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset2")]
     pub asset2: Asset,
+    /// The least to bid for the auction slot, in LP tokens (`BidMin`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "BidMin", default, skip_serializing_if = "Option::is_none")]
     pub bid_min: Option<Amount>,
+    /// The most to bid for the auction slot, in LP tokens (`BidMax`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "BidMax", default, skip_serializing_if = "Option::is_none")]
     pub bid_max: Option<Amount>,
+    /// Accounts that may trade at the auction slot's discounted fee (`AuthAccounts`: a list). Optional.
     #[serde(
         rename = "AuthAccounts",
         default,
@@ -79,12 +84,16 @@ pub struct AMMClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The holder (`Holder`: a classic address). Required.
     #[serde(rename = "Holder")]
     pub holder: String,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// The pool's second asset (`Asset2`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset2")]
     pub asset2: Asset,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
 }
@@ -136,10 +145,13 @@ pub struct AMMCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// The second asset's amount (`Amount2`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount2")]
     pub amount2: Amount,
+    /// The trading fee, in 1/100,000 (1000 = 1%) (`TradingFee`: a number). Required.
     #[serde(rename = "TradingFee")]
     pub trading_fee: u16,
 }
@@ -188,8 +200,10 @@ pub struct AMMDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// The pool's second asset (`Asset2`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset2")]
     pub asset2: Asset,
 }
@@ -232,22 +246,29 @@ pub struct AMMDeposit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// The pool's second asset (`Asset2`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset2")]
     pub asset2: Asset,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
+    /// The second asset's amount (`Amount2`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount2", default, skip_serializing_if = "Option::is_none")]
     pub amount2: Option<Amount>,
+    /// The effective price limit (`EPrice`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "EPrice", default, skip_serializing_if = "Option::is_none")]
     pub e_price: Option<Amount>,
+    /// The LP tokens to receive (`LPTokenOut`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "LPTokenOut",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub lp_token_out: Option<Amount>,
+    /// The trading fee, in 1/100,000 (1000 = 1%) (`TradingFee`: a number). Optional.
     #[serde(
         rename = "TradingFee",
         default,
@@ -260,15 +281,15 @@ impl AMMDeposit {
     /// `"AMMDeposit"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMDeposit";
     /// `tfLPToken`.
-    pub const TF_LPTOKEN: u32 = 0x00010000;
+    pub const TF_LP_TOKEN: u32 = 0x00010000;
     /// `tfSingleAsset`.
     pub const TF_SINGLE_ASSET: u32 = 0x00080000;
     /// `tfTwoAsset`.
     pub const TF_TWO_ASSET: u32 = 0x00100000;
     /// `tfOneAssetLPToken`.
-    pub const TF_ONE_ASSET_LPTOKEN: u32 = 0x00200000;
+    pub const TF_ONE_ASSET_LP_TOKEN: u32 = 0x00200000;
     /// `tfLimitLPToken`.
-    pub const TF_LIMIT_LPTOKEN: u32 = 0x00400000;
+    pub const TF_LIMIT_LP_TOKEN: u32 = 0x00400000;
     /// `tfTwoAssetIfEmpty`.
     pub const TF_TWO_ASSET_IF_EMPTY: u32 = 0x00800000;
 
@@ -311,10 +332,13 @@ pub struct AMMVote {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// The pool's second asset (`Asset2`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset2")]
     pub asset2: Asset,
+    /// The trading fee, in 1/100,000 (1000 = 1%) (`TradingFee`: a number). Required.
     #[serde(rename = "TradingFee")]
     pub trading_fee: u16,
 }
@@ -358,16 +382,22 @@ pub struct AMMWithdraw {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// The pool's second asset (`Asset2`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset2")]
     pub asset2: Asset,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
+    /// The second asset's amount (`Amount2`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount2", default, skip_serializing_if = "Option::is_none")]
     pub amount2: Option<Amount>,
+    /// The effective price limit (`EPrice`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "EPrice", default, skip_serializing_if = "Option::is_none")]
     pub e_price: Option<Amount>,
+    /// The LP tokens to return (`LPTokenIn`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "LPTokenIn", default, skip_serializing_if = "Option::is_none")]
     pub lp_token_in: Option<Amount>,
 }
@@ -376,7 +406,7 @@ impl AMMWithdraw {
     /// `"AMMWithdraw"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
     /// `tfLPToken`.
-    pub const TF_LPTOKEN: u32 = 0x00010000;
+    pub const TF_LP_TOKEN: u32 = 0x00010000;
     /// `tfWithdrawAll`.
     pub const TF_WITHDRAW_ALL: u32 = 0x00020000;
     /// `tfOneAssetWithdrawAll`.
@@ -386,9 +416,9 @@ impl AMMWithdraw {
     /// `tfTwoAsset`.
     pub const TF_TWO_ASSET: u32 = 0x00100000;
     /// `tfOneAssetLPToken`.
-    pub const TF_ONE_ASSET_LPTOKEN: u32 = 0x00200000;
+    pub const TF_ONE_ASSET_LP_TOKEN: u32 = 0x00200000;
     /// `tfLimitLPToken`.
-    pub const TF_LIMIT_LPTOKEN: u32 = 0x00400000;
+    pub const TF_LIMIT_LP_TOKEN: u32 = 0x00400000;
 
     /// A `AMMWithdraw` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
@@ -428,14 +458,17 @@ pub struct AccountDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
@@ -483,40 +516,50 @@ pub struct AccountSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MD5 of an email address, for an avatar (`EmailHash`: 128 bits, hex). Optional.
     #[serde(rename = "EmailHash", default, skip_serializing_if = "Option::is_none")]
     pub email_hash: Option<Hash128>,
+    /// `WalletLocator`: 256 bits, hex. Optional.
     #[serde(
         rename = "WalletLocator",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub wallet_locator: Option<Hash256>,
+    /// `WalletSize`: a number. Optional.
     #[serde(
         rename = "WalletSize",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub wallet_size: Option<u32>,
+    /// A public key for sending the account encrypted messages (`MessageKey`: bytes, hex). Optional.
     #[serde(
         rename = "MessageKey",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub message_key: Option<String>,
+    /// A domain the account claims, hex (ASCII, lower case) (`Domain`: bytes, hex). Optional.
     #[serde(rename = "Domain", default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+    /// The fee on transfers of the account's tokens, in billionths over 1,000,000,000 (`TransferRate`: a number). Optional.
     #[serde(
         rename = "TransferRate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub transfer_rate: Option<u32>,
+    /// An account flag to turn on (`ASF_*`) (`SetFlag`: a number). Optional.
     #[serde(rename = "SetFlag", default, skip_serializing_if = "Option::is_none")]
     pub set_flag: Option<u32>,
+    /// An account flag to turn off (`ASF_*`) (`ClearFlag`: a number). Optional.
     #[serde(rename = "ClearFlag", default, skip_serializing_if = "Option::is_none")]
     pub clear_flag: Option<u32>,
+    /// Significant digits for offers of the account's tokens (3–15; 0 clears) (`TickSize`: a number). Optional.
     #[serde(rename = "TickSize", default, skip_serializing_if = "Option::is_none")]
     pub tick_size: Option<u8>,
+    /// An account allowed to mint NFTs for this one (`NFTokenMinter`: a classic address). Optional.
     #[serde(
         rename = "NFTokenMinter",
         default,
@@ -615,8 +658,10 @@ pub struct Batch {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The inner transactions (2 to 8) (`RawTransactions`: a list). Required.
     #[serde(rename = "RawTransactions", with = "raw_transactions")]
     pub raw_transactions: Vec<Tx>,
+    /// Approvals from the other accounts with inner transactions (`BatchSigners`: a list). Optional.
     #[serde(
         rename = "BatchSigners",
         default,
@@ -672,6 +717,7 @@ pub struct CheckCancel {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The check's ID (`CheckID`: 256 bits, hex). Required.
     #[serde(rename = "CheckID")]
     pub check_id: Hash256,
 }
@@ -713,10 +759,13 @@ pub struct CheckCash {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The check's ID (`CheckID`: 256 bits, hex). Required.
     #[serde(rename = "CheckID")]
     pub check_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
+    /// The least a partial payment must deliver (`DeliverMin`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "DeliverMin",
         default,
@@ -764,22 +813,27 @@ pub struct CheckCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// The most the sender will spend, in any currency (`SendMax`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "SendMax")]
     pub send_max: Amount,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`: a number). Optional.
     #[serde(
         rename = "Expiration",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub expiration: Option<u32>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// An ID of the sender's choosing, such as an invoice number (`InvoiceID`: 256 bits, hex). Optional.
     #[serde(rename = "InvoiceID", default, skip_serializing_if = "Option::is_none")]
     pub invoice_id: Option<Hash256>,
 }
@@ -829,8 +883,10 @@ pub struct Clawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// The holder (`Holder`: a classic address). Optional.
     #[serde(rename = "Holder", default, skip_serializing_if = "Option::is_none")]
     pub holder: Option<String>,
 }
@@ -873,12 +929,16 @@ pub struct ConfidentialMPTClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
+    /// The holder (`Holder`: a classic address). Required.
     #[serde(rename = "Holder")]
     pub holder: String,
+    /// `MPTAmount`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "MPTAmount")]
     pub mpt_amount: String,
+    /// `ZKProof`: bytes, hex. Required.
     #[serde(rename = "ZKProof")]
     pub zk_proof: String,
 }
@@ -929,28 +989,36 @@ pub struct ConfidentialMPTConvert {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
+    /// `MPTAmount`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "MPTAmount")]
     pub mpt_amount: String,
+    /// `HolderEncryptionKey`: bytes, hex. Optional.
     #[serde(
         rename = "HolderEncryptionKey",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub holder_encryption_key: Option<String>,
+    /// `HolderEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "HolderEncryptedAmount")]
     pub holder_encrypted_amount: String,
+    /// `IssuerEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "IssuerEncryptedAmount")]
     pub issuer_encrypted_amount: String,
+    /// `AuditorEncryptedAmount`: bytes, hex. Optional.
     #[serde(
         rename = "AuditorEncryptedAmount",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub auditor_encrypted_amount: Option<String>,
+    /// `BlindingFactor`: 256 bits, hex. Required.
     #[serde(rename = "BlindingFactor")]
     pub blinding_factor: Hash256,
+    /// `ZKProof`: bytes, hex. Optional.
     #[serde(rename = "ZKProof", default, skip_serializing_if = "Option::is_none")]
     pub zk_proof: Option<String>,
 }
@@ -1006,24 +1074,32 @@ pub struct ConfidentialMPTConvertBack {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
+    /// `MPTAmount`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "MPTAmount")]
     pub mpt_amount: String,
+    /// `HolderEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "HolderEncryptedAmount")]
     pub holder_encrypted_amount: String,
+    /// `IssuerEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "IssuerEncryptedAmount")]
     pub issuer_encrypted_amount: String,
+    /// `AuditorEncryptedAmount`: bytes, hex. Optional.
     #[serde(
         rename = "AuditorEncryptedAmount",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub auditor_encrypted_amount: Option<String>,
+    /// `BlindingFactor`: 256 bits, hex. Required.
     #[serde(rename = "BlindingFactor")]
     pub blinding_factor: Hash256,
+    /// `ZKProof`: bytes, hex. Required.
     #[serde(rename = "ZKProof")]
     pub zk_proof: String,
+    /// `BalanceCommitment`: bytes, hex. Required.
     #[serde(rename = "BalanceCommitment")]
     pub balance_commitment: String,
 }
@@ -1081,6 +1157,7 @@ pub struct ConfidentialMPTMergeInbox {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
 }
@@ -1122,34 +1199,45 @@ pub struct ConfidentialMPTSend {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// `SenderEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "SenderEncryptedAmount")]
     pub sender_encrypted_amount: String,
+    /// `DestinationEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "DestinationEncryptedAmount")]
     pub destination_encrypted_amount: String,
+    /// `IssuerEncryptedAmount`: bytes, hex. Required.
     #[serde(rename = "IssuerEncryptedAmount")]
     pub issuer_encrypted_amount: String,
+    /// `AuditorEncryptedAmount`: bytes, hex. Optional.
     #[serde(
         rename = "AuditorEncryptedAmount",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub auditor_encrypted_amount: Option<String>,
+    /// `ZKProof`: bytes, hex. Required.
     #[serde(rename = "ZKProof")]
     pub zk_proof: String,
+    /// `AmountCommitment`: bytes, hex. Required.
     #[serde(rename = "AmountCommitment")]
     pub amount_commitment: String,
+    /// `BalanceCommitment`: bytes, hex. Required.
     #[serde(rename = "BalanceCommitment")]
     pub balance_commitment: String,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
@@ -1215,8 +1303,10 @@ pub struct CredentialAccept {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The issuer (`Issuer`: a classic address). Required.
     #[serde(rename = "Issuer")]
     pub issuer: String,
+    /// The credential's type, hex (`CredentialType`: bytes, hex). Required.
     #[serde(rename = "CredentialType")]
     pub credential_type: String,
 }
@@ -1263,16 +1353,20 @@ pub struct CredentialCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account a credential is about (`Subject`: a classic address). Required.
     #[serde(rename = "Subject")]
     pub subject: String,
+    /// The credential's type, hex (`CredentialType`: bytes, hex). Required.
     #[serde(rename = "CredentialType")]
     pub credential_type: String,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`: a number). Optional.
     #[serde(
         rename = "Expiration",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub expiration: Option<u32>,
+    /// A URI, hex (`URI`: bytes, hex). Optional.
     #[serde(rename = "URI", default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
 }
@@ -1321,10 +1415,13 @@ pub struct CredentialDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account a credential is about (`Subject`: a classic address). Optional.
     #[serde(rename = "Subject", default, skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
+    /// The issuer (`Issuer`: a classic address). Optional.
     #[serde(rename = "Issuer", default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
+    /// The credential's type, hex (`CredentialType`: bytes, hex). Required.
     #[serde(rename = "CredentialType")]
     pub credential_type: String,
 }
@@ -1406,14 +1503,17 @@ pub struct DIDSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The DID document, hex (`DIDDocument`: bytes, hex). Optional.
     #[serde(
         rename = "DIDDocument",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub did_document: Option<String>,
+    /// A URI, hex (`URI`: bytes, hex). Optional.
     #[serde(rename = "URI", default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
+    /// Data, hex (`Data`: bytes, hex). Optional.
     #[serde(rename = "Data", default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
 }
@@ -1457,8 +1557,10 @@ pub struct DelegateSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account to authorize (`Authorize`: a classic address). Required.
     #[serde(rename = "Authorize")]
     pub authorize: String,
+    /// The transaction types or granular permissions to grant (`Permissions`: a list). Required.
     #[serde(rename = "Permissions", with = "permissions")]
     pub permissions: Vec<Permission>,
 }
@@ -1505,14 +1607,17 @@ pub struct DepositPreauth {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account to authorize (`Authorize`: a classic address). Optional.
     #[serde(rename = "Authorize", default, skip_serializing_if = "Option::is_none")]
     pub authorize: Option<String>,
+    /// The account to stop authorizing (`Unauthorize`: a classic address). Optional.
     #[serde(
         rename = "Unauthorize",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub unauthorize: Option<String>,
+    /// Credentials to authorize (`AuthorizeCredentials`: a list). Optional.
     #[serde(
         rename = "AuthorizeCredentials",
         default,
@@ -1520,6 +1625,7 @@ pub struct DepositPreauth {
         with = "credentials_opt"
     )]
     pub authorize_credentials: Option<Vec<CredentialSpec>>,
+    /// Credentials to stop authorizing (`UnauthorizeCredentials`: a list). Optional.
     #[serde(
         rename = "UnauthorizeCredentials",
         default,
@@ -1569,8 +1675,10 @@ pub struct EnableAmendment {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The ledger the pseudo-transaction applies to (`LedgerSequence`: a number). Required.
     #[serde(rename = "LedgerSequence")]
     pub ledger_sequence: u32,
+    /// An amendment's ID (`Amendment`: 256 bits, hex). Required.
     #[serde(rename = "Amendment")]
     pub amendment: Hash256,
 }
@@ -1617,8 +1725,10 @@ pub struct EscrowCancel {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that owns the entry (`Owner`: a classic address). Required.
     #[serde(rename = "Owner")]
     pub owner: String,
+    /// The sequence of the transaction that created the entry (`OfferSequence`: a number). Required.
     #[serde(rename = "OfferSequence")]
     pub offer_sequence: u32,
 }
@@ -1661,24 +1771,30 @@ pub struct EscrowCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// A PREIMAGE-SHA-256 crypto-condition that must be fulfilled (`Condition`: bytes, hex). Optional.
     #[serde(rename = "Condition", default, skip_serializing_if = "Option::is_none")]
     pub condition: Option<String>,
+    /// The time after which it can be cancelled (ledger time) (`CancelAfter`: a number). Optional.
     #[serde(
         rename = "CancelAfter",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub cancel_after: Option<u32>,
+    /// The time after which it can be finished (ledger time) (`FinishAfter`: a number). Optional.
     #[serde(
         rename = "FinishAfter",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub finish_after: Option<u32>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
@@ -1729,18 +1845,23 @@ pub struct EscrowFinish {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that owns the entry (`Owner`: a classic address). Required.
     #[serde(rename = "Owner")]
     pub owner: String,
+    /// The sequence of the transaction that created the entry (`OfferSequence`: a number). Required.
     #[serde(rename = "OfferSequence")]
     pub offer_sequence: u32,
+    /// The fulfillment of the escrow's condition (`Fulfillment`: bytes, hex). Optional.
     #[serde(
         rename = "Fulfillment",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub fulfillment: Option<String>,
+    /// A PREIMAGE-SHA-256 crypto-condition that must be fulfilled (`Condition`: bytes, hex). Optional.
     #[serde(rename = "Condition", default, skip_serializing_if = "Option::is_none")]
     pub condition: Option<String>,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
@@ -1790,10 +1911,13 @@ pub struct LedgerStateFix {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LedgerFixType`: a number. Required.
     #[serde(rename = "LedgerFixType")]
     pub ledger_fix_type: u16,
+    /// The account that owns the entry (`Owner`: a classic address). Optional.
     #[serde(rename = "Owner", default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// The order book directory page holding the offer (`BookDirectory`: 256 bits, hex). Optional.
     #[serde(
         rename = "BookDirectory",
         default,
@@ -1841,12 +1965,14 @@ pub struct LoanBrokerCoverClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanBrokerID`: 256 bits, hex. Optional.
     #[serde(
         rename = "LoanBrokerID",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub loan_broker_id: Option<Hash256>,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
 }
@@ -1889,8 +2015,10 @@ pub struct LoanBrokerCoverDeposit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanBrokerID`: 256 bits, hex. Required.
     #[serde(rename = "LoanBrokerID")]
     pub loan_broker_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
 }
@@ -1933,22 +2061,27 @@ pub struct LoanBrokerCoverWithdraw {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanBrokerID`: 256 bits, hex. Required.
     #[serde(rename = "LoanBrokerID")]
     pub loan_broker_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// The account that receives it (`Destination`: a classic address). Optional.
     #[serde(
         rename = "Destination",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination: Option<String>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
@@ -1998,6 +2131,7 @@ pub struct LoanBrokerDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanBrokerID`: 256 bits, hex. Required.
     #[serde(rename = "LoanBrokerID")]
     pub loan_broker_id: Hash256,
 }
@@ -2039,34 +2173,41 @@ pub struct LoanBrokerSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `VaultID`: 256 bits, hex. Required.
     #[serde(rename = "VaultID")]
     pub vault_id: Hash256,
+    /// `LoanBrokerID`: 256 bits, hex. Optional.
     #[serde(
         rename = "LoanBrokerID",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub loan_broker_id: Option<Hash256>,
+    /// Data, hex (`Data`: bytes, hex). Optional.
     #[serde(rename = "Data", default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    /// `ManagementFeeRate`: a number. Optional.
     #[serde(
         rename = "ManagementFeeRate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub management_fee_rate: Option<u16>,
+    /// `DebtMaximum`: a decimal number, as a string. Optional.
     #[serde(
         rename = "DebtMaximum",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub debt_maximum: Option<String>,
+    /// `CoverRateMinimum`: a number. Optional.
     #[serde(
         rename = "CoverRateMinimum",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub cover_rate_minimum: Option<u32>,
+    /// `CoverRateLiquidation`: a number. Optional.
     #[serde(
         rename = "CoverRateLiquidation",
         default,
@@ -2118,6 +2259,7 @@ pub struct LoanDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanID`: 256 bits, hex. Required.
     #[serde(rename = "LoanID")]
     pub loan_id: Hash256,
 }
@@ -2159,6 +2301,7 @@ pub struct LoanManage {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanID`: 256 bits, hex. Required.
     #[serde(rename = "LoanID")]
     pub loan_id: Hash256,
 }
@@ -2206,8 +2349,10 @@ pub struct LoanPay {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanID`: 256 bits, hex. Required.
     #[serde(rename = "LoanID")]
     pub loan_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
 }
@@ -2256,90 +2401,107 @@ pub struct LoanSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `LoanBrokerID`: 256 bits, hex. Required.
     #[serde(rename = "LoanBrokerID")]
     pub loan_broker_id: Hash256,
+    /// Data, hex (`Data`: bytes, hex). Optional.
     #[serde(rename = "Data", default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    /// `Counterparty`: a classic address. Optional.
     #[serde(
         rename = "Counterparty",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub counterparty: Option<String>,
+    /// `CounterpartySignature`: an object. Optional.
     #[serde(
         rename = "CounterpartySignature",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub counterparty_signature: Option<Value>,
+    /// `LoanOriginationFee`: a decimal number, as a string. Optional.
     #[serde(
         rename = "LoanOriginationFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub loan_origination_fee: Option<String>,
+    /// `LoanServiceFee`: a decimal number, as a string. Optional.
     #[serde(
         rename = "LoanServiceFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub loan_service_fee: Option<String>,
+    /// `LatePaymentFee`: a decimal number, as a string. Optional.
     #[serde(
         rename = "LatePaymentFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub late_payment_fee: Option<String>,
+    /// `ClosePaymentFee`: a decimal number, as a string. Optional.
     #[serde(
         rename = "ClosePaymentFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub close_payment_fee: Option<String>,
+    /// `OverpaymentFee`: a number. Optional.
     #[serde(
         rename = "OverpaymentFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub overpayment_fee: Option<u32>,
+    /// `InterestRate`: a number. Optional.
     #[serde(
         rename = "InterestRate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub interest_rate: Option<u32>,
+    /// `LateInterestRate`: a number. Optional.
     #[serde(
         rename = "LateInterestRate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub late_interest_rate: Option<u32>,
+    /// `CloseInterestRate`: a number. Optional.
     #[serde(
         rename = "CloseInterestRate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub close_interest_rate: Option<u32>,
+    /// `OverpaymentInterestRate`: a number. Optional.
     #[serde(
         rename = "OverpaymentInterestRate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub overpayment_interest_rate: Option<u32>,
+    /// `PrincipalRequested`: a decimal number, as a string. Required.
     #[serde(rename = "PrincipalRequested")]
     pub principal_requested: String,
+    /// `PaymentTotal`: a number. Optional.
     #[serde(
         rename = "PaymentTotal",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub payment_total: Option<u32>,
+    /// `PaymentInterval`: a number. Optional.
     #[serde(
         rename = "PaymentInterval",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub payment_interval: Option<u32>,
+    /// `GracePeriod`: a number. Optional.
     #[serde(
         rename = "GracePeriod",
         default,
@@ -2407,8 +2569,10 @@ pub struct MPTokenAuthorize {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
+    /// The holder (`Holder`: a classic address). Optional.
     #[serde(rename = "Holder", default, skip_serializing_if = "Option::is_none")]
     pub holder: Option<String>,
 }
@@ -2417,7 +2581,7 @@ impl MPTokenAuthorize {
     /// `"MPTokenAuthorize"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenAuthorize";
     /// `tfMPTUnauthorize`.
-    pub const TF_MPTUNAUTHORIZE: u32 = 0x00000001;
+    pub const TF_MPT_UNAUTHORIZE: u32 = 0x00000001;
 
     /// A `MPTokenAuthorize` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
@@ -2453,32 +2617,38 @@ pub struct MPTokenIssuanceCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// Decimal places: an MPT amount of 12345 at scale 2 is 123.45 (`AssetScale`: a number). Optional.
     #[serde(
         rename = "AssetScale",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub asset_scale: Option<u8>,
+    /// The fee on secondary sales, in 1/100,000 (5000 = 5%); for tokens, see `TransferRate` (`TransferFee`: a number). Optional.
     #[serde(
         rename = "TransferFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub transfer_fee: Option<u16>,
+    /// The most of the MPT that can ever exist, in its smallest unit (`MaximumAmount`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts)). Optional.
     #[serde(
         rename = "MaximumAmount",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub maximum_amount: Option<String>,
+    /// Metadata, hex (XLS-89 JSON) (`MPTokenMetadata`: bytes, hex). Optional.
     #[serde(
         rename = "MPTokenMetadata",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub mp_token_metadata: Option<String>,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// `ImmutableFlags`: a number. Optional.
     #[serde(
         rename = "ImmutableFlags",
         default,
@@ -2491,19 +2661,19 @@ impl MPTokenIssuanceCreate {
     /// `"MPTokenIssuanceCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceCreate";
     /// `tfMPTCanLock`.
-    pub const TF_MPTCAN_LOCK: u32 = 0x00000002;
+    pub const TF_MPT_CAN_LOCK: u32 = 0x00000002;
     /// `tfMPTRequireAuth`.
-    pub const TF_MPTREQUIRE_AUTH: u32 = 0x00000004;
+    pub const TF_MPT_REQUIRE_AUTH: u32 = 0x00000004;
     /// `tfMPTCanEscrow`.
-    pub const TF_MPTCAN_ESCROW: u32 = 0x00000008;
+    pub const TF_MPT_CAN_ESCROW: u32 = 0x00000008;
     /// `tfMPTCanTrade`.
-    pub const TF_MPTCAN_TRADE: u32 = 0x00000010;
+    pub const TF_MPT_CAN_TRADE: u32 = 0x00000010;
     /// `tfMPTCanTransfer`.
-    pub const TF_MPTCAN_TRANSFER: u32 = 0x00000020;
+    pub const TF_MPT_CAN_TRANSFER: u32 = 0x00000020;
     /// `tfMPTCanClawback`.
-    pub const TF_MPTCAN_CLAWBACK: u32 = 0x00000040;
+    pub const TF_MPT_CAN_CLAWBACK: u32 = 0x00000040;
     /// `tfMPTCanHoldConfidentialBalance`.
-    pub const TF_MPTCAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000080;
+    pub const TF_MPT_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000080;
 
     /// A `MPTokenIssuanceCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -2543,6 +2713,7 @@ pub struct MPTokenIssuanceDestroy {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
 }
@@ -2584,36 +2755,44 @@ pub struct MPTokenIssuanceSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The MPT issuance's ID (`MPTokenIssuanceID`: 192 bits, hex). Required.
     #[serde(rename = "MPTokenIssuanceID")]
     pub mp_token_issuance_id: Hash192,
+    /// The holder (`Holder`: a classic address). Optional.
     #[serde(rename = "Holder", default, skip_serializing_if = "Option::is_none")]
     pub holder: Option<String>,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// Metadata, hex (XLS-89 JSON) (`MPTokenMetadata`: bytes, hex). Optional.
     #[serde(
         rename = "MPTokenMetadata",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub mp_token_metadata: Option<String>,
+    /// The fee on secondary sales, in 1/100,000 (5000 = 5%); for tokens, see `TransferRate` (`TransferFee`: a number). Optional.
     #[serde(
         rename = "TransferFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub transfer_fee: Option<u16>,
+    /// `ImmutableFlags`: a number. Optional.
     #[serde(
         rename = "ImmutableFlags",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub immutable_flags: Option<u32>,
+    /// `IssuerEncryptionKey`: bytes, hex. Optional.
     #[serde(
         rename = "IssuerEncryptionKey",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub issuer_encryption_key: Option<String>,
+    /// `AuditorEncryptionKey`: bytes, hex. Optional.
     #[serde(
         rename = "AuditorEncryptionKey",
         default,
@@ -2626,23 +2805,23 @@ impl MPTokenIssuanceSet {
     /// `"MPTokenIssuanceSet"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceSet";
     /// `tfMPTLock`.
-    pub const TF_MPTLOCK: u32 = 0x00000001;
+    pub const TF_MPT_LOCK: u32 = 0x00000001;
     /// `tfMPTUnlock`.
-    pub const TF_MPTUNLOCK: u32 = 0x00000002;
+    pub const TF_MPT_UNLOCK: u32 = 0x00000002;
     /// `tfMPTSetCanLock`.
-    pub const TF_MPTSET_CAN_LOCK: u32 = 0x00000004;
+    pub const TF_MPT_SET_CAN_LOCK: u32 = 0x00000004;
     /// `tfMPTSetRequireAuth`.
-    pub const TF_MPTSET_REQUIRE_AUTH: u32 = 0x00000008;
+    pub const TF_MPT_SET_REQUIRE_AUTH: u32 = 0x00000008;
     /// `tfMPTSetCanEscrow`.
-    pub const TF_MPTSET_CAN_ESCROW: u32 = 0x00000010;
+    pub const TF_MPT_SET_CAN_ESCROW: u32 = 0x00000010;
     /// `tfMPTSetCanTrade`.
-    pub const TF_MPTSET_CAN_TRADE: u32 = 0x00000020;
+    pub const TF_MPT_SET_CAN_TRADE: u32 = 0x00000020;
     /// `tfMPTSetCanTransfer`.
-    pub const TF_MPTSET_CAN_TRANSFER: u32 = 0x00000040;
+    pub const TF_MPT_SET_CAN_TRANSFER: u32 = 0x00000040;
     /// `tfMPTSetCanClawback`.
-    pub const TF_MPTSET_CAN_CLAWBACK: u32 = 0x00000080;
+    pub const TF_MPT_SET_CAN_CLAWBACK: u32 = 0x00000080;
     /// `tfMPTSetCanHoldConfidentialBalance`.
-    pub const TF_MPTSET_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000100;
+    pub const TF_MPT_SET_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000100;
 
     /// A `MPTokenIssuanceSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
@@ -2684,18 +2863,21 @@ pub struct NFTokenAcceptOffer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The buy offer to accept (`NFTokenBuyOffer`: 256 bits, hex). Optional.
     #[serde(
         rename = "NFTokenBuyOffer",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub nf_token_buy_offer: Option<Hash256>,
+    /// The sell offer to accept (`NFTokenSellOffer`: 256 bits, hex). Optional.
     #[serde(
         rename = "NFTokenSellOffer",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub nf_token_sell_offer: Option<Hash256>,
+    /// A broker's cut when matching a buy and a sell offer (`NFTokenBrokerFee`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "NFTokenBrokerFee",
         default,
@@ -2743,8 +2925,10 @@ pub struct NFTokenBurn {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// An NFT's ID (`NFTokenID`: 256 bits, hex). Required.
     #[serde(rename = "NFTokenID")]
     pub nf_token_id: Hash256,
+    /// The account that owns the entry (`Owner`: a classic address). Optional.
     #[serde(rename = "Owner", default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
 }
@@ -2787,6 +2971,7 @@ pub struct NFTokenCancelOffer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The offers to cancel (`NFTokenOffers`: a list of 256-bit IDs). Required.
     #[serde(rename = "NFTokenOffers")]
     pub nf_token_offers: Vec<Hash256>,
 }
@@ -2828,18 +3013,23 @@ pub struct NFTokenCreateOffer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// An NFT's ID (`NFTokenID`: 256 bits, hex). Required.
     #[serde(rename = "NFTokenID")]
     pub nf_token_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// The account that receives it (`Destination`: a classic address). Optional.
     #[serde(
         rename = "Destination",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination: Option<String>,
+    /// The account that owns the entry (`Owner`: a classic address). Optional.
     #[serde(rename = "Owner", default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`: a number). Optional.
     #[serde(
         rename = "Expiration",
         default,
@@ -2891,26 +3081,33 @@ pub struct NFTokenMint {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// A number the issuer uses to group its NFTs (`NFTokenTaxon`: a number). Required.
     #[serde(rename = "NFTokenTaxon")]
     pub nf_token_taxon: u32,
+    /// The fee on secondary sales, in 1/100,000 (5000 = 5%); for tokens, see `TransferRate` (`TransferFee`: a number). Optional.
     #[serde(
         rename = "TransferFee",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub transfer_fee: Option<u16>,
+    /// The issuer (`Issuer`: a classic address). Optional.
     #[serde(rename = "Issuer", default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
+    /// A URI, hex (`URI`: bytes, hex). Optional.
     #[serde(rename = "URI", default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
+    /// The account that receives it (`Destination`: a classic address). Optional.
     #[serde(
         rename = "Destination",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination: Option<String>,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`: a number). Optional.
     #[serde(
         rename = "Expiration",
         default,
@@ -2970,10 +3167,13 @@ pub struct NFTokenModify {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// An NFT's ID (`NFTokenID`: 256 bits, hex). Required.
     #[serde(rename = "NFTokenID")]
     pub nf_token_id: Hash256,
+    /// The account that owns the entry (`Owner`: a classic address). Optional.
     #[serde(rename = "Owner", default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// A URI, hex (`URI`: bytes, hex). Optional.
     #[serde(rename = "URI", default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
 }
@@ -3017,6 +3217,7 @@ pub struct OfferCancel {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The sequence of the transaction that created the entry (`OfferSequence`: a number). Required.
     #[serde(rename = "OfferSequence")]
     pub offer_sequence: u32,
 }
@@ -3058,24 +3259,38 @@ pub struct OfferCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// What the offer wants in return (`TakerPays`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "TakerPays")]
     pub taker_pays: Amount,
+    /// What the offer gives (`TakerGets`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "TakerGets")]
     pub taker_gets: Amount,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`: a number). Optional.
     #[serde(
         rename = "Expiration",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub expiration: Option<u32>,
+    /// The sequence of the transaction that created the entry (`OfferSequence`: a number). Optional.
     #[serde(
         rename = "OfferSequence",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub offer_sequence: Option<u32>,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// What the owner holds of `TakerGets`' asset: `rippled` adds it in transaction
+    /// streams and in `ledger` with `owner_funds: true`. Not a transaction field: the
+    /// codec ignores it.
+    #[serde(
+        rename = "owner_funds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub owner_funds: Option<String>,
 }
 
 impl OfferCreate {
@@ -3101,6 +3316,7 @@ impl OfferCreate {
             expiration: None,
             offer_sequence: None,
             domain_id: None,
+            owner_funds: None,
         }
     }
 }
@@ -3129,6 +3345,7 @@ pub struct OracleDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The oracle's number among its owner's oracles (`OracleDocumentID`: a number). Required.
     #[serde(rename = "OracleDocumentID")]
     pub oracle_document_id: u32,
 }
@@ -3170,20 +3387,26 @@ pub struct OracleSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The oracle's number among its owner's oracles (`OracleDocumentID`: a number). Required.
     #[serde(rename = "OracleDocumentID")]
     pub oracle_document_id: u32,
+    /// The data provider, hex (`Provider`: bytes, hex). Optional.
     #[serde(rename = "Provider", default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// A URI, hex (`URI`: bytes, hex). Optional.
     #[serde(rename = "URI", default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
+    /// The kind of asset priced, hex (e.g. "currency") (`AssetClass`: bytes, hex). Optional.
     #[serde(
         rename = "AssetClass",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub asset_class: Option<String>,
+    /// When the prices were last updated (Unix time) (`LastUpdateTime`: a number). Required.
     #[serde(rename = "LastUpdateTime")]
     pub last_update_time: u32,
+    /// The prices (`PriceDataSeries`: a list). Required.
     #[serde(rename = "PriceDataSeries", with = "price_data_series")]
     pub price_data_series: Vec<PriceData>,
 }
@@ -3235,34 +3458,43 @@ pub struct Payment {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// The most the sender will spend, in any currency (`SendMax`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "SendMax", default, skip_serializing_if = "Option::is_none")]
     pub send_max: Option<Amount>,
+    /// The paths a cross-currency payment may take (from `ripple_path_find`) (`Paths`: payment paths). Optional.
     #[serde(rename = "Paths", default, skip_serializing_if = "Option::is_none")]
     pub paths: Option<Vec<Vec<PathStep>>>,
+    /// An ID of the sender's choosing, such as an invoice number (`InvoiceID`: 256 bits, hex). Optional.
     #[serde(rename = "InvoiceID", default, skip_serializing_if = "Option::is_none")]
     pub invoice_id: Option<Hash256>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// The least a partial payment must deliver (`DeliverMin`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "DeliverMin",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub deliver_min: Option<Amount>,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub credential_ids: Option<Vec<Hash256>>,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
     /// `rippled`'s API name for `Amount` in what it returns (API v1 writes both; v2 only
@@ -3330,16 +3562,22 @@ pub struct PaymentChannelClaim {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The payment channel's ID (`Channel`: 256 bits, hex). Required.
     #[serde(rename = "Channel")]
     pub channel: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
+    /// The balance (`Balance`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Balance", default, skip_serializing_if = "Option::is_none")]
     pub balance: Option<Amount>,
+    /// A signature, hex (`Signature`: bytes, hex). Optional.
     #[serde(rename = "Signature", default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// A public key, hex (`PublicKey`: bytes, hex). Optional.
     #[serde(rename = "PublicKey", default, skip_serializing_if = "Option::is_none")]
     pub public_key: Option<String>,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
@@ -3394,20 +3632,26 @@ pub struct PaymentChannelCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// Seconds the source must wait before closing a channel with unclaimed XRP (`SettleDelay`: a number). Required.
     #[serde(rename = "SettleDelay")]
     pub settle_delay: u32,
+    /// A public key, hex (`PublicKey`: bytes, hex). Required.
     #[serde(rename = "PublicKey")]
     pub public_key: String,
+    /// The time after which it can be cancelled (ledger time) (`CancelAfter`: a number). Optional.
     #[serde(
         rename = "CancelAfter",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub cancel_after: Option<u32>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
@@ -3464,10 +3708,13 @@ pub struct PaymentChannelFund {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The payment channel's ID (`Channel`: 256 bits, hex). Required.
     #[serde(rename = "Channel")]
     pub channel: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`: a number). Optional.
     #[serde(
         rename = "Expiration",
         default,
@@ -3515,6 +3762,7 @@ pub struct PermissionedDomainDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Required.
     #[serde(rename = "DomainID")]
     pub domain_id: Hash256,
 }
@@ -3556,8 +3804,10 @@ pub struct PermissionedDomainSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// The credentials the domain accepts (`AcceptedCredentials`: a list). Required.
     #[serde(rename = "AcceptedCredentials", with = "credentials")]
     pub accepted_credentials: Vec<CredentialSpec>,
 }
@@ -3600,44 +3850,52 @@ pub struct SetFee {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The ledger the pseudo-transaction applies to (`LedgerSequence`: a number). Optional.
     #[serde(
         rename = "LedgerSequence",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub ledger_sequence: Option<u32>,
+    /// `BaseFee`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Optional.
     #[serde(rename = "BaseFee", default, skip_serializing_if = "Option::is_none")]
     pub base_fee: Option<String>,
+    /// `ReferenceFeeUnits`: a number. Optional.
     #[serde(
         rename = "ReferenceFeeUnits",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub reference_fee_units: Option<u32>,
+    /// `ReserveBase`: a number. Optional.
     #[serde(
         rename = "ReserveBase",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub reserve_base: Option<u32>,
+    /// `ReserveIncrement`: a number. Optional.
     #[serde(
         rename = "ReserveIncrement",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub reserve_increment: Option<u32>,
+    /// The reference transaction cost, in drops (`BaseFeeDrops`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "BaseFeeDrops",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub base_fee_drops: Option<Amount>,
+    /// The account reserve, in drops (`ReserveBaseDrops`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "ReserveBaseDrops",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub reserve_base_drops: Option<Amount>,
+    /// The reserve per owned entry, in drops (`ReserveIncrementDrops`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "ReserveIncrementDrops",
         default,
@@ -3690,6 +3948,7 @@ pub struct SetRegularKey {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The regular key pair's account; absent to remove it (`RegularKey`: a classic address). Optional.
     #[serde(
         rename = "RegularKey",
         default,
@@ -3735,8 +3994,10 @@ pub struct SignerListSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The total signer weight a multi-signature needs; 0 deletes the list (`SignerQuorum`: a number). Required.
     #[serde(rename = "SignerQuorum")]
     pub signer_quorum: u32,
+    /// The signers and their weights (`SignerEntries`: a list). Optional.
     #[serde(
         rename = "SignerEntries",
         default,
@@ -3784,22 +4045,27 @@ pub struct SponsorshipSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `CounterpartySponsor`: a classic address. Optional.
     #[serde(
         rename = "CounterpartySponsor",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub counterparty_sponsor: Option<String>,
+    /// `Sponsee`: a classic address. Optional.
     #[serde(rename = "Sponsee", default, skip_serializing_if = "Option::is_none")]
     pub sponsee: Option<String>,
+    /// `FeeAmountDelta`: XRP in drops, a token, or an MPT. Optional.
     #[serde(
         rename = "FeeAmountDelta",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub fee_amount_delta: Option<Amount>,
+    /// `MaxFee`: XRP in drops, a token, or an MPT. Optional.
     #[serde(rename = "MaxFee", default, skip_serializing_if = "Option::is_none")]
     pub max_fee: Option<Amount>,
+    /// `RemainingOwnerCountDelta`: a signed number. Optional.
     #[serde(
         rename = "RemainingOwnerCountDelta",
         default,
@@ -3859,8 +4125,10 @@ pub struct SponsorshipTransfer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `ObjectID`: 256 bits, hex. Optional.
     #[serde(rename = "ObjectID", default, skip_serializing_if = "Option::is_none")]
     pub object_id: Option<Hash256>,
+    /// `Sponsee`: a classic address. Optional.
     #[serde(rename = "Sponsee", default, skip_serializing_if = "Option::is_none")]
     pub sponsee: Option<String>,
 }
@@ -3909,6 +4177,7 @@ pub struct TicketCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// How many tickets to create (`TicketCount`: a number). Required.
     #[serde(rename = "TicketCount")]
     pub ticket_count: u32,
 }
@@ -3950,14 +4219,17 @@ pub struct TrustSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The most of the token the account will hold, and its issuer (`LimitAmount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(
         rename = "LimitAmount",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub limit_amount: Option<Amount>,
+    /// The value of incoming balances, in billionths (0 or 1,000,000,000 = face value) (`QualityIn`: a number). Optional.
     #[serde(rename = "QualityIn", default, skip_serializing_if = "Option::is_none")]
     pub quality_in: Option<u32>,
+    /// The value of outgoing balances, in billionths (`QualityOut`: a number). Optional.
     #[serde(
         rename = "QualityOut",
         default,
@@ -4019,10 +4291,13 @@ pub struct UNLModify {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `UNLModifyDisabling`: a number. Required.
     #[serde(rename = "UNLModifyDisabling")]
     pub unl_modify_disabling: u8,
+    /// The ledger the pseudo-transaction applies to (`LedgerSequence`: a number). Required.
     #[serde(rename = "LedgerSequence")]
     pub ledger_sequence: u32,
+    /// `UNLModifyValidator`: bytes, hex. Required.
     #[serde(rename = "UNLModifyValidator")]
     pub unl_modify_validator: String,
 }
@@ -4071,10 +4346,13 @@ pub struct VaultClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `VaultID`: 256 bits, hex. Required.
     #[serde(rename = "VaultID")]
     pub vault_id: Hash256,
+    /// The holder (`Holder`: a classic address). Required.
     #[serde(rename = "Holder")]
     pub holder: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Optional.
     #[serde(rename = "Amount", default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<Amount>,
 }
@@ -4118,40 +4396,50 @@ pub struct VaultCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// The pool's first asset (`Asset`: an asset: XRP, a token or an MPT). Required.
     #[serde(rename = "Asset")]
     pub asset: Asset,
+    /// `AssetsMaximum`: a decimal number, as a string. Optional.
     #[serde(
         rename = "AssetsMaximum",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub assets_maximum: Option<String>,
+    /// Metadata, hex (XLS-89 JSON) (`MPTokenMetadata`: bytes, hex). Optional.
     #[serde(
         rename = "MPTokenMetadata",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub mp_token_metadata: Option<String>,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// `WithdrawalPolicy`: a number. Optional.
     #[serde(
         rename = "WithdrawalPolicy",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub withdrawal_policy: Option<u8>,
+    /// Data, hex (`Data`: bytes, hex). Optional.
     #[serde(rename = "Data", default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    /// `Scale`: a number. Optional.
     #[serde(rename = "Scale", default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<u8>,
+    /// `VaultKind`: a number. Optional.
     #[serde(rename = "VaultKind", default, skip_serializing_if = "Option::is_none")]
     pub vault_kind: Option<u8>,
+    /// `SubscriptionDate`: a number. Optional.
     #[serde(
         rename = "SubscriptionDate",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub subscription_date: Option<u32>,
+    /// `RedemptionDate`: a number. Optional.
     #[serde(
         rename = "RedemptionDate",
         default,
@@ -4210,8 +4498,10 @@ pub struct VaultDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `VaultID`: 256 bits, hex. Required.
     #[serde(rename = "VaultID")]
     pub vault_id: Hash256,
+    /// `MemoData`: bytes, hex. Optional.
     #[serde(rename = "MemoData", default, skip_serializing_if = "Option::is_none")]
     pub memo_data: Option<String>,
 }
@@ -4254,8 +4544,10 @@ pub struct VaultDeposit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `VaultID`: 256 bits, hex. Required.
     #[serde(rename = "VaultID")]
     pub vault_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
 }
@@ -4298,16 +4590,20 @@ pub struct VaultSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `VaultID`: 256 bits, hex. Required.
     #[serde(rename = "VaultID")]
     pub vault_id: Hash256,
+    /// `AssetsMaximum`: a decimal number, as a string. Optional.
     #[serde(
         rename = "AssetsMaximum",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub assets_maximum: Option<String>,
+    /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// Data, hex (`Data`: bytes, hex). Optional.
     #[serde(rename = "Data", default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
 }
@@ -4352,22 +4648,27 @@ pub struct VaultWithdraw {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `VaultID`: 256 bits, hex. Required.
     #[serde(rename = "VaultID")]
     pub vault_id: Hash256,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// The account that receives it (`Destination`: a classic address). Optional.
     #[serde(
         rename = "Destination",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination: Option<String>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// Credentials to present (`CredentialIDs`: a list of 256-bit IDs). Optional.
     #[serde(
         rename = "CredentialIDs",
         default,
@@ -4417,12 +4718,16 @@ pub struct XChainAccountCreateCommit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// `SignatureReward`: XRP in drops, a token, or an MPT. Required.
     #[serde(rename = "SignatureReward")]
     pub signature_reward: Amount,
 }
@@ -4473,26 +4778,37 @@ pub struct XChainAddAccountCreateAttestation {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `AttestationSignerAccount`: a classic address. Required.
     #[serde(rename = "AttestationSignerAccount")]
     pub attestation_signer_account: String,
+    /// A public key, hex (`PublicKey`: bytes, hex). Required.
     #[serde(rename = "PublicKey")]
     pub public_key: String,
+    /// A signature, hex (`Signature`: bytes, hex). Required.
     #[serde(rename = "Signature")]
     pub signature: String,
+    /// `OtherChainSource`: a classic address. Required.
     #[serde(rename = "OtherChainSource")]
     pub other_chain_source: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// `AttestationRewardAccount`: a classic address. Required.
     #[serde(rename = "AttestationRewardAccount")]
     pub attestation_reward_account: String,
+    /// `WasLockingChainSend`: a number. Required.
     #[serde(rename = "WasLockingChainSend")]
     pub was_locking_chain_send: u8,
+    /// `XChainAccountCreateCount`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "XChainAccountCreateCount")]
     pub x_chain_account_create_count: String,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// `SignatureReward`: XRP in drops, a token, or an MPT. Required.
     #[serde(rename = "SignatureReward")]
     pub signature_reward: Amount,
 }
@@ -4557,24 +4873,34 @@ pub struct XChainAddClaimAttestation {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `AttestationSignerAccount`: a classic address. Required.
     #[serde(rename = "AttestationSignerAccount")]
     pub attestation_signer_account: String,
+    /// A public key, hex (`PublicKey`: bytes, hex). Required.
     #[serde(rename = "PublicKey")]
     pub public_key: String,
+    /// A signature, hex (`Signature`: bytes, hex). Required.
     #[serde(rename = "Signature")]
     pub signature: String,
+    /// `OtherChainSource`: a classic address. Required.
     #[serde(rename = "OtherChainSource")]
     pub other_chain_source: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// `AttestationRewardAccount`: a classic address. Required.
     #[serde(rename = "AttestationRewardAccount")]
     pub attestation_reward_account: String,
+    /// `WasLockingChainSend`: a number. Required.
     #[serde(rename = "WasLockingChainSend")]
     pub was_locking_chain_send: u8,
+    /// `XChainClaimID`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "XChainClaimID")]
     pub x_chain_claim_id: String,
+    /// The account that receives it (`Destination`: a classic address). Optional.
     #[serde(
         rename = "Destination",
         default,
@@ -4640,18 +4966,23 @@ pub struct XChainClaim {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `XChainClaimID`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "XChainClaimID")]
     pub x_chain_claim_id: String,
+    /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`: a number). Optional.
     #[serde(
         rename = "DestinationTag",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub destination_tag: Option<u32>,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
 }
@@ -4703,12 +5034,16 @@ pub struct XChainCommit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `XChainClaimID`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "XChainClaimID")]
     pub x_chain_claim_id: String,
+    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
     #[serde(rename = "Amount")]
     pub amount: Amount,
+    /// `OtherChainDestination`: a classic address. Optional.
     #[serde(
         rename = "OtherChainDestination",
         default,
@@ -4762,10 +5097,13 @@ pub struct XChainCreateBridge {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `SignatureReward`: XRP in drops, a token, or an MPT. Required.
     #[serde(rename = "SignatureReward")]
     pub signature_reward: Amount,
+    /// `MinAccountCreateAmount`: XRP in drops, a token, or an MPT. Optional.
     #[serde(
         rename = "MinAccountCreateAmount",
         default,
@@ -4817,10 +5155,13 @@ pub struct XChainCreateClaimID {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `SignatureReward`: XRP in drops, a token, or an MPT. Required.
     #[serde(rename = "SignatureReward")]
     pub signature_reward: Amount,
+    /// `OtherChainSource`: a classic address. Required.
     #[serde(rename = "OtherChainSource")]
     pub other_chain_source: String,
 }
@@ -4869,14 +5210,17 @@ pub struct XChainModifyBridge {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
     pub common: Common,
+    /// `XChainBridge`: a cross-chain bridge. Required.
     #[serde(rename = "XChainBridge")]
     pub x_chain_bridge: XChainBridge,
+    /// `SignatureReward`: XRP in drops, a token, or an MPT. Optional.
     #[serde(
         rename = "SignatureReward",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub signature_reward: Option<Amount>,
+    /// `MinAccountCreateAmount`: XRP in drops, a token, or an MPT. Optional.
     #[serde(
         rename = "MinAccountCreateAmount",
         default,

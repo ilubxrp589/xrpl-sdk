@@ -34,14 +34,19 @@ use serde::Serialize;
 /// necessarily validated.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LedgerIndex {
+    /// The latest validated ledger: final.
     #[default]
     Validated,
+    /// The open ledger: it can still change.
     Current,
+    /// The latest closed ledger, not necessarily validated.
     Closed,
+    /// A ledger by its index.
     Index(u32),
 }
 
 impl LedgerIndex {
+    /// The JSON `rippled` takes for this ledger.
     pub fn as_value(&self) -> serde_json::Value {
         match self {
             LedgerIndex::Validated => serde_json::Value::String("validated".into()),

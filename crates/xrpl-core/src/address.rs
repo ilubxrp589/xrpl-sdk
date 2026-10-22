@@ -259,7 +259,9 @@ pub fn x_address_to_classic(x_address: &str) -> Result<(String, Option<u32>, boo
 /// Key type for seed encoding/decoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyType {
+    /// Ed25519: `rippled`'s default for new keys.
     Ed25519,
+    /// secp256k1 (ECDSA).
     Secp256k1,
 }
 

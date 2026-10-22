@@ -5,10 +5,15 @@
 //! ([`definitions::DEFINITIONS_JSON`]); a field they do not hold is an
 //! error, as in `rippled`.
 
+/// Amount encoding.
 pub mod amount;
+/// Binary → JSON.
 pub mod decode;
+/// Field and type definitions, from `rippled` 3.4.1's `server_definitions`.
 pub mod definitions;
+/// JSON → binary.
 pub mod encode;
+/// Field IDs and length prefixes.
 pub mod field;
 
 pub use decode::decode_transaction_binary;

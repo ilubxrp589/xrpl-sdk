@@ -51,6 +51,7 @@ pub trait TxModel: Serialize + Into<Tx> + Clone {
     const TRANSACTION_TYPE: &'static str;
     /// The fields every transaction has.
     fn common(&self) -> &Common;
+    /// The common fields, to change.
     fn common_mut(&mut self) -> &mut Common;
 
     /// `rippled`'s JSON for the transaction, `TransactionType` included: what
@@ -80,8 +81,10 @@ pub struct Common {
     /// Transaction cost in drops.
     #[serde(rename = "Fee", default, skip_serializing_if = "Option::is_none")]
     pub fee: Option<String>,
+    /// The sequence number (`Sequence`).
     #[serde(rename = "Sequence", default, skip_serializing_if = "Option::is_none")]
     pub sequence: Option<u32>,
+    /// Flag bits (`Flags`).
     #[serde(rename = "Flags", default, skip_serializing_if = "Option::is_none")]
     pub flags: Option<u32>,
     /// The last ledger the transaction may appear in.
@@ -91,6 +94,7 @@ pub struct Common {
         skip_serializing_if = "Option::is_none"
     )]
     pub last_ledger_sequence: Option<u32>,
+    /// A tag the sender uses to tell its own payments apart (`SourceTag`).
     #[serde(rename = "SourceTag", default, skip_serializing_if = "Option::is_none")]
     pub source_tag: Option<u32>,
     /// A ticket to use instead of a sequence number (`Sequence` is then 0).
@@ -100,12 +104,14 @@ pub struct Common {
         skip_serializing_if = "Option::is_none"
     )]
     pub ticket_sequence: Option<u32>,
+    /// Valid only if the account's last transaction had this hash (`AccountTxnID`).
     #[serde(
         rename = "AccountTxnID",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub account_txn_id: Option<Hash256>,
+    /// Notes attached to the transaction (`Memos`).
     #[serde(
         rename = "Memos",
         default,
@@ -126,12 +132,14 @@ pub struct Common {
         skip_serializing_if = "Option::is_none"
     )]
     pub signing_pub_key: Option<String>,
+    /// The signature, hex (`TxnSignature`).
     #[serde(
         rename = "TxnSignature",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub txn_signature: Option<String>,
+    /// The signatures of a multi-signed transaction (`Signers`).
     #[serde(
         rename = "Signers",
         default,
@@ -139,26 +147,31 @@ pub struct Common {
         with = "signers_opt"
     )]
     pub signers: Option<Vec<Signer>>,
+    /// The last transaction that changed this entry (`PreviousTxnID`).
     #[serde(
         rename = "PreviousTxnID",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub previous_txn_id: Option<Hash256>,
+    /// A limit on the operations the transaction may perform (`OperationLimit`).
     #[serde(
         rename = "OperationLimit",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub operation_limit: Option<u32>,
+    /// The account sponsoring the fee or reserve (`Sponsor`).
     #[serde(rename = "Sponsor", default, skip_serializing_if = "Option::is_none")]
     pub sponsor: Option<String>,
+    /// How the sponsor pays (`SponsorFlags`).
     #[serde(
         rename = "SponsorFlags",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub sponsor_flags: Option<u32>,
+    /// The sponsor's signature (`SponsorSignature`).
     #[serde(
         rename = "SponsorSignature",
         default,
@@ -169,6 +182,11 @@ pub struct Common {
     /// into the JSON it returns. The codec ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash: Option<Hash256>,
+    /// The close time of the ledger it is in (ledger time): not a
+    /// transaction field, but `rippled` adds it in streams and `tx`. The
+    /// codec ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<u64>,
 }
 
 impl Common {
@@ -195,6 +213,7 @@ impl Common {
             sponsor_flags: None,
             sponsor_signature: None,
             hash: None,
+            date: None,
         }
     }
 }
@@ -202,10 +221,13 @@ impl Common {
 /// One of a transaction's `Memos`. Each part is hex (see `utils::str_to_hex`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Memo {
+    /// What kind of memo, hex (for example a MIME type) (`MemoType`).
     #[serde(rename = "MemoType", default, skip_serializing_if = "Option::is_none")]
     pub memo_type: Option<String>,
+    /// The memo's content, hex (`MemoData`).
     #[serde(rename = "MemoData", default, skip_serializing_if = "Option::is_none")]
     pub memo_data: Option<String>,
+    /// How the content is encoded, hex (`MemoFormat`).
     #[serde(
         rename = "MemoFormat",
         default,
@@ -217,10 +239,13 @@ pub struct Memo {
 /// One signature of a multi-signed transaction (`Signers`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signer {
+    /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
+    /// The signing public key, hex; empty when multi-signed (`SigningPubKey`).
     #[serde(rename = "SigningPubKey")]
     pub signing_pub_key: String,
+    /// The signature, hex (`TxnSignature`).
     #[serde(rename = "TxnSignature")]
     pub txn_signature: String,
 }
@@ -228,10 +253,13 @@ pub struct Signer {
 /// A member of a signer list (SignerListSet's `SignerEntries`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignerEntry {
+    /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
+    /// The signer's weight toward the quorum (`SignerWeight`).
     #[serde(rename = "SignerWeight")]
     pub signer_weight: u16,
+    /// Data about the signer, of the list owner's choosing (`WalletLocator`).
     #[serde(
         rename = "WalletLocator",
         default,
@@ -245,8 +273,10 @@ pub struct SignerEntry {
 /// deletes the pair.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PriceData {
+    /// The asset priced (for example `XRP`) (`BaseAsset`).
     #[serde(rename = "BaseAsset")]
     pub base_asset: String,
+    /// The asset the price is in (for example `USD`) (`QuoteAsset`).
     #[serde(rename = "QuoteAsset")]
     pub quote_asset: String,
     /// UInt64: a number in JSON, or hex as `rippled` writes it.
@@ -256,6 +286,7 @@ pub struct PriceData {
         skip_serializing_if = "Option::is_none"
     )]
     pub asset_price: Option<Value>,
+    /// The price's decimal places (`Scale`).
     #[serde(rename = "Scale", default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<u8>,
 }
@@ -263,6 +294,7 @@ pub struct PriceData {
 /// An account in AMMBid's `AuthAccounts`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthAccount {
+    /// The account.
     #[serde(rename = "Account")]
     pub account: String,
 }
@@ -271,6 +303,7 @@ pub struct AuthAccount {
 /// granular permission (`"TrustlineAuthorize"`, …).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Permission {
+    /// A transaction type or a granular permission name (`PermissionValue`).
     #[serde(rename = "PermissionValue")]
     pub permission_value: String,
 }
@@ -279,6 +312,7 @@ pub struct Permission {
 /// `AuthorizeCredentials`, PermissionedDomainSet's `AcceptedCredentials`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CredentialSpec {
+    /// The issuer (`Issuer`).
     #[serde(rename = "Issuer")]
     pub issuer: String,
     /// Hex.
@@ -291,17 +325,20 @@ pub struct CredentialSpec {
 /// `transaction::batch`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatchSigner {
+    /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
     /// Hex; empty when `signers` is used.
     #[serde(rename = "SigningPubKey")]
     pub signing_pub_key: String,
+    /// The signature, hex (`TxnSignature`).
     #[serde(
         rename = "TxnSignature",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub txn_signature: Option<String>,
+    /// The signatures of a multi-signed transaction (`Signers`).
     #[serde(
         rename = "Signers",
         default,
@@ -315,21 +352,26 @@ pub struct BatchSigner {
 /// `{"currency": "XRP"}`, `{"currency", "issuer"}` or `{"mpt_issuance_id"}`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Asset {
+    /// The currency code (`currency`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
+    /// The issuer (`Issuer`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
+    /// The MPT issuance's ID (`mpt_issuance_id`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mpt_issuance_id: Option<String>,
 }
 
 impl Asset {
+    /// XRP.
     pub fn xrp() -> Self {
         Self {
             currency: Some("XRP".into()),
             ..Default::default()
         }
     }
+    /// A token: currency code and issuer.
     pub fn token(currency: impl Into<String>, issuer: impl Into<String>) -> Self {
         Self {
             currency: Some(currency.into()),
@@ -337,6 +379,7 @@ impl Asset {
             ..Default::default()
         }
     }
+    /// An MPT, by MPTokenIssuanceID.
     pub fn mpt(mpt_issuance_id: impl Into<String>) -> Self {
         Self {
             mpt_issuance_id: Some(mpt_issuance_id.into()),
@@ -348,12 +391,16 @@ impl Asset {
 /// A cross-chain bridge: its door accounts and assets on each chain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct XChainBridge {
+    /// The bridge's door account on the locking chain (`LockingChainDoor`).
     #[serde(rename = "LockingChainDoor")]
     pub locking_chain_door: String,
+    /// The bridged asset on the locking chain (`LockingChainIssue`).
     #[serde(rename = "LockingChainIssue")]
     pub locking_chain_issue: Asset,
+    /// The bridge's door account on the issuing chain (`IssuingChainDoor`).
     #[serde(rename = "IssuingChainDoor")]
     pub issuing_chain_door: String,
+    /// The bridged asset on the issuing chain (`IssuingChainIssue`).
     #[serde(rename = "IssuingChainIssue")]
     pub issuing_chain_issue: Asset,
 }
@@ -363,14 +410,19 @@ pub struct XChainBridge {
 /// writes back; the codec derives them from the other fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathStep {
+    /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    /// The currency code (`currency`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
+    /// The issuer (`Issuer`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
+    /// The step's type bits (1 account, 16 currency, 32 issuer) (`type`).
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub step_type: Option<u32>,
+    /// The step's type, hex.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_hex: Option<String>,
 }
@@ -494,6 +546,7 @@ macro_rules! tx_enum {
                 }
             }
 
+            /// The common fields, to change.
             pub fn common_mut(&mut self) -> Option<&mut Common> {
                 match self {
                     $(Tx::$name(t) => Some(&mut t.common),)*

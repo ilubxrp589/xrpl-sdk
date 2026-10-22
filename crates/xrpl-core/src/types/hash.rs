@@ -23,8 +23,10 @@ pub struct Hash256(pub [u8; 32]);
 // --- Hash128 ---
 
 impl Hash128 {
+    /// All zero bytes.
     pub const ZERO: Self = Self([0u8; 16]);
 
+    /// From hex (either case).
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 16 {
@@ -38,6 +40,7 @@ impl Hash128 {
         Ok(Self(arr))
     }
 
+    /// The bytes.
     pub fn as_bytes(&self) -> &[u8; 16] {
         &self.0
     }
@@ -71,8 +74,10 @@ impl<'de> Deserialize<'de> for Hash128 {
 // --- Hash160 ---
 
 impl Hash160 {
+    /// All zero bytes.
     pub const ZERO: Self = Self([0u8; 20]);
 
+    /// From hex (either case).
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 20 {
@@ -86,6 +91,7 @@ impl Hash160 {
         Ok(Self(arr))
     }
 
+    /// The bytes.
     pub fn as_bytes(&self) -> &[u8; 20] {
         &self.0
     }
@@ -119,8 +125,10 @@ impl<'de> Deserialize<'de> for Hash160 {
 // --- Hash192 ---
 
 impl Hash192 {
+    /// All zero bytes.
     pub const ZERO: Self = Self([0u8; 24]);
 
+    /// From hex (either case).
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 24 {
@@ -134,6 +142,7 @@ impl Hash192 {
         Ok(Self(arr))
     }
 
+    /// The bytes.
     pub fn as_bytes(&self) -> &[u8; 24] {
         &self.0
     }
@@ -167,8 +176,10 @@ impl<'de> Deserialize<'de> for Hash192 {
 // --- Hash256 ---
 
 impl Hash256 {
+    /// All zero bytes.
     pub const ZERO: Self = Self([0u8; 32]);
 
+    /// From hex (either case).
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 32 {
@@ -182,6 +193,7 @@ impl Hash256 {
         Ok(Self(arr))
     }
 
+    /// The bytes.
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }

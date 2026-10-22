@@ -17,37 +17,7 @@ use tokio_tungstenite::MaybeTlsStream;
 
 type WsStream = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
-/// WebSocket event from subscriptions.
-#[derive(Debug, Clone)]
-pub enum WsEvent {
-    /// Ledger closed event.
-    Ledger(LedgerEvent),
-    /// Transaction event (from account or global subscription).
-    Transaction(TransactionEvent),
-    /// Connection was re-established after a disconnect.
-    Reconnected,
-}
-
-/// Ledger closed event data.
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct LedgerEvent {
-    pub ledger_index: u32,
-    pub ledger_hash: Option<String>,
-    pub ledger_time: Option<u64>,
-    pub txn_count: Option<u32>,
-    pub fee_base: Option<u64>,
-    pub reserve_base: Option<u64>,
-    pub reserve_inc: Option<u64>,
-}
-
-/// Transaction stream event data.
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct TransactionEvent {
-    pub transaction: Value,
-    pub meta: Option<Value>,
-    pub validated: Option<bool>,
-    pub ledger_index: Option<u32>,
-}
+pub use crate::stream::*;
 
 type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, ClientError>>>>>;
 
@@ -305,19 +275,8 @@ impl XrplWsClient {
                     };
                     let _ = sender.send(result);
                 }
-            } else if let Some(msg_type) = value.get("type").and_then(|v| v.as_str()) {
-                let event = match msg_type {
-                    "ledgerClosed" => serde_json::from_value::<LedgerEvent>(value)
-                        .ok()
-                        .map(WsEvent::Ledger),
-                    "transaction" => serde_json::from_value::<TransactionEvent>(value)
-                        .ok()
-                        .map(WsEvent::Transaction),
-                    _ => None,
-                };
-                if let Some(evt) = event {
-                    let _ = event_tx.send(evt);
-                }
+            } else if let Some(evt) = WsEvent::from_message(value) {
+                let _ = event_tx.send(evt);
             }
         }
 
@@ -328,51 +287,114 @@ impl XrplWsClient {
         }
     }
 
-    /// Subscribe to ledger events.
-    pub async fn subscribe_ledger(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        let params = json!({"streams": ["ledger"]});
-        self.raw_request("subscribe", params.clone()).await?;
+    /// Subscribe with any `subscribe` parameters (`streams`, `accounts`,
+    /// `accounts_proposed`, `books`, …), returning `rippled`'s reply (an order
+    /// book snapshot, for instance) and a receiver of every [`WsEvent`]. The
+    /// subscription is restored after a reconnect.
+    pub async fn subscribe(
+        &self,
+        params: Value,
+    ) -> Result<(Value, broadcast::Receiver<WsEvent>), ClientError> {
+        let events = self.event_tx.subscribe();
+        let reply = self.raw_request("subscribe", params.clone()).await?;
         let mut subs = self.active_subs.lock().await;
         if !subs.contains(&params) {
             subs.push(params);
         }
-        Ok(self.event_tx.subscribe())
+        Ok((reply, events))
     }
 
-    /// Subscribe to all validated transactions.
+    /// Undo a [`XrplWsClient::subscribe`] with the same parameters.
+    pub async fn unsubscribe(&self, params: Value) -> Result<(), ClientError> {
+        self.raw_request("unsubscribe", params.clone()).await?;
+        self.active_subs.lock().await.retain(|s| s != &params);
+        Ok(())
+    }
+
+    async fn subscribe_streams(
+        &self,
+        streams: &[&str],
+    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        Ok(self.subscribe(json!({ "streams": streams })).await?.1)
+    }
+
+    /// Subscribe to ledger closes ([`WsEvent::Ledger`]).
+    pub async fn subscribe_ledger(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["ledger"]).await
+    }
+
+    /// Subscribe to validations from every validator the server hears
+    /// ([`WsEvent::Validation`]).
+    pub async fn subscribe_validations(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["validations"]).await
+    }
+
+    /// Subscribe to the server's load and fee changes ([`WsEvent::Server`]).
+    pub async fn subscribe_server(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["server"]).await
+    }
+
+    /// Subscribe to consensus phase changes ([`WsEvent::Consensus`]).
+    pub async fn subscribe_consensus(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["consensus"]).await
+    }
+
+    /// Subscribe to each validated ledger's order-book trading
+    /// ([`WsEvent::BookChanges`]).
+    pub async fn subscribe_book_changes(
+        &self,
+    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["book_changes"]).await
+    }
+
+    /// Subscribe to validator manifests ([`WsEvent::Manifest`]).
+    pub async fn subscribe_manifests(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["manifests"]).await
+    }
+
+    /// Subscribe to an order book: every transaction that touches it
+    /// ([`WsEvent::Transaction`]). `taker_gets` / `taker_pays` are
+    /// `{"currency": "XRP"}` or `{"currency", "issuer"}`. With `snapshot`,
+    /// returns the book's current offers first (`both` adds the other side).
+    pub async fn subscribe_order_book(
+        &self,
+        taker_gets: Value,
+        taker_pays: Value,
+        snapshot: bool,
+        both: bool,
+    ) -> Result<(OrderBookSnapshot, broadcast::Receiver<WsEvent>), ClientError> {
+        let book = json!({"taker_gets": taker_gets, "taker_pays": taker_pays, "snapshot": snapshot, "both": both});
+        let (reply, events) = self.subscribe(json!({ "books": [book] })).await?;
+        Ok((serde_json::from_value(reply)?, events))
+    }
+
+    /// Subscribe to every validated transaction on the network
+    /// ([`WsEvent::Transaction`]).
     pub async fn subscribe_transactions(
         &self,
     ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        let params = json!({"streams": ["transactions"]});
-        self.raw_request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(self.event_tx.subscribe())
+        self.subscribe_streams(&["transactions"]).await
     }
 
-    /// Subscribe to a specific account's transactions.
+    /// Subscribe to transactions as they are proposed, before validation
+    /// (preliminary results; [`WsEvent::Transaction`] with `validated: false`).
+    pub async fn subscribe_transactions_proposed(
+        &self,
+    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        self.subscribe_streams(&["transactions_proposed"]).await
+    }
+
+    /// Subscribe to the validated transactions that affect an account.
     pub async fn subscribe_account(
         &self,
         account: &str,
     ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        let params = json!({"accounts": [account]});
-        self.raw_request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(self.event_tx.subscribe())
+        Ok(self.subscribe(json!({ "accounts": [account] })).await?.1)
     }
 
-    /// Unsubscribe from a ledger stream.
+    /// Unsubscribe from ledger closes.
     pub async fn unsubscribe_ledger(&self) -> Result<(), ClientError> {
-        let params = json!({"streams": ["ledger"]});
-        self.raw_request("unsubscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        subs.retain(|s| s != &params);
-        Ok(())
+        self.unsubscribe(json!({"streams": ["ledger"]})).await
     }
 
     /// Get a receiver for all subscription events.

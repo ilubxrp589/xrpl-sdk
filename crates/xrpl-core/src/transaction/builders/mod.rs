@@ -32,30 +32,42 @@ pub trait Transaction {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TxCommon {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The transaction cost, in drops (`Fee`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fee: Option<String>,
+    /// The sequence number (`Sequence`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sequence: Option<u32>,
+    /// The last ledger the transaction may appear in (`LastLedgerSequence`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_ledger_sequence: Option<u32>,
+    /// Flag bits (`Flags`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub flags: Option<u32>,
+    /// Notes attached to the transaction (`Memos`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memos: Option<Vec<Value>>,
+    /// A tag the sender uses to tell its own payments apart (`SourceTag`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_tag: Option<u32>,
+    /// Valid only if the account's last transaction had this hash (`AccountTxnID`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_txn_id: Option<String>,
+    /// A ticket to use instead of a sequence number (`TicketSequence`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ticket_sequence: Option<u32>,
+    /// The signing public key, hex; empty when multi-signed (`SigningPubKey`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signing_pub_key: Option<String>,
+    /// The signature, hex (`TxnSignature`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub txn_signature: Option<String>,
 }
 
 impl TxCommon {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),

@@ -18,6 +18,7 @@ Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and Web
 | `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
 | `halcyon-xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
 | `halcyon-xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
+| `halcyon-xrpl-cli` | `hxrpl`, the command line: wallets, faucet, queries, signing, sending, live streams | — |
 
 The packages are named `halcyon-*` on crates.io; in code they are `xrpl_core`, `xrpl_client`
 and `xrpl_sdk`.
@@ -27,12 +28,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.3"
+halcyon-xrpl-sdk = "0.4"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.3"      # types + codec + crypto only
-halcyon-xrpl-client = "0.3"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.4"      # types + codec + crypto only
+halcyon-xrpl-client = "0.4"    # HTTP + WebSocket clients
 ```
 
 ## Quick Start
@@ -78,6 +79,44 @@ let nft = utils::parse_nftoken_id("000B0539C35B55AA…")?;       // issuer, taxo
 let changes = utils::get_balance_changes(&meta)?;              // exact, never floating point
 let ok = verify_payment_channel_claim(&channel, 1_000_000, &signature, &public_key)?;
 ```
+
+## Cookbook
+
+Runnable recipes in [`crates/xrpl-sdk/examples`](crates/xrpl-sdk/examples). Each one makes its own
+funded Testnet wallets, so `cargo run --example <name>` works with nothing to set up. Every recipe
+below was run against Testnet (and `watch_streams` against mainnet) before release.
+
+| Recipe | What it does |
+|--------|--------------|
+| `testnet_quickstart` | a funded wallet, a payment, its hash and balance changes |
+| `issue_token` | issue a token: DefaultRipple, trust lines, issuing, paying holder to holder |
+| `nft_marketplace` | mint an NFT with a 5% transfer fee, sell it, resell it, and the artist's royalty |
+| `dex_order` | place an order, read the order book, take part of it, cancel the rest |
+| `amm` | create an XRP/USD AMM pool, trade against it, watch the pool move |
+| `escrow` | lock XRP until a time, then release it |
+| `checks` | write a check and cash part of it |
+| `payment_channel` | open a channel, pay with off-ledger signed claims, redeem one |
+| `multisign` | a signer list of two, a transaction signed by both, `submit_multisigned` |
+| `batch` | two accounts' payments in one all-or-nothing Batch, co-signed |
+| `mpt` | create a Multi-Purpose Token, opt in, send it |
+| `blocking` | the same, with no async: `BlockingClient` |
+| `watch_streams` | live mainnet ledgers, order-book trading and validations over WebSocket |
+| `check_balance`, `decode_blob`, `subscribe_ledger` | an account's spendable balance; decoding a blob; the ledger stream |
+
+## Command line
+
+```sh
+cargo install halcyon-xrpl-cli
+hxrpl wallet faucet                                       # a funded Testnet wallet
+hxrpl --network mainnet account info rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+XRPL_SEED=s… hxrpl tx send-xrp rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe 1.5
+hxrpl --network mainnet book XRP RLUSD.rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De
+hxrpl --network mainnet watch ledger --count 5
+hxrpl tx hash 120000220000000024…                         # a signed blob's ID, offline
+```
+
+Testnet unless told otherwise; sending on mainnet needs `--yes`; seeds only from `XRPL_SEED` or
+`--seed-file`. See [`crates/xrpl-cli`](crates/xrpl-cli).
 
 ### Subscribe to Ledger Closes (WebSocket)
 
@@ -169,7 +208,10 @@ assert_eq!(json["TransactionType"], "Payment");
 - A typed request and response for every public `rippled` method and the Clio-only ones (43),
   each response checked against one recorded from a real server; `request_all` follows markers
 - `simulate` (dry-run a transaction) and `submit_multisigned`
-- WebSocket client with subscriptions & automatic reconnection
+- WebSocket client with subscriptions & automatic reconnection; typed events for every rippled
+  stream (ledger, transactions, validations, server, consensus, book changes, manifests, peer status)
+  and order books with a snapshot
+- `BlockingClient`: every method as a plain call, no async runtime needed
 - Autofill (Sequence, Fee, LastLedgerSequence) with concurrent fetch
 - `submit_and_wait` — reliable submission with polling until validated
 - Pagination helpers (`_all` variants) for paginated endpoints

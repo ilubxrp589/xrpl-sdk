@@ -89,10 +89,13 @@ pub mod keylet {
     /// One side of an AMM pool.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Issue<'a> {
+        /// XRP.
         Xrp,
         /// A token: its currency code (3 letters or 40 hex digits) and issuer.
         Token {
+            /// Its currency code (3 letters or 40 hex digits).
             currency: &'a str,
+            /// Its issuer.
             issuer: &'a str,
         },
     }

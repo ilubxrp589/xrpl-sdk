@@ -11,12 +11,15 @@ use alloc::string::String;
 pub struct AccountId(pub [u8; 20]);
 
 impl AccountId {
+    /// All zero bytes.
     pub const ZERO: Self = Self([0u8; 20]);
 
+    /// From the 20-byte account ID.
     pub fn from_bytes(bytes: [u8; 20]) -> Self {
         Self(bytes)
     }
 
+    /// The 20 bytes.
     pub fn as_bytes(&self) -> &[u8; 20] {
         &self.0
     }

@@ -86,7 +86,9 @@ macro_rules! paginated {
 /// An oracle to read in [`GetAggregatePriceRequest`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct OracleId {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The oracle's document ID.
     pub oracle_document_id: u32,
 }
 
@@ -96,17 +98,22 @@ pub struct OracleId {
 /// payment channels the account is the source of.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountChannelsRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
     /// Only channels to this destination.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub destination_account: Option<String>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl AccountChannelsRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -121,10 +128,13 @@ paginated!(AccountChannelsRequest, PaymentChannel, channels);
 /// currencies the account can send and receive.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountCurrenciesRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl AccountCurrenciesRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -138,7 +148,9 @@ request!(AccountCurrenciesRequest => "account_currencies", AccountCurrenciesResu
 /// an account's settings and XRP balance.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountInfoRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// Include the account's signer lists.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -148,6 +160,7 @@ pub struct AccountInfoRequest {
     pub queue: Option<bool>,
 }
 impl AccountInfoRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -161,7 +174,9 @@ request!(AccountInfoRequest => "account_info", AccountInfo);
 /// an account's trust lines.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountLinesRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// Only the line with this peer.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -169,10 +184,12 @@ pub struct AccountLinesRequest {
     /// 10–400 per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl AccountLinesRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -187,15 +204,19 @@ paginated!(AccountLinesRequest, TrustLine, lines);
 /// the NFTs an account holds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountNftsRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// 20–400 per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl AccountNftsRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -210,6 +231,7 @@ paginated!(AccountNftsRequest, NFToken, account_nfts);
 /// the ledger entries an account owns.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountObjectsRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
     /// Only entries of this type (`offer`, `state`, `check`, `escrow`,
     /// `payment_channel`, `nft_offer`, `ticket`, `did`, `oracle`, `mptoken`, …).
@@ -218,14 +240,17 @@ pub struct AccountObjectsRequest {
     /// Only entries that block deleting the account.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deletion_blockers_only: Option<bool>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// 10–400 per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl AccountObjectsRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -240,15 +265,19 @@ paginated!(AccountObjectsRequest, LedgerObject, account_objects);
 /// an account's open DEX offers.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountOffersRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// 10–400 per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl AccountOffersRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -264,16 +293,21 @@ paginated!(AccountOffersRequest, AccountOffer, offers);
 /// latest validated ledger.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AccountTxRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// The earliest ledger searched.
     pub ledger_index_min: i32,
+    /// The latest ledger searched.
     pub ledger_index_max: i32,
     /// Hex (`tx_blob`, `meta`) instead of JSON.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub binary: Option<bool>,
     /// Oldest first.
     pub forward: bool,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
@@ -306,15 +340,19 @@ paginated!(AccountTxRequest, AccountTxEntry, transactions);
 /// what an issuer has issued, and to whom.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct GatewayBalancesRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
     /// Operational addresses to leave out of `obligations` (listed in `balances`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hotwallet: Option<Vec<String>>,
+    /// Accept only addresses, not public keys.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strict: Option<bool>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl GatewayBalancesRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -328,17 +366,21 @@ request!(GatewayBalancesRequest => "gateway_balances", GatewayBalancesResult);
 /// trust-line settings that do not suit the account's role.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NoRippleCheckRequest {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
     /// `"gateway"` (an issuer) or `"user"`.
     pub role: String,
     /// Include the transactions that fix the problems.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transactions: Option<bool>,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl NoRippleCheckRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(account: impl Into<String>, role: impl Into<String>) -> Self {
         Self {
             account: account.into(),
@@ -355,6 +397,7 @@ request!(NoRippleCheckRequest => "noripple_check", NoRippleCheckResult);
 /// a ledger's header, and optionally its transactions.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct LedgerRequest {
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// The ledger by hash instead.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -362,6 +405,7 @@ pub struct LedgerRequest {
     /// Include the transactions (hashes, or objects with `expand`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transactions: Option<bool>,
+    /// Whole transactions instead of hashes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expand: Option<bool>,
     /// With `expand`: hex instead of JSON.
@@ -375,6 +419,7 @@ pub struct LedgerRequest {
     pub queue: Option<bool>,
 }
 impl LedgerRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(ledger_index: LedgerIndex) -> Self {
         Self {
             ledger_index,
@@ -400,7 +445,9 @@ request!(LedgerCurrentRequest => "ledger_current", LedgerCurrentResult);
 /// a ledger's state, a page at a time.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct LedgerDataRequest {
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// That ledger's hash.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
     /// Only entries of this type (`account`, `amm`, `offer`, `state`, …).
@@ -412,10 +459,12 @@ pub struct LedgerDataRequest {
     /// Up to 256 per page (2048 with `binary`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl LedgerDataRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(ledger_index: LedgerIndex) -> Self {
         Self {
             ledger_index,
@@ -431,7 +480,9 @@ paginated!(LedgerDataRequest, LedgerObject, state);
 /// entry (account, trust line, offer, escrow, AMM, MPT, credential, …).
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct LedgerEntryRequest {
+    /// The ID.
     pub index: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
     /// Hex (`node_binary`) instead of JSON.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -441,6 +492,7 @@ pub struct LedgerEntryRequest {
     pub include_deleted: Option<bool>,
 }
 impl LedgerEntryRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(index: impl Into<String>) -> Self {
         Self {
             index: index.into(),
@@ -458,8 +510,10 @@ request!(LedgerEntryRequest => "ledger_entry", LedgerEntryResult);
 /// `Fee`, `Sequence` and the like are filled in.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct SimulateRequest {
+    /// The transaction, as JSON.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tx_json: Option<Value>,
+    /// The transaction, as hex.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tx_blob: Option<String>,
     /// Hex (`tx_blob`, `meta_blob`) in the response.
@@ -467,6 +521,7 @@ pub struct SimulateRequest {
     pub binary: Option<bool>,
 }
 impl SimulateRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(tx_json: Value) -> Self {
         Self {
             tx_json: Some(tx_json),
@@ -481,12 +536,14 @@ request!(SimulateRequest => "simulate", SimulateResult);
 /// is left out: keys stay local.)
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct SubmitRequest {
+    /// The transaction, as hex.
     pub tx_blob: String,
     /// Do not retry or relay it if it fails locally.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fail_hard: Option<bool>,
 }
 impl SubmitRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(tx_blob: impl Into<String>) -> Self {
         Self {
             tx_blob: tx_blob.into(),
@@ -501,11 +558,14 @@ request!(SubmitRequest => "submit", SubmitResult);
 /// `SigningPubKey`; see `xrpl_sdk::wallet::collect_signers`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct SubmitMultisignedRequest {
+    /// The transaction, as JSON.
     pub tx_json: Value,
+    /// Do not retry or relay it if it fails locally.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fail_hard: Option<bool>,
 }
 impl SubmitMultisignedRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(tx_json: Value) -> Self {
         Self {
             tx_json,
@@ -519,12 +579,16 @@ request!(SubmitMultisignedRequest => "submit_multisigned", SubmitResult);
 /// a transaction from one given ledger.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct TransactionEntryRequest {
+    /// The transaction's hash.
     pub tx_hash: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// That ledger's hash.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
 }
 impl TransactionEntryRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(tx_hash: impl Into<String>, ledger_index: LedgerIndex) -> Self {
         Self {
             tx_hash: tx_hash.into(),
@@ -551,10 +615,12 @@ pub struct TxRequest {
     /// server has all of it (`searched_all`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_ledger: Option<u32>,
+    /// The latest ledger to search.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_ledger: Option<u32>,
 }
 impl TxRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(hash: impl Into<String>) -> Self {
         Self {
             transaction: hash.into(),
@@ -573,6 +639,7 @@ pub struct AmmInfoRequest {
     /// `{"currency": "XRP"}` or `{"currency", "issuer"}`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset: Option<Value>,
+    /// The pool's second asset (`Asset2`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset2: Option<Value>,
     /// The AMM's account, instead of the assets.
@@ -581,10 +648,12 @@ pub struct AmmInfoRequest {
     /// Include this LP's vote and auction-slot details.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    /// The ledger the answer is from.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<LedgerIndex>,
 }
 impl AmmInfoRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(asset: Value, asset2: Value) -> Self {
         Self {
             asset: Some(asset),
@@ -599,9 +668,11 @@ request!(AmmInfoRequest => "amm_info", AmmInfoResult);
 /// each order book's trading in one ledger (open, high, low, close, volume).
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct BookChangesRequest {
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl BookChangesRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(ledger_index: LedgerIndex) -> Self {
         Self { ledger_index }
     }
@@ -613,8 +684,11 @@ request!(BookChangesRequest => "book_changes", BookChangesResult);
 /// get and pay: `{"currency": "XRP"}` or `{"currency", "issuer"}`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct BookOffersRequest {
+    /// What the offer wants in return (`TakerPays`).
     pub taker_pays: Value,
+    /// What the offer gives (`TakerGets`).
     pub taker_gets: Value,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Compute funding from this account's point of view.
@@ -623,10 +697,12 @@ pub struct BookOffersRequest {
     /// A permissioned domain's book (PermissionedDEX).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+    /// The ledger the answer is from.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<LedgerIndex>,
 }
 impl BookOffersRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(taker_gets: Value, taker_pays: Value) -> Self {
         Self {
             taker_gets,
@@ -641,14 +717,18 @@ request!(BookOffersRequest => "book_offers", BookOffersResult);
 /// whether `source_account` may pay `destination_account` directly.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct DepositAuthorizedRequest {
+    /// The sending account.
     pub source_account: String,
+    /// The receiving account.
     pub destination_account: String,
     /// Credential IDs the payment would present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credentials: Option<Vec<String>>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl DepositAuthorizedRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(source_account: impl Into<String>, destination_account: impl Into<String>) -> Self {
         Self {
             source_account: source_account.into(),
@@ -675,10 +755,12 @@ pub struct GetAggregatePriceRequest {
     /// Ignore prices older than this many seconds before the newest.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_threshold: Option<u32>,
+    /// The ledger the answer is from.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<LedgerIndex>,
 }
 impl GetAggregatePriceRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(
         base_asset: impl Into<String>,
         quote_asset: impl Into<String>,
@@ -698,14 +780,19 @@ request!(GetAggregatePriceRequest => "get_aggregate_price", AggregatePriceResult
 /// offers to buy one NFT.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NftBuyOffersRequest {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl NftBuyOffersRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(nft_id: impl Into<String>) -> Self {
         Self {
             nft_id: nft_id.into(),
@@ -720,14 +807,19 @@ paginated!(NftBuyOffersRequest, NftOffer, offers);
 /// offers to sell one NFT.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NftSellOffersRequest {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl NftSellOffersRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(nft_id: impl Into<String>) -> Self {
         Self {
             nft_id: nft_id.into(),
@@ -742,7 +834,9 @@ paginated!(NftSellOffersRequest, NftOffer, offers);
 /// paths that deliver `destination_amount`, and what each costs.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct RipplePathFindRequest {
+    /// The sending account.
     pub source_account: String,
+    /// The receiving account.
     pub destination_account: String,
     /// Drops as a string, or `{"currency", "issuer", "value"}`; `"-1"` / value
     /// `"-1"` for as much as possible.
@@ -756,9 +850,11 @@ pub struct RipplePathFindRequest {
     /// Only paths through this permissioned domain.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl RipplePathFindRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(
         source_account: impl Into<String>,
         destination_account: impl Into<String>,
@@ -781,14 +877,17 @@ request!(RipplePathFindRequest => "ripple_path_find", RipplePathFindResult);
 /// does the same offline.)
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct ChannelVerifyRequest {
+    /// The channel's ID.
     pub channel_id: String,
     /// The claimed total, in drops.
     pub amount: String,
     /// Hex or base58.
     pub public_key: String,
+    /// A signature, hex (`Signature`).
     pub signature: String,
 }
 impl ChannelVerifyRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(
         channel_id: impl Into<String>,
         amount_drops: u64,
@@ -823,9 +922,11 @@ request!(FeatureRequest => "feature", FeatureResult);
 /// a validator's manifest, by its public key (`n…`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct ManifestRequest {
+    /// A public key, hex (`PublicKey`).
     pub public_key: String,
 }
 impl ManifestRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(public_key: impl Into<String>) -> Self {
         Self {
             public_key: public_key.into(),
@@ -881,15 +982,20 @@ request!(RandomRequest => "random", RandomResult);
 /// a vault, by ID or by owner and sequence.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct VaultInfoRequest {
+    /// The vault's ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vault_id: Option<String>,
+    /// The account that owns the entry (`Owner`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// The sequence of the transaction that created it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seq: Option<u32>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl VaultInfoRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(vault_id: impl Into<String>) -> Self {
         Self {
             vault_id: Some(vault_id.into()),
@@ -905,10 +1011,13 @@ request!(VaultInfoRequest => "vault_info", VaultInfoResult);
 /// (Clio): one NFT, including a burned one.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NftInfoRequest {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
 }
 impl NftInfoRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(nft_id: impl Into<String>) -> Self {
         Self {
             nft_id: nft_id.into(),
@@ -922,15 +1031,21 @@ request!(NftInfoRequest => "nft_info", NftInfoResult);
 /// (Clio): every transaction that touched an NFT.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct NftHistoryRequest {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The earliest ledger searched.
     pub ledger_index_min: i32,
+    /// The latest ledger searched.
     pub ledger_index_max: i32,
+    /// Hex instead of JSON.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub binary: Option<bool>,
     /// Oldest first.
     pub forward: bool,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
@@ -948,6 +1063,7 @@ impl Default for NftHistoryRequest {
     }
 }
 impl NftHistoryRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(nft_id: impl Into<String>) -> Self {
         Self {
             nft_id: nft_id.into(),
@@ -962,17 +1078,22 @@ paginated!(NftHistoryRequest, AccountTxEntry, transactions);
 /// (Clio): every NFT an account issued.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NftsByIssuerRequest {
+    /// The issuer (`Issuer`).
     pub issuer: String,
     /// Only this taxon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_taxon: Option<u32>,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl NftsByIssuerRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(issuer: impl Into<String>) -> Self {
         Self {
             issuer: issuer.into(),
@@ -987,14 +1108,19 @@ paginated!(NftsByIssuerRequest, NftInfo, nfts);
 /// (Clio): the holders of an MPT issuance.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct MptHoldersRequest {
+    /// The MPT issuance's ID.
     pub mpt_issuance_id: String,
+    /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
+    /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
 }
 impl MptHoldersRequest {
+    /// The request with its required parameters set and every optional one unset.
     pub fn new(mpt_issuance_id: impl Into<String>) -> Self {
         Self {
             mpt_issuance_id: mpt_issuance_id.into(),

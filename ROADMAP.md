@@ -31,13 +31,13 @@ welcome as GitHub issues.
 - [x] `Batch` (XLS-56): inner transactions, `BatchSigners`, the fee, `autofill`; run on Testnet
 - [x] Transaction flags as named constants for every type
 
-## 0.4: developer experience
+## 0.4: developer experience (released 2026-10-22)
 
-- [ ] A cookbook: send XRP, issue a token, trust lines, NFTs, AMM, escrow, checks, payment
-      channels, multisign, batch, subscriptions, DEX orders
-- [ ] Typed WebSocket stream events (transactions, validations, order books, path finding)
-- [ ] A blocking (non-async) client
-- [ ] A command-line tool (`cargo install`)
+- [x] A cookbook: 12 runnable recipes (token issuing, NFTs, DEX, AMM, escrow, checks, payment
+      channels, multisign, batch, MPT, blocking, live streams), each run on Testnet
+- [x] Typed WebSocket stream events for every rippled stream, checked against mainnet messages
+- [x] A blocking (non-async) client
+- [x] A command-line tool: `cargo install halcyon-xrpl-cli` (`hxrpl`)
 - [ ] An example of every public item on docs.rs
 
 ## Ongoing

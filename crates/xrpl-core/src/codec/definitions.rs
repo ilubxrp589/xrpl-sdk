@@ -6,11 +6,17 @@ use std::sync::LazyLock;
 /// Parsed field definition from definitions.json.
 #[derive(Debug, Clone)]
 pub struct FieldDef {
+    /// The name.
     pub name: String,
+    /// The type's code.
     pub type_code: u16,
+    /// The field's code within its type.
     pub field_code: u16,
+    /// Whether the value has a length prefix.
     pub is_vl_encoded: bool,
+    /// Whether the field is serialized.
     pub is_serialized: bool,
+    /// Whether signatures cover the field.
     pub is_signing: bool,
 }
 
