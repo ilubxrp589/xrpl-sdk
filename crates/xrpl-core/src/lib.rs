@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.2"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.3"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -20,7 +20,7 @@
 //! | [`codec`] | JSON ↔ binary for transactions and ledger entries, driven by `rippled` 3.4.1's definitions |
 //! | [`hashes`] | transaction IDs, and [`hashes::keylet`]: the ID of every kind of ledger entry |
 //! | [`types`] | [`Amount`] (XRP, token, MPT), [`AccountId`], [`Currency`], hashes, and [`LedgerObject`]: all 31 ledger entry types, typed |
-//! | [`transaction`] | typed builders for common transactions |
+//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); builders for common transactions |
 //! | [`utils`] | XRP ↔ drops, ledger time, text ↔ hex, rates, NFTokenIDs, balance changes, reserves |
 //! | [`error`] | [`CoreError`] |
 //!
@@ -100,6 +100,35 @@
 //! # Ok::<(), serde_json::Error>(())
 //! ```
 //!
+//! ## Typed transactions
+//!
+//! [`transaction::models`] has a struct for each of the 82 transaction types
+//! `rippled` 3.4.1 defines, generated from its own definitions: every field
+//! under `rippled`'s name, `new` with the required ones, and the flags as
+//! constants. [`transaction::models::Tx`] parses any transaction strictly (a
+//! field its type does not have is an error).
+//!
+//! ```
+//! use xrpl_core::transaction::models::{OfferCreate, Tx, TxModel};
+//! use xrpl_core::types::Amount;
+//!
+//! let mut offer = OfferCreate::new(
+//!     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+//!     Amount::Xrp(25_000_000),                                  // TakerGets: 25 XRP
+//!     serde_json::from_value(serde_json::json!({
+//!         "currency": "USD", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "10"
+//!     }))?,                                                     // TakerPays: 10 USD
+//! );
+//! offer.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
+//! let json = offer.to_json()?;
+//! assert_eq!(json["Flags"], 0x0002_0000);
+//! assert!(matches!(Tx::from_value(json)?, Tx::OfferCreate(_)));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! [`transaction::batch`] builds and signs `Batch` transactions: inner
+//! transactions, `BatchSigners` from other accounts, and the fee.
+//!
 //! ## Without `std`
 //!
 //! With `default-features = false` the crate builds as `no_std` + `alloc`:
@@ -108,7 +137,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.2", default-features = false }
+//! halcyon-xrpl-core = { version = "0.3", default-features = false }
 //! ```
 //!
 //! ## How it is checked
@@ -116,7 +145,11 @@
 //! Signatures, multi-signatures, transaction hashes and channel claims match
 //! `rippled` 3.4.1's `sign`, `sign_for` and `channel_authorize` byte for
 //! byte. The codec passes all 34 transaction and 261 ledger-object fixtures
-//! of the XRPL codec test suite. Ledger entry IDs match real mainnet entries
+//! of the XRPL codec test suite. Every transaction type is checked against
+//! `rippled`: 186 real transactions (51 types) round-trip through their typed
+//! models to the same bytes and ID, and an example of each of the other types,
+//! signed by `rippled` 3.4.1, encodes to `rippled`'s exact `tx_blob`. Batch
+//! signatures verify against real batches `rippled` accepted. Ledger entry IDs match real mainnet entries
 //! and a live Testnet run. The utilities pass xrpl.js's own fixtures.
 //!
 //! No `unsafe` code; no `unwrap`, `expect` or unchecked indexing in library

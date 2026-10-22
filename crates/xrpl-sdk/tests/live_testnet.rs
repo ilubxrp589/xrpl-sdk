@@ -17,8 +17,8 @@ use xrpl_sdk::requests::*;
 use xrpl_sdk::utils::{self, nftoken::parse_nftoken_id, str_to_hex};
 use xrpl_sdk::wallet::collect_signers;
 use xrpl_sdk::{
-    generate_faucet_wallet, hash_signed_tx_blob, keylet, Client, ClientError, FaucetNetwork,
-    LedgerIndex, Wallet, XrplHttpClient,
+    batch, generate_faucet_wallet, hash_signed_tx_blob, keylet, models, Amount, Client,
+    ClientError, FaucetNetwork, LedgerIndex, TxModel, Wallet, XrplHttpClient,
 };
 
 /// Testnet's public Clio server (for the Clio-only methods).
@@ -88,6 +88,38 @@ async fn submit(client: &XrplHttpClient, wallet: &Wallet, mut tx: Value) -> Opti
     let mut out = tx;
     out["meta"] = meta;
     Some(out)
+}
+
+/// Sign and submit a Batch (autofilling it first if it has no Sequence), wait
+/// for it, and return each inner transaction's validated result. `None` if
+/// Batch is not enabled on the network.
+async fn submit_batch(
+    client: &XrplHttpClient,
+    wallet: &Wallet,
+    batch_tx: &mut Value,
+) -> Option<Vec<String>> {
+    if batch_tx.get("Sequence").is_none() {
+        client.autofill(batch_tx).await.unwrap();
+    }
+    let ids = batch::inner_transaction_ids(batch_tx).unwrap();
+    let blob = wallet.sign_and_encode(batch_tx).unwrap();
+    let last = batch_tx["LastLedgerSequence"].as_u64().unwrap() as u32;
+    match client.submit_and_wait(&blob, last).await {
+        Ok(r) => assert_eq!(r.meta.unwrap()["TransactionResult"], "tesSUCCESS", "Batch"),
+        Err(ClientError::TransactionFailed { engine_result, .. })
+            if engine_result == "temDISABLED" =>
+        {
+            println!("  Batch skipped: not enabled on testnet");
+            return None;
+        }
+        Err(e) => panic!("Batch: {e}"),
+    }
+    let mut results = Vec::new();
+    for id in ids {
+        let meta = wait_validated(client, &id.to_string()).await;
+        results.push(meta["TransactionResult"].as_str().unwrap().to_string());
+    }
+    Some(results)
 }
 
 /// The ID of the one entry of `entry_type` the transaction created.
@@ -274,6 +306,45 @@ async fn keylets_and_helpers_match_testnet() {
     if let Some(tx) = submit(&client, &alice, json!({"TransactionType": "TrustSet", "Account": a, "LimitAmount": {"currency": "USD", "issuer": b, "value": "100"}})).await {
         check(&mut checked, "trust_line", keylet::trust_line(a, b, "USD").unwrap().to_string(), created(&tx, "RippleState"));
     }
+    // Batch, one account: Alice pays Bob twice, all or nothing. autofill numbers
+    // the inner transactions and prices the batch; each inner transaction lands
+    // on the ledger under the ID batch::inner_transaction_ids computed.
+    let mut one = json!({"TransactionType": "Batch", "Account": a, "Flags": models::Batch::TF_ALL_OR_NOTHING, "RawTransactions": [
+        {"RawTransaction": {"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "1000000"}},
+        {"RawTransaction": {"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "2000000"}},
+    ]});
+    if let Some(done) = submit_batch(&client, &alice, &mut one).await {
+        for id in done {
+            check(
+                &mut checked,
+                "batch inner (one account)",
+                "tesSUCCESS".into(),
+                id,
+            );
+        }
+    }
+    // Batch, two accounts, built from the typed models: Alice pays Bob, Bob pays
+    // Alice, and Bob approves it as a BatchSigner.
+    let inner_a: models::Tx = models::Payment::new(a, b, Amount::Xrp(1_000_000)).into();
+    let inner_b: models::Tx = models::Payment::new(b, a, Amount::Xrp(500_000)).into();
+    let mut typed = models::Batch::new(a, vec![inner_a, inner_b]);
+    typed.common.flags = Some(models::Batch::TF_ALL_OR_NOTHING);
+    let mut two = typed.to_json().unwrap();
+    client.autofill(&mut two).await.unwrap();
+    let bob_approves = bob.sign_batch(&two).unwrap();
+    batch::add_batch_signers(&mut two, vec![bob_approves]).unwrap();
+    assert!(batch::verify_batch_signers(&two).unwrap());
+    if let Some(done) = submit_batch(&client, &alice, &mut two).await {
+        for id in done {
+            check(
+                &mut checked,
+                "batch inner (two accounts, BatchSigner)",
+                "tesSUCCESS".into(),
+                id,
+            );
+        }
+    }
+
     // Multi-signing end to end: Bob alone signs for Alice through her signer list.
     if submit(&client, &alice, json!({"TransactionType": "SignerListSet", "Account": a, "SignerQuorum": 1, "SignerEntries": [{"SignerEntry": {"Account": b, "SignerWeight": 1}}]})).await.is_some() {
         let mut tx = json!({"TransactionType": "AccountSet", "Account": a, "Domain": str_to_hex("example.com")});

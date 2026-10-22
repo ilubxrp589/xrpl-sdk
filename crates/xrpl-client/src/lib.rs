@@ -7,7 +7,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-client = "0.2"   # imported as `xrpl_client`
+//! halcyon-xrpl-client = "0.3"   # imported as `xrpl_client`
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! ```
 //!

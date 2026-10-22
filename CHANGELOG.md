@@ -1,6 +1,32 @@
 # Changelog
 
-## v0.2.0 (2026-10-22)
+## v0.3.0 (2026-10-22)
+
+Every transaction type typed, and Batch.
+
+### Added
+- **`transaction::models`: a typed struct for each of the 82 transaction types in `rippled` 3.4.1**,
+  generated from its `server_definitions` (`scripts/gen_transactions.py`): the common fields in
+  `Common`, then each type's own fields under `rippled`'s names (334 in all), `new` with the
+  required ones, and every flag as a constant (`Payment::TF_PARTIAL_PAYMENT`,
+  `AccountSet::ASF_DEFAULT_RIPPLE`, `Batch::TF_ALL_OR_NOTHING`: 100 constants). Nested arrays are
+  typed (`Memo`, `Signer`, `SignerEntry`, `PriceData`, `Permission`, `CredentialSpec`,
+  `BatchSigner`, inner `Tx`s), as are `Asset`, `XChainBridge` and `PathStep`.
+- **`Tx`** over all of them: `Tx::from_value` is strict (a field the type does not have is an
+  error), deserializing inside a larger value is lenient (`Tx::Other`); `TxModel::to_json` gives
+  `rippled`'s JSON. A Payment read from API v2 takes its `Amount` from `DeliverMax`.
+- **`transaction::batch` (XLS-56)**: `inner_transaction`, `inner_transaction_ids`,
+  `batch_signing_data`, `sign_batch` / `sign_batch_for` / `multisigned_batch_signer`,
+  `add_batch_signers` (in the account-ID order `rippled` requires), `verify_batch_signers`,
+  `batch_fee`; `Wallet::sign_batch` / `sign_batch_for`.
+- `Client::autofill` handles a `Batch`: it marks each inner transaction, numbers those without a
+  sequence (the outer account's continue after the outer `Sequence`), and prices the batch.
+- Tests: 186 real transactions (51 types, mainnet and Testnet, including the SetFee of the
+  December 2024 reserve change) round-trip to the same JSON, bytes and ID; an example of each of
+  the other types, signed offline by `rippled` 3.4.1, encodes to its exact `tx_blob` — all 82
+  types; batch signatures verify against 6 real batches; the live Testnet test (29 checks) runs a
+  one-account and a two-account batch.
+
 
 The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
 `halcyon-xrpl-sdk`. v0.1.0 (below) was released on GitHub only.

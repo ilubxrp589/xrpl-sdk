@@ -27,12 +27,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.2"
+halcyon-xrpl-sdk = "0.3"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.2"      # types + codec + crypto only
-halcyon-xrpl-client = "0.2"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.3"      # types + codec + crypto only
+halcyon-xrpl-client = "0.3"    # HTTP + WebSocket clients
 ```
 
 ## Quick Start
@@ -147,7 +147,11 @@ assert_eq!(json["TransactionType"], "Payment");
 - X-addresses (XLS-5d): encode/decode, and accepted by the codec in `Account` / `Destination`
 - All XRPL primitive types with serde support; amounts typed for XRP, IOU and MPT
 - Typed ledger objects for all 31 entry types, generated from rippled's own formats
-- Typed transaction builders for 28 transaction types
+- **Typed transactions for all 82 types**, generated from rippled's definitions: every field,
+  `new` with the required ones, and every flag as a constant (`Payment::TF_PARTIAL_PAYMENT`)
+- **Batch (XLS-56)**: inner transactions, `BatchSigners` from other accounts (single or multi-signed),
+  the batch fee, and `autofill` that numbers and prices a batch
+- Fluent builders for 28 common transaction types
 - Transaction hashes (`hash_signed_tx`, `hash_signed_tx_blob`) and ledger entry IDs for every entry
   type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, …)
 - Payment channel claims: sign and verify
@@ -191,6 +195,8 @@ itself:
 | Binary codec | all 34 transaction and 261 ledger-object XRPL codec fixtures; mainnet transactions and ledger entries |
 | Ledger entry IDs | the `index` of real mainnet entries, xrpl.js's hash tests, and a live run that creates each entry type on Testnet |
 | Balance changes, NFTokenIDs, rates, time, hex, X-addresses | xrpl.js's own test fixtures and expected results |
+| Transaction models | 186 real transactions (51 types) round-trip to the same JSON, bytes and ID; an example of every other type, signed by rippled 3.4.1, encodes to its exact `tx_blob`: all 82 types |
+| Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
 | Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet: each must parse, and serializing it back must keep all 2,521 field paths |
 | End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
 

@@ -24,12 +24,12 @@ welcome as GitHub issues.
 - [x] Testnet / Devnet faucet and `generate_faucet_wallet`
 - [x] A live Testnet test that checks IDs, hashes and helpers against what the network records
 
-## 0.3: every transaction, typed
+## 0.3: every transaction, typed (released 2026-10-22)
 
-- [ ] A typed model for each of `rippled`'s transaction types, generated from its own
-      definitions, with required-field checks
-- [ ] `Batch` (XLS-56): building, inner-transaction signing, `BatchSigners`
-- [ ] Transaction flags as named constants for every type
+- [x] A typed model for each of `rippled`'s 82 transaction types, generated from its own
+      definitions, each checked against `rippled` (real transactions or `rippled`'s own signing)
+- [x] `Batch` (XLS-56): inner transactions, `BatchSigners`, the fee, `autofill`; run on Testnet
+- [x] Transaction flags as named constants for every type
 
 ## 0.4: developer experience
 

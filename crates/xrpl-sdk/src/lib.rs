@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-sdk = "0.2"
+//! halcyon-xrpl-sdk = "0.3"
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! serde_json = "1"
 //! ```
@@ -134,8 +134,28 @@
 //! `Vault*` and `Loan*`. The codec refuses fields it does not know, as
 //! `rippled` does, instead of dropping them.
 //!
-//! For common transactions there are typed builders that check required
-//! fields ([`transactions`]):
+//! Or use the typed models ([`models`]): a struct for each of the 82 types,
+//! generated from `rippled`'s definitions, with every field and every flag
+//! as a constant. `to_json` gives the JSON to autofill, sign and submit:
+//!
+//! ```
+//! use xrpl_sdk::{models::{Payment, TrustSet}, Amount, TxModel};
+//!
+//! let mut pay = Payment::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", Amount::Xrp(2_000_000));
+//! pay.destination_tag = Some(77);
+//! assert_eq!(pay.to_json()?["DestinationTag"], 77);
+//!
+//! let mut line = TrustSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+//! line.limit_amount = Some(serde_json::from_value(serde_json::json!(
+//!     {"currency": "USD", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "1000"}
+//! ))?);
+//! line.common.flags = Some(TrustSet::TF_SET_NO_RIPPLE);
+//! assert_eq!(line.to_json()?["LimitAmount"]["value"], "1000");
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! For common transactions there are also fluent builders that check
+//! required fields ([`transactions`]):
 //!
 //! ```
 //! use xrpl_sdk::transactions::{Payment, Transaction};
@@ -147,6 +167,37 @@
 //!     .to_json();
 //! assert_eq!(tx["TransactionType"], "Payment");
 //! # Ok::<(), xrpl_sdk::CoreError>(())
+//! ```
+//!
+//! ### Batch: several transactions at once
+//!
+//! A `Batch` (XLS-56) applies up to eight transactions together, from one
+//! or several accounts: all or nothing, only one, until one fails, or each
+//! independently. [`Client::autofill`] numbers the inner transactions and
+//! prices the batch; every other account involved approves it with
+//! [`Wallet::sign_batch`]; the outer account signs and submits it as usual.
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! # async fn run(client: &XrplHttpClient, alice: &Wallet, bob: &Wallet) -> Result<(), Box<dyn std::error::Error>> {
+//! // Alice pays Bob 5 XRP and Bob pays Alice 2 XRP, all or nothing.
+//! let pay_bob: Tx = models::Payment::new(alice.classic_address(), bob.classic_address(), Amount::Xrp(5_000_000)).into();
+//! let pay_alice: Tx = models::Payment::new(bob.classic_address(), alice.classic_address(), Amount::Xrp(2_000_000)).into();
+//! let mut batch_tx = models::Batch::new(alice.classic_address(), vec![pay_bob, pay_alice]);
+//! batch_tx.common.flags = Some(models::Batch::TF_ALL_OR_NOTHING);
+//!
+//! let mut tx = batch_tx.to_json()?;
+//! client.autofill(&mut tx).await?;                         // inner sequences and the batch fee
+//! let approval = bob.sign_batch(&tx)?;                       // Bob approves
+//! batch::add_batch_signers(&mut tx, vec![approval])?;
+//! let blob = alice.sign_and_encode(&tx)?;                   // Alice signs the batch
+//! let last = tx["LastLedgerSequence"].as_u64().unwrap() as u32;
+//! client.submit_and_wait(&blob, last).await?;
+//! for id in batch::inner_transaction_ids(&tx)? {
+//!     println!("inner transaction {id}");                  // each is on the ledger under this ID
+//! }
+//! # Ok(()) }
 //! ```
 //!
 //! ## Submitting, and what can go wrong
@@ -344,6 +395,10 @@
 //!   XRPL codec test suite, plus mainnet transactions and ledger entries.
 //! - **Ledger entry IDs**: the `index` of real mainnet entries, xrpl.js's hash
 //!   tests, and a live run that creates each kind of entry on Testnet.
+//! - **Transaction models**: 186 real transactions (51 types) round-trip
+//!   through their typed models to the same JSON, bytes and ID; an example of
+//!   every other type, signed by `rippled` 3.4.1, encodes to its exact
+//!   `tx_blob`: all 82 types. Batch signatures verify against real batches.
 //! - **Utilities**: xrpl.js's own fixtures and expected results.
 //! - **Typed responses**: 44 responses recorded from `rippled` 3.4.1, Clio and
 //!   Testnet; each must parse, and serializing it back must keep every one of
@@ -352,7 +407,10 @@
 //!   two faucet wallets create a Ticket, Check, Escrow, payment channel (and
 //!   redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding,
 //!   Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on
-//!   Testnet, and push a multi-signed transaction through `submit_multisigned`;
+//!   Testnet, push a multi-signed transaction through `submit_multisigned`,
+//!   and submit two `Batch`es (one built from the typed models, approved by a
+//!   second account) whose inner transactions must land under the IDs
+//!   computed for them;
 //!   every ID, hash and balance change must be what the network recorded, and
 //!   the typed queries for what they made (channels, NFT offers, oracle prices,
 //!   MPT holders through Clio) must parse the answers.
@@ -382,7 +440,9 @@ pub use xrpl_core::crypto::{
     sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, Keypair, Seed,
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
+pub use xrpl_core::transaction::batch;
 pub use xrpl_core::transaction::builders::{self as transactions, Transaction, TxCommon};
+pub use xrpl_core::transaction::models::{self, Tx, TxModel};
 pub use xrpl_core::types::*;
 pub use xrpl_core::utils;
 pub use xrpl_core::CoreError;
