@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added
+- Int32 fields (LoanScale, RemainingOwnerCountDelta): encode/decode as rippled's STInteger<int32_t>.
+- PermissionValue decodes to rippled's names (granular permission, else TxType + 1).
+- X-addresses (XLS-5d): `address::{encode_x_address, decode_x_address, classic_to_x_address,
+  x_address_to_classic}`, checked against xrpl.js's 22 vectors; the codec takes X-addresses in
+  Account/Destination (tag → SourceTag/DestinationTag), as xrpl.js does.
+- `TypeCode::{Int32, Int64}` (a breaking change for exhaustive matches on `TypeCode`).
+
+### Changed
+- tests/vectors/definitions.json is rippled 3.4.1's `server_definitions`: 44 fields, 7 transaction
+  types, 1 ledger entry type and 8 results added; the Hooks-only fields dropped; UInt32 nth 53 is
+  `ImmutableFlags` (was `MutableFlags`); type names Hash384/Hash512.
+- Decoding a field id the definitions do not know is an error (`CoreError::UnknownField`), as in
+  rippled. It used to be skipped, with a guessed length that was wrong for AccountID, PathSet, MPT
+  amounts and nested objects, and the field vanished from the JSON.
+
 ### Fixed
 - Ed25519 signing: transactions and multisign Signer entries were signed over SHA512Half of the signing
   data; rippled verifies Ed25519 over the data itself, so every Ed25519 signature was rejected.

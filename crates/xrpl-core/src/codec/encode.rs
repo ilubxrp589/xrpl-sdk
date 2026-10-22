@@ -1,3 +1,4 @@
+use crate::address::x_address_to_classic;
 use crate::codec::amount;
 use crate::codec::definitions::{
     ledger_entry_type_code, lookup_field_def, permission_value_code, transaction_type_code,
@@ -6,6 +7,7 @@ use crate::codec::field::{encode_vl, FieldId, TypeCode};
 use crate::types::AccountId;
 use crate::CoreError;
 use serde_json::Value;
+use std::borrow::Cow;
 
 /// Non-serialized field names that appear in JSON but shouldn't be encoded.
 const SKIP_FIELDS: &[&str] = &[
@@ -21,15 +23,61 @@ const SKIP_FIELDS: &[&str] = &[
     "close_time_iso",
 ];
 
+/// X-addresses (XLS-5d) in AccountID fields become classic addresses, as
+/// xrpl.js's codec does: an Account's tag becomes SourceTag and a
+/// Destination's tag DestinationTag. A tag on any other field, or one that
+/// meets an explicit tag field, is an error.
+fn with_classic_addresses(
+    obj: &serde_json::Map<String, Value>,
+) -> Result<Cow<'_, serde_json::Map<String, Value>>, CoreError> {
+    let x_address = |name: &str, value: &Value| -> Option<String> {
+        let s = value.as_str().filter(|s| s.starts_with(['X', 'T']))?;
+        lookup_field_def(name)
+            .filter(|f| f.type_code == TypeCode::AccountId as u16)
+            .map(|_| s.to_string())
+    };
+    if !obj.iter().any(|(n, v)| x_address(n, v).is_some()) {
+        return Ok(Cow::Borrowed(obj));
+    }
+    let mut out = obj.clone();
+    for (name, value) in obj {
+        let Some(x) = x_address(name, value) else {
+            continue;
+        };
+        let (classic, tag, _) = x_address_to_classic(&x)?;
+        out.insert(name.clone(), Value::String(classic));
+        let Some(tag) = tag else {
+            continue;
+        };
+        let tag_field = match name.as_str() {
+            "Account" => "SourceTag",
+            "Destination" => "DestinationTag",
+            _ => {
+                return Err(CoreError::CodecError(format!(
+                    "{name} is an X-address with a tag, and {name} has no tag field"
+                )))
+            }
+        };
+        if obj.contains_key(tag_field) {
+            return Err(CoreError::CodecError(format!(
+                "{name} is an X-address with a tag and {tag_field} is also set"
+            )));
+        }
+        out.insert(tag_field.to_string(), Value::from(tag));
+    }
+    Ok(Cow::Owned(out))
+}
+
 /// Encode a transaction from JSON to canonical binary format.
 pub fn encode_transaction_json(json: &Value, for_signing: bool) -> Result<Vec<u8>, CoreError> {
     let obj = json
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
+    let obj = with_classic_addresses(obj)?;
 
     let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::new();
 
-    for (name, value) in obj {
+    for (name, value) in obj.iter() {
         if SKIP_FIELDS.contains(&name.as_str()) {
             continue;
         }
@@ -106,6 +154,7 @@ fn encode_field_value(
         Some(TypeCode::UInt16) => encode_uint16(value),
         Some(TypeCode::UInt32) => encode_uint32(value, field_name),
         Some(TypeCode::UInt64) => encode_uint64(value),
+        Some(TypeCode::Int32) => encode_int32(value, field_name),
         Some(TypeCode::Hash128) => encode_hash(value, 16),
         Some(TypeCode::Hash160) => encode_hash(value, 20),
         Some(TypeCode::Hash256) => encode_hash(value, 32),
@@ -177,6 +226,21 @@ fn encode_uint32(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> 
     Err(CoreError::CodecError(format!(
         "UInt32 field '{field_name}' must be a number, got: {value}"
     )))
+}
+
+/// Int32: big-endian two's complement. rippled (STParsedJSON) takes a JSON
+/// integer or a decimal string.
+fn encode_int32(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
+    let n = match value {
+        Value::Number(n) => n.as_i64().and_then(|n| i32::try_from(n).ok()),
+        Value::String(s) => s.parse::<i32>().ok(),
+        _ => None,
+    };
+    n.map(|n| n.to_be_bytes().to_vec()).ok_or_else(|| {
+        CoreError::CodecError(format!(
+            "Int32 field '{field_name}' must be a 32-bit signed integer, got: {value}"
+        ))
+    })
 }
 
 fn encode_uint64(value: &Value) -> Result<Vec<u8>, CoreError> {
@@ -320,10 +384,11 @@ fn encode_st_object(value: &Value, for_signing: bool) -> Result<Vec<u8>, CoreErr
     let obj = value
         .as_object()
         .ok_or_else(|| CoreError::CodecError("STObject must be a JSON object".to_string()))?;
+    let obj = with_classic_addresses(obj)?;
 
     let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::new();
 
-    for (name, val) in obj {
+    for (name, val) in obj.iter() {
         if SKIP_FIELDS.contains(&name.as_str()) {
             continue;
         }
@@ -756,11 +821,12 @@ pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<
     let obj = tx
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
+    let obj = with_classic_addresses(obj)?;
 
     // Encode fields, excluding non-signing fields AND Signers array
     let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::new();
 
-    for (name, value) in obj {
+    for (name, value) in obj.iter() {
         if SKIP_FIELDS.contains(&name.as_str()) {
             continue;
         }

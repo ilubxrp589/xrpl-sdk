@@ -48,6 +48,9 @@ byte[2] = field_code
 | Amount | 6 | No |
 | Blob | 7 | Yes |
 | AccountID | 8 | Yes (in field context) |
+| Number | 9 | No (12 bytes) |
+| Int32 | 10 | No (big-endian two's complement; JSON number or decimal string) |
+| Int64 | 11 | — (rippled 3.4.1 defines no Int64 field or JSON form; the codec refuses it) |
 | STObject | 14 | No (terminated by 0xE1) |
 | STArray | 15 | No (terminated by 0xF1) |
 | UInt8 | 16 | No |
@@ -145,7 +148,16 @@ Fields MUST be sorted before encoding. Sort ascending by:
 | SignerEntry | STObject | 17 | |
 | TransactionHash | Hash256 | 7 | |
 
-Full registry: https://github.com/XRPLF/xrpl.js/blob/main/packages/ripple-binary-codec/src/enums/definitions.json
+Full registry: `tests/vectors/definitions.json`, which is rippled 3.4.1's `server_definitions` (FIELDS,
+LEDGER_ENTRY_TYPES, TRANSACTION_RESULTS, TRANSACTION_TYPES, TYPES). Regenerate it from a rippled node
+when rippled adds fields. A field id the registry does not define is a decode error, as in rippled.
+
+**PermissionValue** (UInt32, nth 52) is spelled as rippled spells it: a granular permission's name
+(65537-65548), else the name of TxType (value - 1); encode takes either the name or the number.
+
+**X-addresses** (XLS-5d) are accepted in AccountID fields on encode: an `Account` X-address's tag
+becomes `SourceTag`, a `Destination`'s becomes `DestinationTag`; a tag on any other field, or one that
+meets an explicit tag field, is an error. See `address::{encode_x_address, decode_x_address}`.
 
 ---
 

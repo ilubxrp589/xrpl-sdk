@@ -181,6 +181,14 @@ static GRANULAR_PERMISSIONS: LazyLock<HashMap<&'static str, u32>> = LazyLock::ne
     m
 });
 
+/// The granular permission named by a PermissionValue code, if it is one.
+pub fn granular_permission_name(code: u32) -> Option<&'static str> {
+    GRANULAR_PERMISSIONS
+        .iter()
+        .find(|(_, &c)| c == code)
+        .map(|(&name, _)| name)
+}
+
 /// Resolve a PermissionValue string to its u32 code.
 /// Checks granular permissions first, then falls back to transaction type + 1.
 pub fn permission_value_code(name: &str) -> Result<u32, CoreError> {
