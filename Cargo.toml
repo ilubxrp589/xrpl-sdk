@@ -4,6 +4,7 @@ members = [
     "crates/xrpl-core",
     "crates/xrpl-client",
     "crates/xrpl-sdk",
+    "crates/xrpl-cli",
 ]
 exclude = ["fuzz"]
 
