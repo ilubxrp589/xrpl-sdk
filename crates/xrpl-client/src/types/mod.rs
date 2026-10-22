@@ -1,12 +1,40 @@
-//! Typed `rippled` responses, and [`LedgerIndex`] for choosing a ledger.
+//! Typed `rippled` and Clio responses, grouped as xrpl.org groups the
+//! methods, and [`LedgerIndex`] for choosing a ledger.
+//!
+//! Every response type here is checked against a response recorded from
+//! `rippled` 3.4.1 (or Clio): it must parse, and serializing it back must
+//! keep every field the server sent (`tests/rippled_responses.rs`).
+//! Responses are read as `rippled`'s API version 1, the default when a
+//! request does not name one.
 
-use serde::{Deserialize, Deserializer, Serialize};
-use xrpl_core::types::{Amount, LedgerObject};
+mod account;
+mod clio;
+mod ledger;
+mod path;
+mod server;
+mod transaction;
+mod vault;
 
-/// Ledger index specifier for API requests: serializes as rippled expects
+pub use account::*;
+pub use clio::*;
+pub use ledger::*;
+pub use path::*;
+pub use server::*;
+pub use transaction::*;
+pub use vault::*;
+pub use xrpl_core::types::{Amount, LedgerObject};
+
+use serde::Serialize;
+
+/// Which ledger a request reads: serializes as `rippled` expects
 /// (`"validated"`, `"current"`, `"closed"` or the number).
-#[derive(Debug, Clone)]
+///
+/// `Validated` (the default) is final; `Current` is the open ledger, whose
+/// contents can still change; `Closed` is the latest closed ledger, not yet
+/// necessarily validated.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LedgerIndex {
+    #[default]
     Validated,
     Current,
     Closed,
@@ -24,6 +52,12 @@ impl LedgerIndex {
     }
 }
 
+impl From<u32> for LedgerIndex {
+    fn from(index: u32) -> Self {
+        LedgerIndex::Index(index)
+    }
+}
+
 impl Serialize for LedgerIndex {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -35,342 +69,30 @@ impl Serialize for LedgerIndex {
     }
 }
 
-/// Account info response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountInfo {
-    pub account_data: AccountData,
-    pub ledger_current_index: Option<u32>,
-    pub ledger_index: Option<u32>,
-    pub validated: Option<bool>,
-}
+/// A count `rippled` writes as a string in some responses (`fee`'s
+/// `"current_queue_size": "28"`, API v1's `ledger.ledger_index`) and as a
+/// number in others: read either; write it back as `rippled` did, a string.
+pub(crate) mod count_as_string {
+    use serde::{Deserialize, Deserializer, Serializer};
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct AccountData {
-    pub account: String,
-    pub balance: String,
-    pub sequence: u32,
-    pub flags: u32,
-    pub owner_count: u32,
-}
-
-/// Fee response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct FeeResult {
-    pub drops: FeeDrops,
-    #[serde(default, deserialize_with = "u32_from_string_or_number")]
-    pub current_ledger_size: Option<u32>,
-    #[serde(default, deserialize_with = "u32_from_string_or_number")]
-    pub current_queue_size: Option<u32>,
-    #[serde(default, deserialize_with = "u32_from_string_or_number")]
-    pub expected_ledger_size: Option<u32>,
-    #[serde(default, deserialize_with = "u32_from_string_or_number")]
-    pub max_queue_size: Option<u32>,
-    pub ledger_current_index: Option<u32>,
-    pub levels: Option<FeeLevels>,
-}
-
-/// Fee levels (256 = the reference transaction cost), as rippled's strings.
-#[derive(Debug, Clone, Deserialize)]
-pub struct FeeLevels {
-    pub median_level: String,
-    pub minimum_level: String,
-    pub open_ledger_level: String,
-    pub reference_level: String,
-}
-
-/// rippled writes some counts as strings (`fee`'s `"current_queue_size": "28"`)
-/// and others as numbers; take either.
-fn u32_from_string_or_number<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Count {
-        Number(u32),
-        Text(String),
+    pub(crate) fn serialize<S: Serializer>(v: &Option<u32>, s: S) -> Result<S::Ok, S::Error> {
+        match v {
+            Some(n) => s.serialize_str(&n.to_string()),
+            None => s.serialize_none(),
+        }
     }
-    match Option::<Count>::deserialize(d)? {
-        None => Ok(None),
-        Some(Count::Number(n)) => Ok(Some(n)),
-        Some(Count::Text(s)) => s.parse().map(Some).map_err(serde::de::Error::custom),
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Count {
+            Number(u32),
+            Text(String),
+        }
+        match Option::<Count>::deserialize(d)? {
+            None => Ok(None),
+            Some(Count::Number(n)) => Ok(Some(n)),
+            Some(Count::Text(s)) => s.parse().map(Some).map_err(serde::de::Error::custom),
+        }
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct FeeDrops {
-    pub base_fee: String,
-    pub median_fee: String,
-    pub minimum_fee: String,
-    pub open_ledger_fee: String,
-}
-
-/// Submit response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct SubmitResult {
-    pub engine_result: String,
-    pub engine_result_code: i32,
-    pub engine_result_message: String,
-    pub tx_blob: Option<String>,
-    pub tx_json: Option<serde_json::Value>,
-}
-
-/// Transaction lookup response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TxResult {
-    pub meta: Option<serde_json::Value>,
-    pub validated: Option<bool>,
-    pub ledger_index: Option<u32>,
-    pub ledger_hash: Option<String>,
-    #[serde(flatten)]
-    pub tx_fields: std::collections::HashMap<String, serde_json::Value>,
-}
-
-/// Ledger info response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct LedgerResult {
-    pub ledger: Option<LedgerInfo>,
-    pub ledger_hash: Option<String>,
-    pub ledger_index: Option<u32>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct LedgerInfo {
-    pub ledger_hash: Option<String>,
-    pub ledger_index: Option<u32>,
-    pub close_time: Option<u64>,
-    pub total_coins: Option<String>,
-}
-
-/// Ledger current response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct LedgerCurrentResult {
-    pub ledger_current_index: u32,
-}
-
-/// Account trust lines response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountLinesResult {
-    pub lines: Vec<TrustLine>,
-    pub marker: Option<Value>,
-}
-
-/// A single trust line.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TrustLine {
-    pub account: String,
-    pub balance: String,
-    pub currency: String,
-    pub limit: String,
-    pub limit_peer: String,
-    pub quality_in: Option<u32>,
-    pub quality_out: Option<u32>,
-    pub no_ripple: Option<bool>,
-    pub no_ripple_peer: Option<bool>,
-    pub freeze: Option<bool>,
-    pub freeze_peer: Option<bool>,
-}
-
-/// Account offers response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountOffersResult {
-    pub offers: Vec<AccountOffer>,
-    pub marker: Option<Value>,
-}
-
-/// A single offer from account_offers.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountOffer {
-    pub flags: u32,
-    pub seq: u32,
-    pub taker_gets: Amount,
-    pub taker_pays: Amount,
-    pub quality: Option<String>,
-    pub expiration: Option<u32>,
-}
-
-/// Account NFTs response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountNftsResult {
-    pub account_nfts: Vec<NFToken>,
-    pub marker: Option<Value>,
-}
-
-/// A single NFToken.
-#[derive(Debug, Clone, Deserialize)]
-pub struct NFToken {
-    pub flags: u32,
-    pub issuer: String,
-    #[serde(rename = "NFTokenID")]
-    pub nf_token_id: String,
-    #[serde(rename = "NFTokenTaxon")]
-    pub nf_token_taxon: u32,
-    pub nft_serial: Option<u32>,
-    #[serde(rename = "URI")]
-    pub uri: Option<String>,
-    pub transfer_fee: Option<u32>,
-}
-
-/// Book offers response (order book).
-#[derive(Debug, Clone, Deserialize)]
-pub struct BookOffersResult {
-    pub offers: Vec<BookOffer>,
-}
-
-/// A single order book offer.
-#[derive(Debug, Clone, Deserialize)]
-pub struct BookOffer {
-    #[serde(rename = "Account")]
-    pub account: String,
-    #[serde(rename = "Flags")]
-    pub flags: u32,
-    #[serde(rename = "Sequence")]
-    pub sequence: u32,
-    #[serde(rename = "TakerGets")]
-    pub taker_gets: Amount,
-    #[serde(rename = "TakerPays")]
-    pub taker_pays: Amount,
-    pub quality: Option<String>,
-    pub owner_funds: Option<String>,
-    /// What the owner can actually deliver, when less than TakerGets.
-    pub taker_gets_funded: Option<Amount>,
-    /// TakerPays scaled to `taker_gets_funded`.
-    pub taker_pays_funded: Option<Amount>,
-    #[serde(rename = "Expiration")]
-    pub expiration: Option<u32>,
-    #[serde(rename = "BookDirectory")]
-    pub book_directory: Option<String>,
-}
-
-/// AMM info response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AmmInfoResult {
-    pub amm: AmmInfo,
-}
-
-/// AMM pool information.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AmmInfo {
-    pub account: Option<String>,
-    pub amount: Option<Amount>,
-    pub amount2: Option<Amount>,
-    pub lp_token: Option<Amount>,
-    pub trading_fee: Option<u32>,
-    pub vote_slots: Option<Vec<Value>>,
-    pub auction_slot: Option<Value>,
-}
-
-use serde_json::Value;
-
-/// Account transaction history response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountTxResult {
-    pub account: String,
-    pub transactions: Vec<AccountTxEntry>,
-    pub marker: Option<Value>,
-}
-
-/// A single entry from account_tx.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountTxEntry {
-    pub tx: Option<Value>,
-    pub meta: Option<Value>,
-    pub validated: Option<bool>,
-}
-
-/// Account objects response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountObjectsResult {
-    pub account: String,
-    pub account_objects: Vec<LedgerObject>,
-    pub marker: Option<Value>,
-}
-
-/// Account currencies response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountCurrenciesResult {
-    pub receive_currencies: Vec<String>,
-    pub send_currencies: Vec<String>,
-    pub ledger_index: Option<u32>,
-    pub validated: Option<bool>,
-}
-
-/// Account channels response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AccountChannelsResult {
-    pub account: String,
-    pub channels: Vec<PaymentChannel>,
-    pub marker: Option<Value>,
-}
-
-/// A single payment channel.
-#[derive(Debug, Clone, Deserialize)]
-pub struct PaymentChannel {
-    pub channel_id: String,
-    pub account: String,
-    pub destination_account: String,
-    pub amount: String,
-    pub balance: String,
-    pub public_key: Option<String>,
-    pub settle_delay: u32,
-    pub expiration: Option<u32>,
-    pub cancel_after: Option<u32>,
-    pub source_tag: Option<u32>,
-    pub destination_tag: Option<u32>,
-}
-
-/// Ledger entry response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct LedgerEntryResult {
-    pub index: String,
-    pub node: LedgerObject,
-    pub ledger_index: Option<u32>,
-    pub validated: Option<bool>,
-}
-
-/// Server info response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct ServerInfoResult {
-    pub info: ServerInfo,
-}
-
-/// Server information.
-#[derive(Debug, Clone, Deserialize)]
-pub struct ServerInfo {
-    pub build_version: Option<String>,
-    pub complete_ledgers: Option<String>,
-    pub hostid: Option<String>,
-    pub load_factor: Option<f64>,
-    pub peers: Option<u32>,
-    pub pubkey_node: Option<String>,
-    pub server_state: Option<String>,
-    pub uptime: Option<u64>,
-    pub validated_ledger: Option<ValidatedLedger>,
-    pub reserve_base_xrp: Option<f64>,
-    pub reserve_inc_xrp: Option<f64>,
-}
-
-/// Validated ledger info from server_info.
-#[derive(Debug, Clone, Deserialize)]
-pub struct ValidatedLedger {
-    pub age: Option<u32>,
-    pub base_fee_xrp: Option<f64>,
-    pub hash: Option<String>,
-    pub reserve_base_xrp: Option<f64>,
-    pub reserve_inc_xrp: Option<f64>,
-    pub seq: Option<u32>,
-}
-
-/// Gateway balances response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct GatewayBalancesResult {
-    pub account: String,
-    pub obligations: Option<std::collections::HashMap<String, String>>,
-    pub balances: Option<std::collections::HashMap<String, Vec<GatewayBalance>>>,
-    pub assets: Option<std::collections::HashMap<String, Vec<GatewayBalance>>>,
-}
-
-/// A single gateway balance entry.
-#[derive(Debug, Clone, Deserialize)]
-pub struct GatewayBalance {
-    pub currency: Option<String>,
-    pub value: String,
 }

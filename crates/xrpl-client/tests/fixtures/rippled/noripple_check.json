@@ -1,0 +1,18 @@
+{
+ "method": "noripple_check",
+ "params": {
+  "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "role": "gateway",
+  "ledger_index": 107831520,
+  "limit": 3,
+  "transactions": true
+ },
+ "result": {
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
+  "ledger_index": 107831520,
+  "problems": [],
+  "status": "success",
+  "transactions": [],
+  "validated": true
+ }
+}

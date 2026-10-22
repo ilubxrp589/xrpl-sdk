@@ -155,8 +155,10 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `xrpl-client`
 
-- One `Client` trait over HTTP JSON-RPC, WebSocket and browser WebSocket (wasm); 18+ methods
-- Typed requests: each `Request` names its method and response type; `request_all` follows markers
+- One `Client` trait over HTTP JSON-RPC, WebSocket and browser WebSocket (wasm)
+- A typed request and response for every public `rippled` method and the Clio-only ones (43),
+  each response checked against one recorded from a real server; `request_all` follows markers
+- `simulate` (dry-run a transaction) and `submit_multisigned`
 - WebSocket client with subscriptions & automatic reconnection
 - Autofill (Sequence, Fee, LastLedgerSequence) with concurrent fetch
 - `submit_and_wait` — reliable submission with polling until validated
@@ -183,8 +185,8 @@ itself:
 | Binary codec | all 34 transaction and 261 ledger-object XRPL codec fixtures; mainnet transactions and ledger entries |
 | Ledger entry IDs | the `index` of real mainnet entries, xrpl.js's hash tests, and a live run that creates each entry type on Testnet |
 | Balance changes, NFTokenIDs, rates, time, hex, X-addresses | xrpl.js's own test fixtures and expected results |
-| Typed responses | recorded rippled 3.4.1 responses |
-| End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and every ID, hash and balance change must be what the network recorded |
+| Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet: each must parse, and serializing it back must keep all 2,521 field paths |
+| End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
 
 ## License
 

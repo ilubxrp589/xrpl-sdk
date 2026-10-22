@@ -1,0 +1,29 @@
+{
+ "method": "account_lines",
+ "params": {
+  "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "ledger_index": 107831520,
+  "limit": 3
+ },
+ "result": {
+  "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
+  "ledger_index": 107831520,
+  "limit": 3,
+  "lines": [
+   {
+    "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+    "balance": "689748.581365565",
+    "currency": "524C555344000000000000000000000000000000",
+    "limit": "10000000000",
+    "limit_peer": "0",
+    "no_ripple": true,
+    "quality_in": 0,
+    "quality_out": 0
+   }
+  ],
+  "marker": "2DE7C6A023569FD79077E9907D39289E2A8FBC2D3D8F24C42F05B1E13F455E7D,1",
+  "status": "success",
+  "validated": true
+ }
+}

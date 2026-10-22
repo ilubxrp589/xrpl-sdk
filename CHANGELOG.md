@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **A typed request and response for every public `rippled` method and the Clio-only ones**: 43
+  requests (25 new), grouped as on xrpl.org. New: `noripple_check`, `ledger_closed`, `ledger_data`,
+  `simulate`, `submit_multisigned`, `transaction_entry`, `book_changes`, `deposit_authorized`,
+  `get_aggregate_price`, `nft_buy_offers`, `nft_sell_offers`, `ripple_path_find`, `channel_verify`,
+  `feature`, `manifest`, `server_definitions`, `server_state`, `version`, `ping`, `random`,
+  `vault_info`, and Clio's `nft_info`, `nft_history`, `nfts_by_issuer`, `mpt_holders`. Every request
+  has a `new` with its required parameters and all of `rippled`'s optional ones as fields; the ones
+  that page implement `Paginated`.
+- Response types model every field `rippled` sends (`account_flags`, `queue_data`, AMM auction and
+  vote slots, the whole of `server_info` / `server_state`, …) and serialize back to its JSON.
+- `tests/rippled_responses.rs`: 44 recorded responses (mainnet `rippled` 3.4.1 and Clio, Testnet);
+  each must parse, and its typed form must keep all of its fields (2,521 field paths).
+- `Client::simulate` and `Client::submit_multisigned`.
+- The live Testnet test sends a multi-signed transaction and checks the typed `account_channels`,
+  `nft_sell_offers`, `get_aggregate_price` and (Clio) `mpt_holders` answers; with
+  `XRPL_RECORD_DIR` it records them.
+
+### Fixed
+- `ledger` failed against `rippled`: API version 1 writes the header's `ledger_index` as a string.
+
+### Changed (breaking)
+- Response types derive `Serialize` and `PartialEq`; several gained fields (e.g. `AccountInfo`,
+  `ServerInfo`, `AmmInfo`). `LedgerEntryResult::node` is an `Option` (absent with `binary: true`);
+  `AmmInfoRequest`'s assets are `Option`s (a pool can be named by `amm_account`);
+  `AccountTxResult` gained `ledger_index_min` / `ledger_index_max`.
+- `LedgerIndex` is `Copy` and defaults to `Validated`.
+
 ## v0.2.0 (2026-10-22)
 
 The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and

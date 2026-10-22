@@ -1,0 +1,27 @@
+{
+  "method": "account_channels",
+  "network": "testnet",
+  "params": {
+    "account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+    "ledger_index": "validated"
+  },
+  "result": {
+    "account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+    "channels": [
+      {
+        "account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+        "amount": "2000000",
+        "balance": "500000",
+        "channel_id": "CAC0E0F82165A3EDF327D842E97F369CE7339DC9B5E3787D6ACCCA4DA9B33CB7",
+        "destination_account": "rEcNXsa8DQCDfHAdBe5aQQF9B7z5tZbhLS",
+        "public_key": "aKEXViibvcegqupmy3CWzZ2zNZXo2rnwhKK3hNGGRgJsx8gkAVoN",
+        "public_key_hex": "ED640A615A36CF6471E218CCB8EA04DBFFAF120611F395A9D859440708E69C55B7",
+        "settle_delay": 60
+      }
+    ],
+    "ledger_hash": "B79A1A55E2557D648C7135626C15CC1BD82A547C2F79C1983627324780D24A35",
+    "ledger_index": 21739819,
+    "status": "success",
+    "validated": true
+  }
+}

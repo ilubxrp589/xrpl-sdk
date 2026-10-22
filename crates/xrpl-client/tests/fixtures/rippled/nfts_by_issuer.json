@@ -1,0 +1,41 @@
+{
+ "method": "nfts_by_issuer",
+ "params": {
+  "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+  "limit": 2
+ },
+ "result": {
+  "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+  "limit": 2,
+  "ledger_index": 107831525,
+  "nfts": [
+   {
+    "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E31280C5C306441428",
+    "ledger_index": 105126663,
+    "owner": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+    "is_burned": true,
+    "uri": "73733A2F2F7368613235362F37663836633737656239343931386266346663653632386333336337333337323737316266323664313166356139306537656337353666663531633333383735",
+    "flags": 0,
+    "transfer_fee": 0,
+    "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+    "nft_taxon": 0,
+    "nft_serial": 105124904
+   },
+   {
+    "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3296696C406441429",
+    "ledger_index": 105126658,
+    "owner": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+    "is_burned": true,
+    "uri": "73733A2F2F7368613235362F37663836633737656239343931386266346663653632386333336337333337323737316266323664313166356139306537656337353666663531633333383735",
+    "flags": 0,
+    "transfer_fee": 0,
+    "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+    "nft_taxon": 0,
+    "nft_serial": 105124905
+   }
+  ],
+  "validated": true,
+  "marker": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3296696C406441429",
+  "status": "success"
+ }
+}

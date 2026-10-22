@@ -1,0 +1,26 @@
+{
+ "method": "ledger_entry",
+ "params": {
+  "account_root": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "ledger_index": 107831520
+ },
+ "result": {
+  "index": "383BB05FBB110F9BE530B75C44DF100F86C5600F0F146593D3E7133FD1C99FF2",
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
+  "ledger_index": 107831520,
+  "node": {
+   "Account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+   "Balance": "99770260",
+   "Domain": "68747470733A2F2F726970706C652E636F6D2F",
+   "Flags": 2174353408,
+   "LedgerEntryType": "AccountRoot",
+   "OwnerCount": 19,
+   "PreviousTxnID": "677DE150B130A24586B00006F16A0B146B1D5C80B196ADDD35047555F2E1B05E",
+   "PreviousTxnLgrSeq": 107831359,
+   "Sequence": 89926490,
+   "index": "383BB05FBB110F9BE530B75C44DF100F86C5600F0F146593D3E7133FD1C99FF2"
+  },
+  "status": "success",
+  "validated": true
+ }
+}

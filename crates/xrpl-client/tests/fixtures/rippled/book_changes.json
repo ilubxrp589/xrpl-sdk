@@ -1,0 +1,47 @@
+{
+ "method": "book_changes",
+ "params": {
+  "ledger_index": 107831526
+ },
+ "result": {
+  "changes": [
+   {
+    "close": "761202.9106741559",
+    "currency_a": "XRP_drops",
+    "currency_b": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
+    "high": "762031",
+    "low": "761187.2459410326",
+    "open": "762031",
+    "volume_a": "862124",
+    "volume_b": "1.13149388782"
+   },
+   {
+    "close": "68.00449960019191",
+    "currency_a": "XRP_drops",
+    "currency_b": "rhCAT4hRdi2Y9puNdkpMzxrdKa5wkppR62/46555A5A59000000000000000000000000000000",
+    "high": "68.00664241582913",
+    "low": "68.00449959997636",
+    "open": "68.0045059271595",
+    "volume_a": "2765665",
+    "volume_b": "40668.8308572"
+   },
+   {
+    "close": "9457.933932555091",
+    "currency_a": "XRP_drops",
+    "currency_b": "rswh1fvyLqHizBS2awu1vs6QcmwTBd9qiv/XAH",
+    "high": "9457.933932555091",
+    "low": "9457.933932555091",
+    "open": "9457.933932555091",
+    "volume_a": "762031",
+    "volume_b": "80.57055646974"
+   }
+  ],
+  "ledger_hash": "CB64A8B6CB1A56EB2C12CDCB22204E2E5F6B4D3EC17CBD391B844628E6EC3F03",
+  "ledger_index": 107831526,
+  "ledger_time": 846004322,
+  "status": "success",
+  "type": "bookChanges",
+  "validated": true
+ },
+ "trimmed": "changes cut to 3"
+}

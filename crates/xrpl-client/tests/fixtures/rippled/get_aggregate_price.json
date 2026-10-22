@@ -1,0 +1,26 @@
+{
+  "method": "get_aggregate_price",
+  "network": "testnet",
+  "params": {
+    "base_asset": "XRP",
+    "oracles": [
+      {
+        "account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+        "oracle_document_id": 1
+      }
+    ],
+    "quote_asset": "USD"
+  },
+  "result": {
+    "entire_set": {
+      "mean": "0.74",
+      "size": 1,
+      "standard_deviation": "0"
+    },
+    "ledger_current_index": 21739826,
+    "median": "0.74",
+    "status": "success",
+    "time": 1792689919,
+    "validated": false
+  }
+}

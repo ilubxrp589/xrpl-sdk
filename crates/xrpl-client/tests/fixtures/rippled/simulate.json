@@ -1,0 +1,77 @@
+{
+ "method": "simulate",
+ "params": {
+  "tx_json": {
+   "TransactionType": "Payment",
+   "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+   "Destination": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+   "Amount": "1"
+  }
+ },
+ "result": {
+  "applied": false,
+  "engine_result": "tesSUCCESS",
+  "engine_result_code": 0,
+  "engine_result_message": "The simulated transaction would have been applied.",
+  "ledger_index": 107831525,
+  "meta": {
+   "AffectedNodes": [
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+       "Balance": "100999527",
+       "BurnedNFTokens": 5,
+       "FirstNFTokenSequence": 105124903,
+       "Flags": 0,
+       "MintedNFTokens": 34,
+       "OwnerCount": 1,
+       "Sequence": 105124943
+      },
+      "LedgerEntryType": "AccountRoot",
+      "LedgerIndex": "5D2236968E40E60A1E815DF409E7DD19C3A4568A733892FAC933AD1BBE7E17A7",
+      "PreviousFields": {
+       "Balance": "100999526"
+      },
+      "PreviousTxnID": "B2F50181DBCEB606C3E48AC2F58A688F1CD58DDBB0A1053F2E132CAAD475C6B0",
+      "PreviousTxnLgrSeq": 107830973
+     }
+    },
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+       "Balance": "176486236666",
+       "Flags": 0,
+       "OwnerCount": 23,
+       "Sequence": 109300263
+      },
+      "LedgerEntryType": "AccountRoot",
+      "LedgerIndex": "B2220016B5A52B30D9297EF383200FF328197E160BFE8FB7B0C74E261FE32647",
+      "PreviousFields": {
+       "Balance": "176486236677",
+       "Sequence": 109300262
+      },
+      "PreviousTxnID": "AE589CDE87057557514762C5F849BAFD522FE59A67B07F15E474133D2784464B",
+      "PreviousTxnLgrSeq": 107831524
+     }
+    }
+   ],
+   "TransactionIndex": 165,
+   "TransactionResult": "tesSUCCESS",
+   "delivered_amount": "1"
+  },
+  "status": "success",
+  "tx_json": {
+   "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+   "Amount": "1",
+   "Destination": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+   "Fee": "10",
+   "Sequence": 109300262,
+   "SigningPubKey": "",
+   "TransactionType": "Payment",
+   "TxnSignature": "",
+   "hash": "768D8A147B676F26D8E83408F9EB95DCCC4DABEA60AAB2EF5F8E8C3F8961CFE8"
+  }
+ }
+}

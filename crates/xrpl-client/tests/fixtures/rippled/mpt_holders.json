@@ -1,0 +1,23 @@
+{
+  "method": "mpt_holders",
+  "network": "testnet",
+  "params": {
+    "ledger_index": "validated",
+    "mpt_issuance_id": "014BB9262A03D6255E9764750942A3D27ECC9F274C8B8DCD"
+  },
+  "result": {
+    "ledger_index": 21739831,
+    "limit": 50,
+    "mpt_issuance_id": "014BB9262A03D6255E9764750942A3D27ECC9F274C8B8DCD",
+    "mptokens": [
+      {
+        "account": "rEcNXsa8DQCDfHAdBe5aQQF9B7z5tZbhLS",
+        "flags": 0,
+        "mpt_amount": "0",
+        "mptoken_index": "02E03279E3698E0186A3D7F09F5B7F03CAF81E48AB5C4274A021908FF8F3A12C"
+      }
+    ],
+    "status": "success",
+    "validated": true
+  }
+}

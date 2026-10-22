@@ -1,0 +1,17 @@
+{
+ "method": "gateway_balances",
+ "params": {
+  "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "ledger_index": 107831520
+ },
+ "result": {
+  "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
+  "ledger_index": 107831520,
+  "obligations": {
+   "524C555344000000000000000000000000000000": "921782606.8615378"
+  },
+  "status": "success",
+  "validated": true
+ }
+}

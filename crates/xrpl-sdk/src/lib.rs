@@ -194,17 +194,44 @@
 //! // Every page of a paginated request, following `marker`.
 //! let lines = client
 //!     .request_all(requests::AccountLinesRequest {
-//!         account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh".into(),
-//!         ledger_index: LedgerIndex::Validated,
 //!         limit: Some(400),
-//!         marker: None,
+//!         ..requests::AccountLinesRequest::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
 //!     })
 //!     .await?;
 //! println!("{} trust lines", lines.len());
 //!
-//! // Anything else rippled offers, as JSON.
+//! // Every public rippled method has a typed request (see `requests`).
+//! let book = client.request(&requests::BookChangesRequest::new(LedgerIndex::Validated)).await?;
+//! for change in &book.changes {
+//!     println!("{} / {}: close {}", change.currency_a, change.currency_b, change.close);
+//! }
+//!
+//! // Or any method at all, as JSON.
 //! let state = client.raw_request("server_state", serde_json::json!({})).await?;
 //! println!("{}", state["state"]["server_state"]);
+//! # Ok(()) }
+//! ```
+//!
+//! ### Simulate before you submit
+//!
+//! [`Client::simulate`] runs a transaction against the open ledger and
+//! returns the result and metadata it would have, without signing or
+//! sending anything (rippled 2.4+):
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! # async fn run() -> Result<(), ClientError> {
+//! let client = XrplHttpClient::new("https://xrplcluster.com")?;
+//! let outcome = client
+//!     .simulate(&serde_json::json!({
+//!         "TransactionType": "Payment",
+//!         "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+//!         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+//!         "Amount": "1000000",
+//!     }))
+//!     .await?;
+//! println!("would be {}", outcome.engine_result); // e.g. tesSUCCESS or tecUNFUNDED_PAYMENT
 //! # Ok(()) }
 //! ```
 //!
@@ -318,12 +345,17 @@
 //! - **Ledger entry IDs**: the `index` of real mainnet entries, xrpl.js's hash
 //!   tests, and a live run that creates each kind of entry on Testnet.
 //! - **Utilities**: xrpl.js's own fixtures and expected results.
+//! - **Typed responses**: 44 responses recorded from `rippled` 3.4.1, Clio and
+//!   Testnet; each must parse, and serializing it back must keep every one of
+//!   their 2,521 field paths.
 //! - **End to end** (`cargo test -p halcyon-xrpl-sdk --features live-tests`):
 //!   two faucet wallets create a Ticket, Check, Escrow, payment channel (and
 //!   redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding,
 //!   Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on
-//!   Testnet; every ID, hash and balance change must be what the network
-//!   recorded.
+//!   Testnet, and push a multi-signed transaction through `submit_multisigned`;
+//!   every ID, hash and balance change must be what the network recorded, and
+//!   the typed queries for what they made (channels, NFT offers, oracle prices,
+//!   MPT holders through Clio) must parse the answers.
 //!
 //! ## Safety
 //!

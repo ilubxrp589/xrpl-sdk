@@ -1,0 +1,8 @@
+{
+ "method": "ledger_current",
+ "params": {},
+ "result": {
+  "ledger_current_index": 107831524,
+  "status": "success"
+ }
+}
