@@ -1,10 +1,10 @@
 use crate::CoreError;
-use k256::ecdsa::signature::hazmat::PrehashSigner;
-use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
+use k256::ecdsa::hazmat::{bits2field, SignPrimitive};
+use k256::ecdsa::{Signature, VerifyingKey};
 use k256::elliptic_curve::ops::Reduce;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::{Scalar, SecretKey, U256};
-use sha2::{Digest, Sha512};
+use k256::{Scalar, Secp256k1, SecretKey, U256};
+use sha2::{Digest, Sha256, Sha512};
 use zeroize::Zeroize;
 
 #[cfg(not(feature = "std"))]
@@ -81,6 +81,11 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> 
 
 /// Sign a 32-byte prehash with a secp256k1 private key.
 /// Returns DER-encoded signature with low-S normalization.
+///
+/// The nonce is RFC 6979's (HMAC-SHA256), as in `rippled`, so the same key
+/// and prehash always give the same signature. Signing works from the secret
+/// scalar alone: unlike `k256`'s `SigningKey`, it does not first derive the
+/// public key, which would double the cost of every signature.
 pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
     if private_key.len() != 32 {
         return Err(CoreError::InvalidKeyLength {
@@ -89,17 +94,15 @@ pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
         });
     }
 
-    let signing_key =
-        SigningKey::from_slice(private_key).map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-
-    let (signature, _): (Signature, _) = signing_key
-        .sign_prehash(prehash)
-        .map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-
-    let normalized = match signature.normalize_s() {
-        Some(s) => s,
-        None => signature,
-    };
+    let secret =
+        SecretKey::from_slice(private_key).map_err(|e| CoreError::SigningFailed(e.to_string()))?;
+    let mut scalar = secret.to_nonzero_scalar();
+    let signed = bits2field::<Secp256k1>(prehash)
+        .and_then(|z| scalar.try_sign_prehashed_rfc6979::<Sha256>(&z, &[]));
+    scalar.zeroize();
+    // k256 already returns the low-S form; normalizing again keeps that explicit.
+    let (signature, _) = signed.map_err(|e| CoreError::SigningFailed(e.to_string()))?;
+    let normalized: Signature = signature.normalize_s().unwrap_or(signature);
     Ok(normalized.to_der().as_bytes().to_vec())
 }
 

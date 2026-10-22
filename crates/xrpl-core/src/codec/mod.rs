@@ -15,6 +15,7 @@ pub mod definitions;
 pub mod encode;
 /// Field IDs and length prefixes.
 pub mod field;
+mod number;
 
 pub use decode::decode_transaction_binary;
 pub use definitions::{lookup_field_def, lookup_field_def_by_id, transaction_type_code};

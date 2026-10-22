@@ -1,239 +1,136 @@
-# Testing Strategy
+# Testing
 
-## Test Levels
-1. **Unit tests** — in each `src/` file, `#[cfg(test)]` module
-2. **Integration tests** — in `crates/*/tests/`
-3. **Codec vector tests** — in `tests/vectors/` at workspace root
-4. **Live network tests** — gated by `#[cfg(feature = "live-tests")]`
+How the SDK is tested, where each test's data comes from, and how to run or
+refresh it. [PARITY.md](PARITY.md) lists what the tests establish against
+`rippled` 3.4.1, with the numbers.
 
----
-
-## Phase 1: Codec Vectors
-
-**Source:** https://github.com/XRPLF/xrpl-codec-fixtures
-
-Download `codec-fixtures.json` to `tests/vectors/codec-fixtures.json`.
-
-Structure:
-```json
-{
-  "accountState": [ { "blob": "HEX", "json": { ... } } ],
-  "transactions": [ { "blob": "HEX", "json": { ... } } ]
-}
-```
-
-Test: for each transaction entry, decode `json` → encode → assert hex output matches `blob`.
-Also: decode `blob` → assert matches `json`.
-
-```rust
-#[test]
-fn codec_transaction_vectors() {
-    let fixtures: serde_json::Value = serde_json::from_str(
-        include_str!("../../../tests/vectors/codec-fixtures.json")
-    ).unwrap();
-    for entry in fixtures["transactions"].as_array().unwrap() {
-        let expected_hex = entry["blob"].as_str().unwrap();
-        let json = &entry["json"];
-        let tx = Transaction::from_json(json).unwrap();
-        let encoded = encode_transaction(&tx).unwrap();
-        assert_eq!(hex::encode_upper(&encoded), expected_hex,
-            "transaction: {}", json["TransactionType"]);
-    }
-}
-```
-
----
-
-## Phase 1: Known Address Vectors
-
-From xrpl.js's ripple-keypairs fixtures (`test/fixtures/api.json`); rippled's `wallet_propose` derives the
-same keys and addresses. The tests (crypto/signing.rs) also check the private and public keys, the fixture
-signatures, and a Payment signed by rippled's `sign` (offline) byte for byte.
-
-| Seed (base58) | Key Type | Classic Address |
-|---|---|---|
-| `sp5fghtJtpUorTwvof1NpDXAzNwf5` | secp256k1 | `rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1` |
-| `sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r` | ed25519 | `rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD` |
-
-```rust
-#[test]
-fn address_derivation_secp256k1() {
-    let wallet = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5").unwrap();
-    assert_eq!(wallet.address, "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
-}
-
-#[test]
-fn address_derivation_ed25519() {
-    let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r").unwrap();
-    assert_eq!(wallet.address, "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
-}
-```
-
----
-
-## Phase 1: Signing Vectors
-
-XRPL test vectors for signing are in the codec-fixtures repo under `sign-fixtures.json`.
-Each entry contains `seed`, `key_type`, `tx_json`, and `tx_blob` (signed blob).
-
-Test: derive keypair from seed, sign tx_json, compare resulting blob to expected.
-
----
-
-## Phase 1: Amount Encoding
-
-```rust
-#[test]
-fn encode_xrp_1_xrp() {
-    // 1 XRP = 1_000_000 drops
-    let encoded = encode_amount_xrp(1_000_000);
-    assert_eq!(encoded, [0x40, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x42, 0x40]);
-}
-
-#[test]
-fn encode_xrp_zero() {
-    let encoded = encode_amount_xrp(0);
-    assert_eq!(encoded, [0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-}
-
-#[test]
-fn encode_iou_zero() {
-    // Zero IOU has special encoding
-    let encoded = encode_amount_iou_zero();
-    assert_eq!(encoded[..8], [0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-}
-```
-
----
-
-## Phase 1: Base58 Vectors
-
-```rust
-#[test]
-fn base58_encode_genesis_account() {
-    // Account ID = all zeros = rHb9... (genesis account)
-    let id = [0u8; 20];
-    // actual genesis is derived from seed, use known pair
-}
-
-#[test]
-fn base58_roundtrip() {
-    let id: [u8; 20] = rand::random();
-    let encoded = encode_account_id(&id);
-    let decoded = decode_account_id(&encoded).unwrap();
-    assert_eq!(id, decoded);
-}
-
-#[test]
-fn base58_bad_checksum() {
-    let addr = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTx"; // last char changed
-    assert!(decode_account_id(addr).is_err());
-}
-```
-
----
-
-## Phase 2: HTTP Client Tests
-
-Use testnet — gate with `#[cfg(feature = "live-tests")]`:
-```rust
-#[tokio::test]
-#[cfg(feature = "live-tests")]
-async fn account_info_testnet() {
-    let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234").unwrap();
-    let account: AccountId = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe".parse().unwrap();
-    let info = client.account_info(&account, LedgerIndex::Validated).await.unwrap();
-    assert!(info.account_data.sequence > 0);
-}
-
-#[tokio::test]
-#[cfg(feature = "live-tests")]
-async fn fee_testnet() {
-    let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234").unwrap();
-    let fee = client.fee().await.unwrap();
-    assert!(fee.drops.base_fee >= 10);
-}
-```
-
----
-
-## Phase 2: WebSocket Tests
-
-```rust
-#[tokio::test]
-#[cfg(feature = "live-tests")]
-async fn ws_subscribe_ledger() {
-    let client = XrplWsClient::connect("wss://s.altnet.rippletest.net:51233").await.unwrap();
-    let mut stream = client.subscribe_ledger().await.unwrap();
-    // Wait for one ledger close (should arrive within ~4 seconds)
-    let event = tokio::time::timeout(Duration::from_secs(10), stream.next())
-        .await.expect("timeout").expect("stream ended");
-    assert!(event.ledger_index > 0);
-}
-```
-
----
-
-## Phase 3: End-to-End (Testnet)
-
-```rust
-#[tokio::test]
-#[cfg(feature = "live-tests")]
-async fn send_payment_e2e() {
-    // Generate two wallets
-    let sender = Wallet::generate();
-    let receiver = Wallet::generate();
-
-    // Fund sender via testnet faucet
-    fund_from_faucet(&sender.address).await;
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    let client = XrplClient::http("https://s.altnet.rippletest.net:51234").unwrap();
-
-    // Build and send 1 XRP
-    let mut tx = PaymentBuilder::new()
-        .to(&receiver.classic_address)
-        .amount(Amount::Xrp(1_000_000))
-        .build_autofill(&client, &sender.classic_address).await.unwrap();
-
-    let blob = sender.sign_transaction(&mut tx).unwrap();
-    let result = client.submit(&blob).await.unwrap();
-    assert_eq!(result.engine_result, "tesSUCCESS");
-}
-```
-
----
-
-## Running Tests
+## Running the tests
 
 ```bash
-# All unit and codec vector tests (no network)
-cargo test --workspace
-
-# Include live network tests
-cargo test --workspace --features live-tests
-
-# Single crate
-cargo test -p xrpl-core
-
-# With output
-cargo test -- --nocapture
-
-# Specific test
-cargo test codec_transaction_vectors
+cargo test --workspace                  # everything offline: unit, fixtures, doc examples, CLI
+cargo test -p halcyon-xrpl-core         # one crate
+cargo test codec_ -- --nocapture        # by name, with the tests' own counts printed
+cargo test -p halcyon-xrpl-sdk --features live-tests -- --nocapture   # the live Testnet test
 ```
 
----
+The offline suite needs no network and takes well under a minute on a laptop.
+The live test needs the XRPL Testnet faucet and takes about two minutes.
 
-## Clippy Config (`.clippy.toml`)
-```toml
-too-many-arguments-threshold = 7
-cognitive-complexity-threshold = 30
+## How the tests are organized
+
+| Kind | Where | What it holds |
+|---|---|---|
+| Unit tests | `#[cfg(test)]` module of each source file | The rules of one module, often with `rippled`'s own answers as the expected values |
+| Fixture tests | `crates/*/tests/*.rs` | Whole-crate behaviour against recorded real-network data |
+| Doc examples | `///` and `//!` comments | Every example in the API docs compiles and runs |
+| CLI tests | `crates/xrpl-cli/tests/cli.rs` | The offline `hxrpl` commands, run as a user would |
+| Live test | `crates/xrpl-sdk/tests/live_testnet.rs` | End to end on Testnet (feature `live-tests`) |
+| Fuzz targets | `fuzz/fuzz_targets/` | Never panic, and round trips hold, on any input |
+| Benchmarks | `benchmarks/` | Speed against xrpl-rust on the same inputs ([BENCHMARKS.md](BENCHMARKS.md)) |
+
+## The fixtures
+
+Expected values come from real servers and networks, not from this SDK. Each
+fixture records where it came from.
+
+| File | Contents | Source |
+|---|---|---|
+| `crates/xrpl-core/tests/fixtures/rippled_signed_transactions.jsonl` | One of each of the 79 user transaction types, every field filled, with `rippled`'s `tx_blob` and `hash` | `rippled` 3.4.1 `sign`, offline |
+| `crates/xrpl-core/tests/fixtures/transactions.jsonl` | 186 transactions, 51 types, as validated | Mainnet and Testnet (`tx`) |
+| `crates/xrpl-core/tests/fixtures/mainnet_ledger_objects.jsonl` | 20 ledger entries, 15 types | Mainnet ledger #107827070 (`ledger_data`) |
+| `crates/xrpl-core/tests/fixtures/xrpljs/` | Transaction metadata and expected balance changes | xrpl.js's own test fixtures |
+| `tests/vectors/codec-fixtures.json` | 34 transactions and 261 ledger entries with their bytes | XRPLF codec fixtures (shared with xrpl.js) |
+| `crates/xrpl-core/src/codec/definitions.json` | Every type, field and result code | `rippled` 3.4.1 `server_definitions` |
+| `crates/xrpl-client/tests/fixtures/rippled/` | One response per method, 44 methods | `rippled` 3.4.1 on mainnet; Clio (`s2.ripple.com`) for Clio-only methods; Testnet for what the live test creates |
+| `crates/xrpl-client/tests/fixtures/streams/` | One message per stream kind | `rippled` 3.4.1 on mainnet (WebSocket) |
+
+Unit tests that compare against `rippled` carry a comment saying which call
+produced the expected value (for example `// rippled 3.4.1 offline sign of
+the Payment ...`), so any expected value can be re-derived.
+
+### Refreshing fixtures
+
+- **Responses.** Run the live test with `XRPL_RECORD_DIR=<dir>`. It writes
+  the responses to the requests it makes in the fixture format; copy the ones
+  you want into `crates/xrpl-client/tests/fixtures/rippled/`.
+- **`Number` rules.** `crates/xrpl-core/scripts/probe_number.py` asks a
+  `rippled` node (through `simulate`, which applies nothing) how it writes and
+  reads `Number` values. The tables in `src/codec/number.rs` are its answers.
+- **Definitions and typed models.** When `rippled` releases a new version,
+  replace `definitions.json` with its `server_definitions` result and run
+  `crates/xrpl-core/scripts/gen_transactions.py` and `gen_ledger_objects.py`.
+  These regenerate the typed transactions, ledger entries and flags. The
+  test `every_type_is_checked_against_rippled` then names any new transaction
+  type that no fixture covers yet.
+
+## The live Testnet test
+
+`--features live-tests` enables `crates/xrpl-sdk/tests/live_testnet.rs`. It
+funds two wallets from the Testnet faucet, submits one transaction of each
+kind that creates a ledger entry, two batches and a multi-signed transaction,
+and checks every hash, entry ID and parsed response against what the network
+did. A transaction whose amendment Testnet has not enabled (`temDISABLED`) is
+skipped, not failed. CI runs it after every push to `main`.
+
+## Fuzzing
+
+```bash
+rustup toolchain install nightly && cargo install cargo-fuzz
+python3 fuzz/seed_corpus.py                       # seed every target from the fixtures
+cargo +nightly fuzz run fuzz_roundtrip            # until stopped
+cargo +nightly fuzz run fuzz_roundtrip -- -max_total_time=120
+cargo +nightly fuzz run fuzz_roundtrip fuzz/artifacts/fuzz_roundtrip/crash-…   # replay a crash
 ```
 
-Allowed lints in `lib.rs`:
-```rust
-#![deny(missing_docs)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-```
+| Target | Requires |
+|---|---|
+| `fuzz_decode` | Decoding any bytes never panics |
+| `fuzz_roundtrip` | Whatever decodes encodes again, and decodes to the same JSON |
+| `fuzz_encode` | Encoding any JSON, for submission or for signing, never panics |
+| `fuzz_models` | Typed transactions and ledger entries never panic on any JSON, and a typed transaction writes back what it read |
+| `fuzz_hashes` | Transaction hashes and Batch signing data never panic, from bytes or JSON |
+| `fuzz_utils` | The string and metadata utilities never panic |
+| `fuzz_amount` | The amount codec never panics |
+| `fuzz_address` | Address and seed decoding never panic |
+
+CI fuzzes each target for a minute on every pull request and for 15 minutes
+every Monday, and uploads any crashing input.
+
+## Minimum supported Rust version
+
+`halcyon-xrpl-core` needs Rust 1.85; `halcyon-xrpl-client`,
+`halcyon-xrpl-sdk` and `halcyon-xrpl-cli` need 1.88 (for the URL handling in
+`reqwest`). Each crate declares it as `rust-version`. CI checks both, with the
+locked dependencies, so a dependency update that raises either fails there
+before it reaches a release. Raising the MSRV is a minor-version change and
+goes in the CHANGELOG.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+| Job | Runs |
+|---|---|
+| Test | `cargo test --workspace` |
+| Clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` |
+| Format | `cargo fmt --check` |
+| MSRV | `cargo check --locked` on Rust 1.85 (core) and 1.88 (everything) |
+| WASM build | Clippy for `wasm32-unknown-unknown` with the `wasm` feature |
+| Docs | `cargo doc` with warnings as errors |
+| Security Audit | `cargo audit` against the RustSec database |
+| Live Testnet Tests | The live test, after pushes to `main` |
+
+`.github/workflows/fuzz.yml` runs the fuzz targets as described above.
+
+## The rules the code is held to
+
+The workspace denies, in library code:
+
+- `unsafe`;
+- `unwrap` and `expect`;
+- unchecked indexing.
+
+A test module opts out explicitly with
+`#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]`.
+Every public item is documented (`#![warn(missing_docs)]`, with docs built
+with warnings as errors).

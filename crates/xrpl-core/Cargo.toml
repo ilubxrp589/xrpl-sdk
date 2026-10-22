@@ -1,7 +1,8 @@
 [package]
 name = "halcyon-xrpl-core"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
+rust-version = "1.85"
 description = "XRP Ledger types, binary codec, Ed25519/secp256k1 signing, transaction hashes and ledger entry IDs, checked byte for byte against rippled"
 license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"

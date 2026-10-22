@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.4"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.5"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -136,7 +136,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.4", default-features = false }
+//! halcyon-xrpl-core = { version = "0.5", default-features = false }
 //! ```
 //!
 //! ## How it is checked
@@ -150,6 +150,13 @@
 //! signed by `rippled` 3.4.1, encodes to `rippled`'s exact `tx_blob`. Batch
 //! signatures verify against real batches `rippled` accepted. Ledger entry IDs match real mainnet entries
 //! and a live Testnet run. The utilities pass xrpl.js's own fixtures.
+//!
+//! Where the format has edge cases (`Number`, amounts, payment paths), each case was put to
+//! `rippled` 3.4.1 itself, and the codec reads, writes and refuses exactly what `rippled` does.
+//! Eight fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
+//! it, is in the [parity report](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md);
+//! speed against xrpl-rust is in the
+//! [benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md).
 //!
 //! No `unsafe` code; no `unwrap`, `expect` or unchecked indexing in library
 //! code; private keys and seeds are zeroized on drop.

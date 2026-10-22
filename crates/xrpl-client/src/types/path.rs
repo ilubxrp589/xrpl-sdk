@@ -390,10 +390,14 @@ pub struct PathStep {
     /// A currency code, to convert into on the DEX.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
+    /// An MPT to convert into, instead of a currency (`mpt_issuance_id`; path
+    /// steps of type 64, new in `rippled` 3.4.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mpt_issuance_id: Option<String>,
     /// The issuer (`Issuer`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
-    /// Bits for which of the fields above are set (1 account, 16 currency, 32 issuer).
+    /// Bits for which of the fields above are set (1 account, 16 currency, 32 issuer, 64 MPT).
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub step_type: Option<u32>,
     /// The step's type, hex.

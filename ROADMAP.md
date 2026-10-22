@@ -9,7 +9,7 @@ welcome as GitHub issues.
 
 ## 0.2: foundations and every request typed (released 2026-10-22, the first crates.io release)
 
-- [x] Binary codec on `rippled` 3.4.1's definitions: all 83 transaction types, 357 fields,
+- [x] Binary codec on `rippled` 3.4.1's definitions: all 82 transaction types, 357 fields,
       byte-exact on the XRPL codec fixtures and mainnet data
 - [x] Ed25519 and secp256k1 signing and multi-signing, byte for byte with `rippled`
 - [x] One `Client` trait over HTTP, WebSocket (subscriptions, auto-reconnect) and browser
@@ -40,8 +40,16 @@ welcome as GitHub issues.
 - [x] A command-line tool: `cargo install halcyon-xrpl-cli` (`hxrpl`)
 - [ ] An example of every public item on docs.rs
 
+## 0.5: trust
+
+- [x] Fuzzing in CI: eight targets, seeded with real XRPL data, on every pull request and weekly
+- [x] Benchmarks against xrpl-rust on the same inputs ([docs/BENCHMARKS.md](docs/BENCHMARKS.md))
+- [x] A minimum supported Rust version, checked in CI (1.85 for core, 1.88 for the rest)
+- [x] A parity report: every check against `rippled` 3.4.1 ([docs/PARITY.md](docs/PARITY.md))
+- [x] The codec reads and writes exactly what `rippled` does at the edges: `Number`, amounts,
+      payment paths (including MPT path steps), each probed against `rippled` itself
+
 ## Ongoing
 
-- [ ] Codec benchmarks, published with each release
-- [ ] Fuzzing in CI
+- [ ] Benchmarks re-run and published with each release
 - [ ] Following each `rippled` release: new amendments, fields and transaction types
