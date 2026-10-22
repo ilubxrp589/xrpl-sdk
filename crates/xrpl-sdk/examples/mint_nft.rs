@@ -5,7 +5,7 @@
 //! Usage: cargo run --example mint_nft
 
 use xrpl_sdk::transactions::{NFTokenMint, Transaction};
-use xrpl_sdk::{autofill_and_sign, Wallet, XrplHttpClient};
+use xrpl_sdk::{autofill_and_sign, Client, Wallet, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

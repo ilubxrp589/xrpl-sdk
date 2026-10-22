@@ -48,8 +48,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --target wasm32-unknown-unknown -p xrpl-client --features wasm
+      - run: cargo clippy --target wasm32-unknown-unknown -p xrpl-core -p xrpl-client --features wasm -- -D warnings
 
   live-tests:
     name: Live Testnet Tests

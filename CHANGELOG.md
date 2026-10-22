@@ -11,6 +11,19 @@
 - `TypeCode::{Int32, Int64}` (a breaking change for exhaustive matches on `TypeCode`).
 
 ### Changed
+- **xrpl-client: one `Client` trait over HTTP, WebSocket and wasm WebSocket** (breaking: `use
+  xrpl_client::Client;` to call the RPC methods). A transport implements `raw_request`; every
+  method, `autofill`, `submit_and_wait` and the `_all` paginators are written once. New typed layer:
+  `requests::*` (each `Request` names its method and response type), `Client::request`,
+  `Client::request_all` for any `Paginated` request. The WS client's `request(command, params)` is
+  now `raw_request`; `autofill_and_sign` / `submit_transaction` take any `Client`.
+- WebSocket `submit` now sorts engine results like HTTP did (`tem`/`tef` failed, `ter` retry, `tec`
+  claimed) and `submit_and_wait` resubmits on `ter`; the wasm client gains every method.
+- Paginated requests omit `marker` on the first page instead of sending `"marker": null`.
+- `LedgerIndex` serializes as rippled expects (it serialized unit variants as `null`).
+- An HTTP error body is cut at 200 characters, not 200 bytes (which could split a UTF-8 character
+  and panic).
+- The wasm build compiles again (getrandom 0.3's `wasm_js` backend); CI lints it.
 - tests/vectors/definitions.json is rippled 3.4.1's `server_definitions`: 44 fields, 7 transaction
   types, 1 ledger entry type and 8 results added; the Hooks-only fields dropped; UInt32 nth 53 is
   `ImmutableFlags` (was `MutableFlags`); type names Hash384/Hash512.

@@ -4,7 +4,7 @@
 //!
 //! Usage: cargo run --example place_offer
 
-use xrpl_sdk::{LedgerIndex, Wallet, XrplHttpClient};
+use xrpl_sdk::{Client, LedgerIndex, Wallet, XrplHttpClient};
 
 const TESTNET_URL: &str = "https://s.altnet.rippletest.net:51234";
 

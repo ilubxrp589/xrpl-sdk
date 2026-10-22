@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/// Ledger index specifier for API requests.
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
+/// Ledger index specifier for API requests: serializes as rippled expects
+/// (`"validated"`, `"current"`, `"closed"` or the number).
+#[derive(Debug, Clone)]
 pub enum LedgerIndex {
     Validated,
     Current,
@@ -17,6 +17,17 @@ impl LedgerIndex {
             LedgerIndex::Current => serde_json::Value::String("current".into()),
             LedgerIndex::Closed => serde_json::Value::String("closed".into()),
             LedgerIndex::Index(n) => serde_json::Value::Number((*n).into()),
+        }
+    }
+}
+
+impl Serialize for LedgerIndex {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            LedgerIndex::Validated => serializer.serialize_str("validated"),
+            LedgerIndex::Current => serializer.serialize_str("current"),
+            LedgerIndex::Closed => serializer.serialize_str("closed"),
+            LedgerIndex::Index(n) => serializer.serialize_u32(*n),
         }
     }
 }
