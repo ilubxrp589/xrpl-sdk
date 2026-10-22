@@ -89,6 +89,33 @@ mod tests {
     use crate::types::*;
 
     #[test]
+    fn mainnet_amounts_deserialize_typed() {
+        // rippled 3.4.1 (.39) responses, 2026-10-22: XRP/RLUSD book, its AMM, a maker's offers.
+        let book: BookOffersResult =
+            serde_json::from_str(include_str!("../tests/fixtures/mainnet_book_offers.json"))
+                .unwrap();
+        assert!(book
+            .offers
+            .iter()
+            .all(|o| o.taker_gets.is_xrp() && !o.taker_pays.is_xrp()));
+        let amm: AmmInfoResult =
+            serde_json::from_str(include_str!("../tests/fixtures/mainnet_amm_info.json")).unwrap();
+        assert!(matches!(
+            amm.amm.amount,
+            Some(xrpl_core::types::Amount::Xrp(_))
+        ));
+        assert!(matches!(
+            amm.amm.lp_token,
+            Some(xrpl_core::types::Amount::Iou { .. })
+        ));
+        let offers: AccountOffersResult = serde_json::from_str(include_str!(
+            "../tests/fixtures/mainnet_account_offers.json"
+        ))
+        .unwrap();
+        assert!(!offers.offers.is_empty());
+    }
+
+    #[test]
     fn client_creation() {
         let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234");
         assert!(client.is_ok());

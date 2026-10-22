@@ -6,6 +6,7 @@ use crate::requests::*;
 use crate::types::*;
 use serde_json::{json, Value};
 use std::time::Duration;
+use xrpl_core::types::LedgerObject;
 
 /// The most pages [`Client::request_all`] follows before it gives up.
 pub const MAX_PAGES: usize = 50;
@@ -393,7 +394,7 @@ pub trait Client {
         account: &str,
         object_type: Option<&str>,
         ledger: &LedgerIndex,
-    ) -> Result<Vec<Value>, ClientError> {
+    ) -> Result<Vec<LedgerObject>, ClientError> {
         self.request_all(account_objects_request(account, object_type, ledger))
             .await
     }

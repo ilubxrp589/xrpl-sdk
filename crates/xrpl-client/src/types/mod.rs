@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use xrpl_core::types::{Amount, LedgerObject};
 
 /// Ledger index specifier for API requests: serializes as rippled expects
 /// (`"validated"`, `"current"`, `"closed"` or the number).
@@ -147,8 +148,8 @@ pub struct AccountOffersResult {
 pub struct AccountOffer {
     pub flags: u32,
     pub seq: u32,
-    pub taker_gets: Value,
-    pub taker_pays: Value,
+    pub taker_gets: Amount,
+    pub taker_pays: Amount,
     pub quality: Option<String>,
     pub expiration: Option<u32>,
 }
@@ -191,11 +192,15 @@ pub struct BookOffer {
     #[serde(rename = "Sequence")]
     pub sequence: u32,
     #[serde(rename = "TakerGets")]
-    pub taker_gets: Value,
+    pub taker_gets: Amount,
     #[serde(rename = "TakerPays")]
-    pub taker_pays: Value,
+    pub taker_pays: Amount,
     pub quality: Option<String>,
     pub owner_funds: Option<String>,
+    /// What the owner can actually deliver, when less than TakerGets.
+    pub taker_gets_funded: Option<Amount>,
+    /// TakerPays scaled to `taker_gets_funded`.
+    pub taker_pays_funded: Option<Amount>,
     #[serde(rename = "Expiration")]
     pub expiration: Option<u32>,
     #[serde(rename = "BookDirectory")]
@@ -212,9 +217,9 @@ pub struct AmmInfoResult {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AmmInfo {
     pub account: Option<String>,
-    pub amount: Option<Value>,
-    pub amount2: Option<Value>,
-    pub lp_token: Option<Value>,
+    pub amount: Option<Amount>,
+    pub amount2: Option<Amount>,
+    pub lp_token: Option<Amount>,
     pub trading_fee: Option<u32>,
     pub vote_slots: Option<Vec<Value>>,
     pub auction_slot: Option<Value>,
@@ -242,7 +247,7 @@ pub struct AccountTxEntry {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AccountObjectsResult {
     pub account: String,
-    pub account_objects: Vec<Value>,
+    pub account_objects: Vec<LedgerObject>,
     pub marker: Option<Value>,
 }
 
@@ -283,7 +288,7 @@ pub struct PaymentChannel {
 #[derive(Debug, Clone, Deserialize)]
 pub struct LedgerEntryResult {
     pub index: String,
-    pub node: Value,
+    pub node: LedgerObject,
     pub ledger_index: Option<u32>,
     pub validated: Option<bool>,
 }

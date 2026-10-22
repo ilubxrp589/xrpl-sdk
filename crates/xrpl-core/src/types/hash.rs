@@ -12,6 +12,10 @@ pub struct Hash128(pub [u8; 16]);
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Hash160(pub [u8; 20]);
 
+/// 192-bit hash (24 bytes). Used for MPTokenIssuanceID.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Hash192(pub [u8; 24]);
+
 /// 256-bit hash (32 bytes). Used for transaction hashes, ledger hashes, etc.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Hash256(pub [u8; 32]);
@@ -106,6 +110,54 @@ impl Serialize for Hash160 {
 }
 
 impl<'de> Deserialize<'de> for Hash160 {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Self::from_hex(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+// --- Hash192 ---
+
+impl Hash192 {
+    pub const ZERO: Self = Self([0u8; 24]);
+
+    pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
+        let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
+        if bytes.len() != 24 {
+            return Err(crate::CoreError::InvalidHex(format!(
+                "expected 24 bytes, got {}",
+                bytes.len()
+            )));
+        }
+        let mut arr = [0u8; 24];
+        arr.copy_from_slice(&bytes);
+        Ok(Self(arr))
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 24] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for Hash192 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Hash192({})", hex::encode_upper(self.0))
+    }
+}
+
+impl fmt::Display for Hash192 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", hex::encode_upper(self.0))
+    }
+}
+
+impl Serialize for Hash192 {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&hex::encode_upper(self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for Hash192 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
         Self::from_hex(&s).map_err(serde::de::Error::custom)

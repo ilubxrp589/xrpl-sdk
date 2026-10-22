@@ -131,6 +131,15 @@ pub fn encode_amount(amount: &Amount) -> Result<Vec<u8>, CoreError> {
             currency,
             issuer,
         } => Ok(encode_amount_iou(value, currency, issuer).to_vec()),
+        Amount::Mpt { value, issuance_id } => {
+            // STAmount::add: lead byte 0x20 (MPT) | 0x40 unless negative,
+            // the 8-byte magnitude, then the 24-byte MPTokenIssuanceID.
+            let mut out = Vec::with_capacity(33);
+            out.push(if *value >= 0 { 0x60 } else { 0x20 });
+            out.extend_from_slice(&value.unsigned_abs().to_be_bytes());
+            out.extend_from_slice(issuance_id.as_bytes());
+            Ok(out)
+        }
     }
 }
 
@@ -147,7 +156,31 @@ pub fn decode_amount(bytes: &[u8]) -> Result<Amount, CoreError> {
     let first_byte = *bytes
         .first()
         .ok_or_else(|| CoreError::InvalidAmount("amount buffer is empty".to_string()))?;
-    if first_byte & 0x80 == 0 {
+    if first_byte & 0x80 == 0 && first_byte & 0x20 != 0 {
+        // MPT: lead byte + 8-byte magnitude + 24-byte MPTokenIssuanceID
+        let arr: &[u8; 33] = bytes.try_into().map_err(|_| {
+            CoreError::InvalidAmount(format!("MPT amount must be 33 bytes, got {}", bytes.len()))
+        })?;
+        let [lead, rest @ ..] = arr;
+        let (magnitude, id) = rest
+            .split_first_chunk::<8>()
+            .ok_or_else(|| CoreError::InvalidAmount("MPT amount magnitude".to_string()))?;
+        let magnitude = u64::from_be_bytes(*magnitude);
+        let magnitude = i64::try_from(magnitude).map_err(|_| {
+            CoreError::InvalidAmount(format!("MPT amount {magnitude} out of range"))
+        })?;
+        let mut issuance_id = [0u8; 24];
+        issuance_id.copy_from_slice(id);
+        let value = if lead & 0x40 == 0 {
+            -magnitude
+        } else {
+            magnitude
+        };
+        Ok(Amount::Mpt {
+            value,
+            issuance_id: crate::types::Hash192(issuance_id),
+        })
+    } else if first_byte & 0x80 == 0 {
         // XRP: 8 bytes
         if bytes.len() != 8 {
             return Err(CoreError::InvalidAmount(format!(
@@ -187,6 +220,18 @@ pub fn decode_amount(bytes: &[u8]) -> Result<Amount, CoreError> {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mpt_amount_matches_the_json_codec() {
+        let json = serde_json::json!({"mpt_issuance_id": "0000012FFD9EE5DA93AC614B4DB94D7E0FCE415CA51BED47", "value": "-100"});
+        let amount: Amount = serde_json::from_value(json.clone()).unwrap();
+        let bytes = encode_amount(&amount).unwrap();
+        let via_json =
+            crate::codec::encode_transaction_json(&serde_json::json!({"Amount": json}), false)
+                .unwrap();
+        assert_eq!(via_json[1..], bytes[..]);
+        assert_eq!(decode_amount(&bytes).unwrap(), amount);
+    }
 
     #[test]
     fn encode_xrp_1_xrp() {

@@ -6,6 +6,7 @@ use crate::types::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use xrpl_core::types::LedgerObject;
 
 /// A typed rippled request: the method it calls and the type of its `result`.
 pub trait Request: Serialize {
@@ -177,7 +178,7 @@ pub struct AccountObjectsRequest {
     pub marker: Option<Value>,
 }
 request!(AccountObjectsRequest => "account_objects", AccountObjectsResult);
-paginated!(AccountObjectsRequest, Value, account_objects);
+paginated!(AccountObjectsRequest, LedgerObject, account_objects);
 
 /// `account_currencies`
 #[derive(Debug, Clone, Serialize)]
