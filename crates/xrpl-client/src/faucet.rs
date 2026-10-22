@@ -10,7 +10,9 @@ use serde_json::{json, Value};
 /// A public test network with a faucet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaucetNetwork {
+    /// The XRP Ledger Testnet (altnet).
     Testnet,
+    /// The XRP Ledger Devnet, where new amendments arrive first.
     Devnet,
 }
 

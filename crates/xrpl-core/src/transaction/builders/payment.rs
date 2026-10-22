@@ -5,13 +5,21 @@ use serde_json::{json, Value};
 /// Payment transaction: send XRP or IOU between accounts.
 #[derive(Debug, Clone)]
 pub struct Payment {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// How much (`Amount`).
     pub amount: Value,
+    /// The account that receives it (`Destination`).
     pub destination: String,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`).
     pub destination_tag: Option<u32>,
+    /// The most the sender will spend, in any currency (`SendMax`).
     pub send_max: Option<Value>,
+    /// The least a partial payment must deliver (`DeliverMin`).
     pub deliver_min: Option<Value>,
+    /// The paths a cross-currency payment may take (from `ripple_path_find`) (`Paths`).
     pub paths: Option<Vec<Vec<Value>>>,
+    /// An ID of the sender's choosing, such as an invoice number (`InvoiceID`).
     pub invoice_id: Option<String>,
 }
 
@@ -54,6 +62,7 @@ impl Transaction for Payment {
     }
 }
 
+/// Builds a [`Payment`] (from [`Payment::builder`]); `build` checks the required fields.
 pub struct PaymentBuilder {
     common: TxCommon,
     amount: Option<Value>,
@@ -66,6 +75,7 @@ pub struct PaymentBuilder {
 }
 
 impl PaymentBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -79,59 +89,73 @@ impl PaymentBuilder {
         }
     }
 
+    /// Set `Amount`.
     pub fn amount(mut self, amount: Value) -> Self {
         self.amount = Some(amount);
         self
     }
+    /// Set `Destination`.
     pub fn destination(mut self, dest: impl Into<String>) -> Self {
         self.destination = Some(dest.into());
         self
     }
+    /// Set `DestinationTag`.
     pub fn destination_tag(mut self, tag: u32) -> Self {
         self.destination_tag = Some(tag);
         self
     }
+    /// Set `SendMax`.
     pub fn send_max(mut self, v: Value) -> Self {
         self.send_max = Some(v);
         self
     }
+    /// Set `DeliverMin`.
     pub fn deliver_min(mut self, v: Value) -> Self {
         self.deliver_min = Some(v);
         self
     }
+    /// Set `Paths`.
     pub fn paths(mut self, p: Vec<Vec<Value>>) -> Self {
         self.paths = Some(p);
         self
     }
+    /// Set `InvoiceID`.
     pub fn invoice_id(mut self, id: impl Into<String>) -> Self {
         self.invoice_id = Some(id.into());
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, fee: impl Into<String>) -> Self {
         self.common.fee = Some(fee.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, seq: u32) -> Self {
         self.common.sequence = Some(seq);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, lls: u32) -> Self {
         self.common.last_ledger_sequence = Some(lls);
         self
     }
+    /// Set `Flags`.
     pub fn flags(mut self, f: u32) -> Self {
         self.common.flags = Some(f);
         self
     }
+    /// Set `Memos`.
     pub fn memos(mut self, m: Vec<Value>) -> Self {
         self.common.memos = Some(m);
         self
     }
+    /// Set `SourceTag`.
     pub fn source_tag(mut self, t: u32) -> Self {
         self.common.source_tag = Some(t);
         self
     }
 
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<Payment, CoreError> {
         let amount = self
             .amount
@@ -155,6 +179,7 @@ impl PaymentBuilder {
 }
 
 impl Payment {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> PaymentBuilder {
         PaymentBuilder::new(account)
     }

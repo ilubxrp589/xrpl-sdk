@@ -1,6 +1,38 @@
 # Changelog
 
-## v0.3.0 (2026-10-22)
+## v0.4.0 (2026-10-22)
+
+Developer experience: a cookbook, the command line, a blocking client, typed streams.
+
+### Added
+- **`hxrpl`, the command line** (new crate `halcyon-xrpl-cli`): wallets (new, show, faucet), account
+  queries, transactions (get, hash, decode, encode, sign, simulate, submit, send-xrp), ledger
+  headers and entries, ledger entry IDs, fee, server, order books, live streams (`watch`),
+  conversions, and any method (`raw`). Testnet by default; mainnet sends need `--yes`; seeds only
+  from `XRPL_SEED` or `--seed-file`; long currency codes (`RLUSD`) are converted to hex.
+- **A cookbook of 12 runnable recipes** (`crates/xrpl-sdk/examples`), each with its own faucet
+  wallets, each run on Testnet: issuing a token, an NFT sale with royalty, a DEX order, an AMM,
+  escrow, checks, a payment channel, multi-signing, Batch, MPTs, the blocking client, and live
+  mainnet streams.
+- **Typed WebSocket stream events**: `WsEvent::{Validation, Server, Consensus, BookChanges,
+  Manifest, PeerStatus, PathFind, Other}` beside `Ledger` and `Transaction` (whose transaction is
+  now a typed `Tx`), checked against messages recorded from mainnet. `XrplWsClient::subscribe` /
+  `unsubscribe` for any parameters, and `subscribe_validations`, `subscribe_server`,
+  `subscribe_consensus`, `subscribe_book_changes`, `subscribe_manifests`,
+  `subscribe_transactions_proposed`, `subscribe_order_book` (with a typed `OrderBookSnapshot`).
+- **`BlockingClient`**: every `Client` method as a plain call on its own runtime, plus `run` /
+  `block_on` for anything else.
+- `Amount::token("10", "USD", issuer)` (long codes become hex) and `Amount::mpt(value, id)`.
+
+### Changed (breaking)
+- `WsEvent` is `#[non_exhaustive]` and has new variants; `TransactionEvent::transaction` is a `Tx`.
+- Flag constants split acronyms: `TF_MPT_CAN_TRANSFER` (was `TF_MPTCAN_TRANSFER`), `TF_LP_TOKEN`,
+  `TF_MPT_LOCK`, …; `NFTOKEN` stays one word (`TF_SELL_NFTOKEN`).
+- Transaction models: `Common::date` and `OfferCreate::owner_funds`, which rippled adds in streams
+  and the codec ignores.
+- The examples `send_payment`, `mint_nft` and `place_offer` (which needed manual funding) are
+  replaced by the cookbook.
+
 
 Every transaction type typed, and Batch.
 

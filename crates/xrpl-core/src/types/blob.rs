@@ -13,23 +13,28 @@ use alloc::{
 pub struct Blob(pub Vec<u8>);
 
 impl Blob {
+    /// From bytes.
     pub fn new(data: Vec<u8>) -> Self {
         Self(data)
     }
 
+    /// From hex.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         Ok(Self(bytes))
     }
 
+    /// The bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
+    /// Whether there are no bytes.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// How many bytes.
     pub fn len(&self) -> usize {
         self.0.len()
     }

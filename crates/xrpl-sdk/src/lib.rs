@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-sdk = "0.3"
+//! halcyon-xrpl-sdk = "0.4"
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! serde_json = "1"
 //! ```
@@ -304,9 +304,60 @@
 //! # Ok(()) }
 //! ```
 //!
-//! The WebSocket client reconnects on its own and resubscribes; it also
-//! offers [`XrplWsClient::subscribe_account`] and
-//! [`XrplWsClient::subscribe_transactions`].
+//! The WebSocket client reconnects on its own and resubscribes. Every
+//! `rippled` stream arrives as a typed [`WsEvent`] (checked against messages
+//! recorded from mainnet): subscribe with `subscribe_ledger`,
+//! `subscribe_transactions` (each transaction a typed [`Tx`]),
+//! `subscribe_transactions_proposed`, `subscribe_account`,
+//! `subscribe_validations`, `subscribe_server`, `subscribe_consensus`,
+//! `subscribe_book_changes`, `subscribe_manifests`, `subscribe_order_book`
+//! (with the book's current offers), or `subscribe` with any parameters.
+//!
+//! ## Without async: the blocking client
+//!
+//! [`BlockingClient`] gives every method as a plain call, for scripts and
+//! tools without an async runtime:
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = BlockingClient::new("https://xrplcluster.com")?;
+//!     let info = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated)?;
+//!     println!("{} XRP", utils::drops_to_xrp(info.account_data.balance.parse()?));
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Cookbook
+//!
+//! Runnable recipes, each with its own funded Testnet wallets
+//! (`cargo run --example <name>` in the repository), each run on Testnet
+//! before release:
+//!
+//! | Recipe | Shows |
+//! |---|---|
+//! | `testnet_quickstart` | a funded wallet, a payment, its hash and balance changes |
+//! | `issue_token` | issuing a token: DefaultRipple, trust lines, issuing, paying holder to holder |
+//! | `nft_marketplace` | minting with a transfer fee, selling, reselling, the royalty |
+//! | `dex_order` | an order, the order book, taking it, cancelling |
+//! | `amm` | an AMM pool, a trade against it |
+//! | `escrow` | XRP locked until a time, then released |
+//! | `checks` | writing a check, cashing part of it |
+//! | `payment_channel` | a channel paid with off-ledger signed claims |
+//! | `multisign` | a signer list and a multi-signed transaction |
+//! | `batch` | two accounts' payments in one all-or-nothing Batch |
+//! | `mpt` | a Multi-Purpose Token: create, opt in, send |
+//! | `blocking` | all of it without async |
+//! | `watch_streams` | live mainnet ledgers, trading and validations |
+//!
+//! ## Command line
+//!
+//! `cargo install halcyon-xrpl-cli` installs `hxrpl`: wallets and the
+//! faucet, account queries, signing and sending, transaction hashes and
+//! ledger entry IDs, order books and live streams, from a terminal. It uses
+//! Testnet unless told otherwise, needs `--yes` to send on mainnet, and reads
+//! seeds only from `XRPL_SEED` or a file.
 //!
 //! ## Hashes and ledger entry IDs
 //!
@@ -395,6 +446,10 @@
 //!   XRPL codec test suite, plus mainnet transactions and ledger entries.
 //! - **Ledger entry IDs**: the `index` of real mainnet entries, xrpl.js's hash
 //!   tests, and a live run that creates each kind of entry on Testnet.
+//! - **Stream events**: messages recorded from `rippled` 3.4.1 on mainnet,
+//!   one or more of each stream type, parse into their typed events and keep
+//!   every field; streamed transactions parse into typed [`Tx`]s.
+//! - **Cookbook**: every recipe runs end to end on Testnet before a release.
 //! - **Transaction models**: 186 real transactions (51 types) round-trip
 //!   through their typed models to the same JSON, bytes and ID; an example of
 //!   every other type, signed by `rippled` 3.4.1, encodes to its exact
@@ -426,6 +481,9 @@
 //! MIT, with an attribution requirement: if you use, copy or modify this code,
 //! credit James Turner with a link to <https://github.com/ilubxrp589/xrpl-sdk>.
 
+#![warn(missing_docs)]
+
+/// Wallets: keys and address, signing, multi-signing, batches and channel claims.
 pub mod wallet;
 
 /// The client crate (`halcyon-xrpl-client`), in full.
@@ -448,9 +506,9 @@ pub use xrpl_core::utils;
 pub use xrpl_core::CoreError;
 
 // Re-exports from xrpl-client
-pub use xrpl_client::error::ClientError;
 #[cfg(not(target_arch = "wasm32"))]
 pub use xrpl_client::blocking::BlockingClient;
+pub use xrpl_client::error::ClientError;
 pub use xrpl_client::faucet::{self, FaucetNetwork};
 pub use xrpl_client::http::XrplHttpClient;
 pub use xrpl_client::requests::{self, Paginated, Request};

@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.3"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.4"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -112,12 +112,11 @@
 //! use xrpl_core::transaction::models::{OfferCreate, Tx, TxModel};
 //! use xrpl_core::types::Amount;
 //!
+//! // Sell 25 XRP for 10 USD: the taker pays 10 USD and gets 25 XRP.
 //! let mut offer = OfferCreate::new(
 //!     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
-//!     Amount::Xrp(25_000_000),                                  // TakerGets: 25 XRP
-//!     serde_json::from_value(serde_json::json!({
-//!         "currency": "USD", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "10"
-//!     }))?,                                                     // TakerPays: 10 USD
+//!     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?, // TakerPays
+//!     Amount::Xrp(25_000_000),                                          // TakerGets
 //! );
 //! offer.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
 //! let json = offer.to_json()?;
@@ -137,7 +136,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.3", default-features = false }
+//! halcyon-xrpl-core = { version = "0.4", default-features = false }
 //! ```
 //!
 //! ## How it is checked
@@ -156,6 +155,7 @@
 //! code; private keys and seeds are zeroized on drop.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![warn(missing_docs)]
 
 #[cfg(not(feature = "std"))]
 #[macro_use]

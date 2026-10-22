@@ -5,13 +5,21 @@ use serde_json::{json, Value};
 /// AccountSet transaction: modify account settings.
 #[derive(Debug, Clone)]
 pub struct AccountSet {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// An account flag to turn on (`ASF_*`) (`SetFlag`).
     pub set_flag: Option<u32>,
+    /// An account flag to turn off (`ASF_*`) (`ClearFlag`).
     pub clear_flag: Option<u32>,
+    /// A domain the account claims, hex (ASCII, lower case) (`Domain`).
     pub domain: Option<String>,
+    /// The MD5 of an email address, for an avatar (`EmailHash`).
     pub email_hash: Option<String>,
+    /// A public key for sending the account encrypted messages (`MessageKey`).
     pub message_key: Option<String>,
+    /// The fee on transfers of the account's tokens, in billionths over 1,000,000,000 (`TransferRate`).
     pub transfer_rate: Option<u32>,
+    /// Significant digits for offers of the account's tokens (3–15; 0 clears) (`TickSize`).
     pub tick_size: Option<u8>,
 }
 
@@ -53,6 +61,7 @@ impl Transaction for AccountSet {
     }
 }
 
+/// Builds a [`AccountSet`] (from [`AccountSet::builder`]); `build` checks the required fields.
 pub struct AccountSetBuilder {
     common: TxCommon,
     set_flag: Option<u32>,
@@ -65,6 +74,7 @@ pub struct AccountSetBuilder {
 }
 
 impl AccountSetBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -77,47 +87,58 @@ impl AccountSetBuilder {
             tick_size: None,
         }
     }
+    /// Set `SetFlag`.
     pub fn set_flag(mut self, f: u32) -> Self {
         self.set_flag = Some(f);
         self
     }
+    /// Set `ClearFlag`.
     pub fn clear_flag(mut self, f: u32) -> Self {
         self.clear_flag = Some(f);
         self
     }
+    /// Set `Domain`.
     pub fn domain(mut self, d: impl Into<String>) -> Self {
         self.domain = Some(d.into());
         self
     }
+    /// Set `EmailHash`.
     pub fn email_hash(mut self, h: impl Into<String>) -> Self {
         self.email_hash = Some(h.into());
         self
     }
+    /// Set `MessageKey`.
     pub fn message_key(mut self, k: impl Into<String>) -> Self {
         self.message_key = Some(k.into());
         self
     }
+    /// Set `TransferRate`.
     pub fn transfer_rate(mut self, r: u32) -> Self {
         self.transfer_rate = Some(r);
         self
     }
+    /// Set `TickSize`.
     pub fn tick_size(mut self, t: u8) -> Self {
         self.tick_size = Some(t);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
 
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<AccountSet, CoreError> {
         Ok(AccountSet {
             common: self.common,
@@ -133,6 +154,7 @@ impl AccountSetBuilder {
 }
 
 impl AccountSet {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> AccountSetBuilder {
         AccountSetBuilder::new(account)
     }

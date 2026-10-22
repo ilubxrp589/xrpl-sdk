@@ -7,7 +7,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-client = "0.3"   # imported as `xrpl_client`
+//! halcyon-xrpl-client = "0.4"   # imported as `xrpl_client`
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! ```
 //!
@@ -132,6 +132,8 @@
 //! types do not model fails the test instead of silently vanishing
 //! (`tests/rippled_responses.rs`). `account_objects`, `ledger_data` and
 //! `ledger_entry` return typed [`xrpl_core::types::LedgerObject`]s.
+
+#![warn(missing_docs)]
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;

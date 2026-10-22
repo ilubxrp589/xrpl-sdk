@@ -13,8 +13,11 @@ use std::collections::HashMap;
 pub struct SubmitResult {
     /// `tesSUCCESS`, `tec…`, `tem…`, `tef…`, `tel…` or `ter…`.
     pub engine_result: String,
+    /// The engine result as a number.
     pub engine_result_code: i32,
+    /// The engine result in words.
     pub engine_result_message: String,
+    /// The transaction, as hex.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tx_blob: Option<String>,
     /// The transaction as submitted, with its `hash`.
@@ -23,21 +26,28 @@ pub struct SubmitResult {
     /// Whether it was applied, broadcast, kept or queued (rippled 1.5+).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted: Option<bool>,
+    /// Whether it applied to the open ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub applied: Option<bool>,
+    /// Whether it was relayed to peers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub broadcast: Option<bool>,
+    /// Whether the server kept it to retry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kept: Option<bool>,
+    /// Whether it was queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued: Option<bool>,
     /// The fee (drops) the transaction would need to get into the open ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_ledger_cost: Option<String>,
+    /// The next sequence the account can use, counting queued transactions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_sequence_available: Option<u32>,
+    /// The account's next sequence on the ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_sequence_next: Option<u32>,
+    /// The latest validated ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated_ledger_index: Option<u32>,
 }
@@ -51,10 +61,13 @@ pub struct TxResult {
     /// Metadata, once the transaction is in a ledger (a hex string with `binary: true`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Value>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
     /// Everything else: the transaction's fields, `hash`, `ctid`, `date`,
@@ -82,12 +95,17 @@ impl TxResult {
 /// a transaction from one given ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TransactionEntryResult {
+    /// The transaction, as JSON.
     pub tx_json: Value,
+    /// The transaction's metadata.
     pub metadata: Value,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -99,8 +117,11 @@ pub struct TransactionEntryResult {
 pub struct SimulateResult {
     /// Whether it would apply (always `false`: nothing is applied).
     pub applied: bool,
+    /// The engine result (`tesSUCCESS`, `tecPATH_DRY`, …).
     pub engine_result: String,
+    /// The engine result as a number.
     pub engine_result_code: i32,
+    /// The engine result in words.
     pub engine_result_message: String,
     /// The open ledger it was simulated against.
     pub ledger_index: u32,

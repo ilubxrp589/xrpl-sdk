@@ -9,7 +9,9 @@ use serde_json::Value;
 /// point of view of the account it is listed under.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Balance {
+    /// `"XRP"` or the token's currency code.
     pub currency: String,
+    /// The issuer (`Issuer`).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub issuer: Option<String>,
     /// The change, in plain decimal (`"-100.012"`); XRP in XRP, not drops.
@@ -19,7 +21,9 @@ pub struct Balance {
 /// Every balance change of one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountBalanceChanges {
+    /// The account that sends the transaction or owns the entry (`Account`).
     pub account: String,
+    /// Each balance change.
     pub balances: Vec<Balance>,
 }
 

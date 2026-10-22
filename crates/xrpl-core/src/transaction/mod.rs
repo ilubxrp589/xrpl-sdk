@@ -10,6 +10,7 @@
 
 #[cfg(feature = "std")]
 pub mod batch;
+/// Fluent builders for common transactions, with required-field checks.
 #[cfg(feature = "std")]
 pub mod builders;
 mod common;

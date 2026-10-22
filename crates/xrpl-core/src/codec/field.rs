@@ -4,34 +4,60 @@ use crate::CoreError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum TypeCode {
+    /// The `Unknown` field type (code 0).
     Unknown = 0,
+    /// The `UInt16` field type (code 1).
     UInt16 = 1,
+    /// The `UInt32` field type (code 2).
     UInt32 = 2,
+    /// The `UInt64` field type (code 3).
     UInt64 = 3,
+    /// The `Hash128` field type (code 4).
     Hash128 = 4,
+    /// The `Hash256` field type (code 5).
     Hash256 = 5,
+    /// The `Amount` field type (code 6).
     Amount = 6,
+    /// The `Blob` field type (code 7).
     Blob = 7,
+    /// The `AccountId` field type (code 8).
     AccountId = 8,
+    /// The `Number` field type (code 9).
     Number = 9,
+    /// The `Int32` field type (code 10).
     Int32 = 10,
+    /// The `Int64` field type (code 11).
     Int64 = 11,
+    /// The `StObject` field type (code 14).
     StObject = 14,
+    /// The `StArray` field type (code 15).
     StArray = 15,
+    /// The `UInt8` field type (code 16).
     UInt8 = 16,
+    /// The `Hash160` field type (code 17).
     Hash160 = 17,
+    /// The `PathSet` field type (code 18).
     PathSet = 18,
+    /// The `Vector256` field type (code 19).
     Vector256 = 19,
+    /// The `UInt96` field type (code 20).
     UInt96 = 20,
+    /// The `Hash192` field type (code 21).
     Hash192 = 21,
+    /// The `UInt384` field type (code 22).
     UInt384 = 22,
+    /// The `UInt512` field type (code 23).
     UInt512 = 23,
+    /// The `Issue` field type (code 24).
     Issue = 24,
+    /// The `XChainBridge` field type (code 25).
     XChainBridge = 25,
+    /// The `Currency` field type (code 26).
     Currency = 26,
 }
 
 impl TypeCode {
+    /// The type with this code, if known.
     pub fn from_u16(v: u16) -> Option<Self> {
         match v {
             1 => Some(Self::UInt16),
@@ -71,11 +97,14 @@ impl TypeCode {
 /// A field identifier combining type code and field code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldId {
+    /// The type's code.
     pub type_code: u16,
+    /// The field's code within its type.
     pub field_code: u16,
 }
 
 impl FieldId {
+    /// A field ID from its type and field codes.
     pub fn new(type_code: u16, field_code: u16) -> Self {
         Self {
             type_code,

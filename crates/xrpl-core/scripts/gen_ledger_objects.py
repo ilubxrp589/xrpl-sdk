@@ -1,4 +1,7 @@
-import json, re, sys
+import json, os, re, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from field_docs import doc  # noqa: E402
 r = json.load(open(sys.argv[1]))["result"]
 ftype = {f[0]: f[1]["type"] for f in r["FIELDS"]}
 fmts = r["LEDGER_ENTRY_FORMATS"]
@@ -40,6 +43,7 @@ for n in names:
     out.append("    pub index: Option<Hash256>,")
     for f in fl:
         t = rust_ty(f["name"]); req = f["optionality"] == 0
+        out.append("    " + doc(f["name"], ftype.get(f["name"]), req))
         if req:
             out.append(f"    #[serde(rename = \"{f['name']}\")]")
             out.append(f"    pub {snake(f['name'])}: {t},")

@@ -34,15 +34,19 @@ pub struct NFTokenIdParts {
 }
 
 impl NFTokenIdParts {
+    /// Whether the issuer may burn it (`tfBurnable`).
     pub fn is_burnable(&self) -> bool {
         self.flags & NFT_FLAG_BURNABLE != 0
     }
+    /// Whether offers must be in XRP (`tfOnlyXRP`).
     pub fn is_only_xrp(&self) -> bool {
         self.flags & NFT_FLAG_ONLY_XRP != 0
     }
+    /// Whether holders may transfer it (`tfTransferable`).
     pub fn is_transferable(&self) -> bool {
         self.flags & NFT_FLAG_TRANSFERABLE != 0
     }
+    /// Whether the issuer may change its URI (`tfMutable`).
     pub fn is_mutable(&self) -> bool {
         self.flags & NFT_FLAG_MUTABLE != 0
     }

@@ -5,6 +5,8 @@
 //! Seeds are read from `XRPL_SEED` or `--seed-file`, never from the command
 //! line, where shell history and process lists would keep them.
 
+#![warn(missing_docs)]
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::{json, Value};
 use std::error::Error;
@@ -48,7 +50,7 @@ impl Network {
     }
     fn ws(self) -> &'static str {
         match self {
-            Network::Mainnet => "wss://xrplcluster.com",
+            Network::Mainnet => "wss://s1.ripple.com",
             Network::Testnet => FaucetNetwork::Testnet.ws_url(),
             Network::Devnet => FaucetNetwork::Devnet.ws_url(),
         }
@@ -94,7 +96,8 @@ enum Command {
         #[arg(long, default_value_t = 10)]
         limit: u32,
     },
-    /// Watch a stream live.
+    /// Watch a stream live. (Public servers do not offer `server` or `consensus`:
+    /// use --url with a rippled you run.)
     Watch {
         stream: Stream,
         /// Stop after this many events.

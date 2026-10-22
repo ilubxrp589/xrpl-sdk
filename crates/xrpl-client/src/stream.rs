@@ -80,12 +80,15 @@ impl WsEvent {
 /// `ledgerClosed`: a ledger was closed and validated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LedgerEvent {
+    /// The ledger the answer is from.
     pub ledger_index: u32,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
     /// Ledger time (seconds since 2000-01-01).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_time: Option<u64>,
+    /// Transactions in the ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub txn_count: Option<u32>,
     /// The reference transaction cost, in drops.
@@ -100,6 +103,7 @@ pub struct LedgerEvent {
     /// The ledgers the server has, e.g. `"32570-107831520"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated_ledgers: Option<String>,
+    /// The network's ID (0 mainnet, 1 Testnet, 2 Devnet).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network_id: Option<u32>,
 }
@@ -111,23 +115,30 @@ pub struct TransactionEvent {
     /// The transaction, typed by its `TransactionType` (see
     /// `xrpl_core::transaction::models`).
     pub transaction: Tx,
+    /// The engine result (`tesSUCCESS`, `tecPATH_DRY`, …).
     pub engine_result: String,
+    /// The engine result as a number.
     pub engine_result_code: i32,
+    /// The engine result in words.
     pub engine_result_message: String,
     /// `"closed"` (validated) or `"proposed"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    /// Whether the data is from a validated ledger (final).
     pub validated: bool,
     /// The metadata, once validated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Value>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
     /// The open ledger (proposed transactions).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_current_index: Option<u32>,
+    /// When the ledger closed, ISO 8601.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_time_iso: Option<String>,
     /// The compact transaction ID.
@@ -136,8 +147,10 @@ pub struct TransactionEvent {
     /// `account_history_tx_stream` subscriptions only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_history_tx_index: Option<i64>,
+    /// Whether this is the account's first transaction (history streams).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_history_tx_first: Option<bool>,
+    /// Whether this marks the end of the history sent (history streams).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_history_boundary: Option<bool>,
 }
@@ -145,7 +158,9 @@ pub struct TransactionEvent {
 /// `validationReceived`: a validator signed a ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ValidationEvent {
+    /// That ledger's hash.
     pub ledger_hash: String,
+    /// The ledger the answer is from.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -157,16 +172,21 @@ pub struct ValidationEvent {
     /// Its master key, when it uses a manifest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub master_key: Option<String>,
+    /// A signature, hex (`Signature`).
     pub signature: String,
     /// Ledger time the validation was signed.
     pub signing_time: u64,
+    /// The validation's flags.
     pub flags: u32,
     /// A full validation (not partial).
     pub full: bool,
+    /// The hash of the latest ledger the validator considers validated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated_hash: Option<String>,
+    /// A number the validator picks at startup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cookie: Option<String>,
+    /// The network's ID (0 mainnet, 1 Testnet, 2 Devnet).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network_id: Option<u32>,
     /// The serialized validation, hex (admin connections).
@@ -178,12 +198,16 @@ pub struct ValidationEvent {
     /// Fee votes (flag ledgers), in drops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_fee: Option<u64>,
+    /// The account reserve, in drops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserve_base: Option<u64>,
+    /// The reserve per owned entry, in drops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserve_inc: Option<u64>,
+    /// The validator's load fee vote.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load_fee: Option<u64>,
+    /// The validator's software version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_version: Option<String>,
 }
@@ -198,15 +222,21 @@ pub struct ServerStatusEvent {
     pub base_fee: Option<u64>,
     /// The fee level with no load (256).
     pub load_base: u64,
+    /// The load multiplier on the transaction cost.
     pub load_factor: u64,
+    /// The open-ledger fee escalation, as a fee level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load_factor_fee_escalation: Option<u64>,
+    /// The fee level to get into the queue.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load_factor_fee_queue: Option<u64>,
+    /// The reference fee level (256).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load_factor_fee_reference: Option<u64>,
+    /// The server's load factor, as a fee level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load_factor_server: Option<u64>,
+    /// The network's ID (0 mainnet, 1 Testnet, 2 Devnet).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network_id: Option<u32>,
 }
@@ -214,6 +244,7 @@ pub struct ServerStatusEvent {
 /// `consensusPhase`: `"open"`, `"establish"` or `"accepted"`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusEvent {
+    /// The consensus phase (`open`, `establish`, `accepted`).
     pub consensus: String,
 }
 
@@ -221,10 +252,15 @@ pub struct ConsensusEvent {
 /// validated ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BookChangesEvent {
+    /// Each book's trading.
     pub changes: Vec<BookChange>,
+    /// The ledger the answer is from.
     pub ledger_index: u32,
+    /// That ledger's hash.
     pub ledger_hash: String,
+    /// When the ledger closed (ledger time).
     pub ledger_time: u64,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -232,11 +268,17 @@ pub struct BookChangesEvent {
 /// `manifestReceived`: a validator's new manifest (key rotation).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestEvent {
+    /// The validator's master key.
     pub master_key: String,
+    /// The manifest's signature by the master key.
     pub master_signature: String,
+    /// The sequence of the transaction that created it.
     pub seq: u32,
+    /// A signature, hex (`Signature`).
     pub signature: String,
+    /// The new signing key.
     pub signing_key: String,
+    /// A domain the account claims, hex (ASCII, lower case) (`Domain`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
 }
@@ -248,12 +290,16 @@ pub struct PeerStatusEvent {
     pub action: String,
     /// Ledger time of the change.
     pub date: u64,
+    /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// The earliest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_min: Option<u32>,
+    /// The latest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_max: Option<u32>,
 }
@@ -262,10 +308,13 @@ pub struct PeerStatusEvent {
 /// with `both`, otherwise `offers`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderBookSnapshot {
+    /// The offers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offers: Option<Vec<BookOffer>>,
+    /// Offers selling the book's first asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asks: Option<Vec<BookOffer>>,
+    /// Offers buying it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bids: Option<Vec<BookOffer>>,
 }

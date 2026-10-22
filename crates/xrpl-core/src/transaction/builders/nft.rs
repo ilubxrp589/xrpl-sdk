@@ -5,10 +5,15 @@ use serde_json::{json, Value};
 /// NFTokenMint transaction.
 #[derive(Debug, Clone)]
 pub struct NFTokenMint {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// A number the issuer uses to group its NFTs (`NFTokenTaxon`).
     pub nf_token_taxon: u32,
+    /// The issuer (`Issuer`).
     pub issuer: Option<String>,
+    /// The fee on secondary sales, in 1/100,000 (5000 = 5%); for tokens, see `TransferRate` (`TransferFee`).
     pub transfer_fee: Option<u16>,
+    /// A URI, hex (`URI`).
     pub uri: Option<String>,
 }
 
@@ -37,6 +42,7 @@ impl Transaction for NFTokenMint {
     }
 }
 
+/// Builds a [`NFTokenMint`] (from [`NFTokenMint::builder`]); `build` checks the required fields.
 pub struct NFTokenMintBuilder {
     common: TxCommon,
     nf_token_taxon: Option<u32>,
@@ -45,6 +51,7 @@ pub struct NFTokenMintBuilder {
     uri: Option<String>,
 }
 impl NFTokenMintBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -54,38 +61,47 @@ impl NFTokenMintBuilder {
             uri: None,
         }
     }
+    /// Set `NFTokenTaxon`.
     pub fn nf_token_taxon(mut self, t: u32) -> Self {
         self.nf_token_taxon = Some(t);
         self
     }
+    /// Set `Issuer`.
     pub fn issuer(mut self, i: impl Into<String>) -> Self {
         self.issuer = Some(i.into());
         self
     }
+    /// Set `TransferFee`.
     pub fn transfer_fee(mut self, f: u16) -> Self {
         self.transfer_fee = Some(f);
         self
     }
+    /// Set `URI`.
     pub fn uri(mut self, u: impl Into<String>) -> Self {
         self.uri = Some(u.into());
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Set `Flags`.
     pub fn flags(mut self, f: u32) -> Self {
         self.common.flags = Some(f);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<NFTokenMint, CoreError> {
         let nf_token_taxon = self.nf_token_taxon.ok_or_else(|| {
             CoreError::ValidationError("NFTokenMint: nf_token_taxon is required".into())
@@ -100,6 +116,7 @@ impl NFTokenMintBuilder {
     }
 }
 impl NFTokenMint {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> NFTokenMintBuilder {
         NFTokenMintBuilder::new(account)
     }
@@ -108,8 +125,11 @@ impl NFTokenMint {
 /// NFTokenBurn transaction.
 #[derive(Debug, Clone)]
 pub struct NFTokenBurn {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// An NFT's ID (`NFTokenID`).
     pub nf_token_id: String,
+    /// The account that owns the entry (`Owner`).
     pub owner: Option<String>,
 }
 impl Transaction for NFTokenBurn {
@@ -130,12 +150,14 @@ impl Transaction for NFTokenBurn {
         Ok(())
     }
 }
+/// Builds a [`NFTokenBurn`] (from [`NFTokenBurn::builder`]); `build` checks the required fields.
 pub struct NFTokenBurnBuilder {
     common: TxCommon,
     nf_token_id: Option<String>,
     owner: Option<String>,
 }
 impl NFTokenBurnBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -143,26 +165,32 @@ impl NFTokenBurnBuilder {
             owner: None,
         }
     }
+    /// Set `NFTokenID`.
     pub fn nf_token_id(mut self, id: impl Into<String>) -> Self {
         self.nf_token_id = Some(id.into());
         self
     }
+    /// Set `Owner`.
     pub fn owner(mut self, o: impl Into<String>) -> Self {
         self.owner = Some(o.into());
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<NFTokenBurn, CoreError> {
         let nf_token_id = self.nf_token_id.ok_or_else(|| {
             CoreError::ValidationError("NFTokenBurn: nf_token_id is required".into())
@@ -175,6 +203,7 @@ impl NFTokenBurnBuilder {
     }
 }
 impl NFTokenBurn {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> NFTokenBurnBuilder {
         NFTokenBurnBuilder::new(account)
     }
@@ -183,11 +212,17 @@ impl NFTokenBurn {
 /// NFTokenCreateOffer transaction.
 #[derive(Debug, Clone)]
 pub struct NFTokenCreateOffer {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// An NFT's ID (`NFTokenID`).
     pub nf_token_id: String,
+    /// How much (`Amount`).
     pub amount: Value,
+    /// The account that owns the entry (`Owner`).
     pub owner: Option<String>,
+    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
     pub expiration: Option<u32>,
+    /// The account that receives it (`Destination`).
     pub destination: Option<String>,
 }
 impl Transaction for NFTokenCreateOffer {
@@ -215,6 +250,7 @@ impl Transaction for NFTokenCreateOffer {
         Ok(())
     }
 }
+/// Builds a [`NFTokenCreateOffer`] (from [`NFTokenCreateOffer::builder`]); `build` checks the required fields.
 pub struct NFTokenCreateOfferBuilder {
     common: TxCommon,
     nf_token_id: Option<String>,
@@ -224,6 +260,7 @@ pub struct NFTokenCreateOfferBuilder {
     destination: Option<String>,
 }
 impl NFTokenCreateOfferBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -234,42 +271,52 @@ impl NFTokenCreateOfferBuilder {
             destination: None,
         }
     }
+    /// Set `NFTokenID`.
     pub fn nf_token_id(mut self, id: impl Into<String>) -> Self {
         self.nf_token_id = Some(id.into());
         self
     }
+    /// Set `Amount`.
     pub fn amount(mut self, a: Value) -> Self {
         self.amount = Some(a);
         self
     }
+    /// Set `Owner`.
     pub fn owner(mut self, o: impl Into<String>) -> Self {
         self.owner = Some(o.into());
         self
     }
+    /// Set `Expiration`.
     pub fn expiration(mut self, e: u32) -> Self {
         self.expiration = Some(e);
         self
     }
+    /// Set `Destination`.
     pub fn destination(mut self, d: impl Into<String>) -> Self {
         self.destination = Some(d.into());
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Set `Flags`.
     pub fn flags(mut self, f: u32) -> Self {
         self.common.flags = Some(f);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<NFTokenCreateOffer, CoreError> {
         let nf_token_id = self.nf_token_id.ok_or_else(|| {
             CoreError::ValidationError("NFTokenCreateOffer: nf_token_id is required".into())
@@ -288,6 +335,7 @@ impl NFTokenCreateOfferBuilder {
     }
 }
 impl NFTokenCreateOffer {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> NFTokenCreateOfferBuilder {
         NFTokenCreateOfferBuilder::new(account)
     }
@@ -296,7 +344,9 @@ impl NFTokenCreateOffer {
 /// NFTokenCancelOffer transaction.
 #[derive(Debug, Clone)]
 pub struct NFTokenCancelOffer {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The offers to cancel (`NFTokenOffers`).
     pub nf_token_offers: Vec<String>,
 }
 impl Transaction for NFTokenCancelOffer {
@@ -314,33 +364,40 @@ impl Transaction for NFTokenCancelOffer {
         Ok(())
     }
 }
+/// Builds a [`NFTokenCancelOffer`] (from [`NFTokenCancelOffer::builder`]); `build` checks the required fields.
 pub struct NFTokenCancelOfferBuilder {
     common: TxCommon,
     nf_token_offers: Option<Vec<String>>,
 }
 impl NFTokenCancelOfferBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
             nf_token_offers: None,
         }
     }
+    /// Set `NFTokenOffers`.
     pub fn nf_token_offers(mut self, offers: Vec<String>) -> Self {
         self.nf_token_offers = Some(offers);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<NFTokenCancelOffer, CoreError> {
         let nf_token_offers = self.nf_token_offers.ok_or_else(|| {
             CoreError::ValidationError("NFTokenCancelOffer: nf_token_offers is required".into())
@@ -352,6 +409,7 @@ impl NFTokenCancelOfferBuilder {
     }
 }
 impl NFTokenCancelOffer {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> NFTokenCancelOfferBuilder {
         NFTokenCancelOfferBuilder::new(account)
     }
@@ -360,9 +418,13 @@ impl NFTokenCancelOffer {
 /// NFTokenAcceptOffer transaction.
 #[derive(Debug, Clone)]
 pub struct NFTokenAcceptOffer {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The buy offer to accept (`NFTokenBuyOffer`).
     pub nf_token_buy_offer: Option<String>,
+    /// The sell offer to accept (`NFTokenSellOffer`).
     pub nf_token_sell_offer: Option<String>,
+    /// A broker's cut when matching a buy and a sell offer (`NFTokenBrokerFee`).
     pub nf_token_broker_fee: Option<Value>,
 }
 impl Transaction for NFTokenAcceptOffer {
@@ -393,6 +455,7 @@ impl Transaction for NFTokenAcceptOffer {
         Ok(())
     }
 }
+/// Builds a [`NFTokenAcceptOffer`] (from [`NFTokenAcceptOffer::builder`]); `build` checks the required fields.
 pub struct NFTokenAcceptOfferBuilder {
     common: TxCommon,
     nf_token_buy_offer: Option<String>,
@@ -400,6 +463,7 @@ pub struct NFTokenAcceptOfferBuilder {
     nf_token_broker_fee: Option<Value>,
 }
 impl NFTokenAcceptOfferBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -408,30 +472,37 @@ impl NFTokenAcceptOfferBuilder {
             nf_token_broker_fee: None,
         }
     }
+    /// Set `NFTokenBuyOffer`.
     pub fn nf_token_buy_offer(mut self, o: impl Into<String>) -> Self {
         self.nf_token_buy_offer = Some(o.into());
         self
     }
+    /// Set `NFTokenSellOffer`.
     pub fn nf_token_sell_offer(mut self, o: impl Into<String>) -> Self {
         self.nf_token_sell_offer = Some(o.into());
         self
     }
+    /// Set `NFTokenBrokerFee`.
     pub fn nf_token_broker_fee(mut self, f: Value) -> Self {
         self.nf_token_broker_fee = Some(f);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<NFTokenAcceptOffer, CoreError> {
         let tx = NFTokenAcceptOffer {
             common: self.common,
@@ -444,6 +515,7 @@ impl NFTokenAcceptOfferBuilder {
     }
 }
 impl NFTokenAcceptOffer {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> NFTokenAcceptOfferBuilder {
         NFTokenAcceptOfferBuilder::new(account)
     }

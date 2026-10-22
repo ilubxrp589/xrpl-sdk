@@ -9,7 +9,10 @@ server_definitions.json is a recorded `server_definitions` response: either
 the bare result or {"result": …} (halcyon-xrpl-client's
 tests/fixtures/rippled/server_definitions.json works as is).
 """
-import json, re, sys
+import json, os, re, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from field_docs import doc  # noqa: E402
 
 raw = json.load(open(sys.argv[1]))
 r = raw.get("result", raw)
@@ -51,8 +54,11 @@ def snake(n):
     return f"r#{s}" if s in KEYWORDS else s
 
 
-def const_name(flag):  # tfNoRippleDirect -> TF_NO_RIPPLE_DIRECT, asfRequireDest -> ASF_REQUIRE_DEST
-    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", flag).upper()
+def const_name(flag):
+    # tfNoRippleDirect -> TF_NO_RIPPLE_DIRECT, tfMPTCanTransfer -> TF_MPT_CAN_TRANSFER,
+    # tfLPToken -> TF_LP_TOKEN; "NFToken" stays one word (tfSellNFToken -> TF_SELL_NFTOKEN).
+    flag = flag.replace("NFToken", "Nftoken")
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", flag).upper()
 
 
 def doc_slug(name):  # xrpl.org's page name for a transaction type
@@ -60,6 +66,10 @@ def doc_slug(name):  # xrpl.org's page name for a transaction type
 
 
 def field(f, optional):
+    return ["    " + doc(f["name"], ftype.get(f["name"]), not optional)] + _field(f, optional)
+
+
+def _field(f, optional):
     name = f["name"]
     if name in ARRAYS:
         elem, _, module = ARRAYS[name]

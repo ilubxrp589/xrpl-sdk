@@ -88,6 +88,7 @@ fn ledger_entry_type_name(code: u16) -> Option<&'static str> {
 /// Prevents stack overflow from malicious or malformed deeply-nested input.
 const MAX_DECODE_DEPTH: usize = 16;
 
+/// Decode a serialized transaction or ledger entry into `rippled`'s JSON.
 pub fn decode_transaction_binary(bytes: &[u8]) -> Result<Value, CoreError> {
     let (obj, consumed) = decode_fields(bytes, false, 0)?;
     if consumed != bytes.len() {

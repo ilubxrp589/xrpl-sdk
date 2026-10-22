@@ -15,12 +15,14 @@
 pub mod balance_changes;
 #[cfg(feature = "std")]
 mod decimal;
+/// Offer quality, midpoint, spread and liquidity.
 #[cfg(feature = "std")]
 pub mod dex;
 #[cfg(feature = "std")]
 pub mod nftoken;
 #[cfg(feature = "std")]
 pub mod rates;
+/// Account reserves and spendable balance.
 pub mod reserve;
 #[cfg(feature = "std")]
 pub mod strings;

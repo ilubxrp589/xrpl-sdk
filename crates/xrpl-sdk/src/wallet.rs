@@ -7,8 +7,11 @@ use xrpl_core::CoreError;
 /// High-level wallet for XRPL transactions.
 /// Wraps a keypair with convenient methods for signing and address derivation.
 pub struct Wallet {
+    /// The key pair (the private key is wiped on drop).
     pub keypair: Keypair,
+    /// The classic address.
     pub address: String,
+    /// The 20-byte account ID.
     pub account_id: AccountId,
     /// The seed the keypair came from, when the wallet was made from one.
     seed: Option<Seed>,

@@ -5,12 +5,19 @@ use serde_json::{json, Value};
 /// EscrowCreate transaction.
 #[derive(Debug, Clone)]
 pub struct EscrowCreate {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// How much (`Amount`).
     pub amount: String,
+    /// The account that receives it (`Destination`).
     pub destination: String,
+    /// The time after which it can be cancelled (ledger time) (`CancelAfter`).
     pub cancel_after: Option<u32>,
+    /// The time after which it can be finished (ledger time) (`FinishAfter`).
     pub finish_after: Option<u32>,
+    /// A PREIMAGE-SHA-256 crypto-condition that must be fulfilled (`Condition`).
     pub condition: Option<String>,
+    /// A tag the destination uses to tell its senders apart (`DestinationTag`).
     pub destination_tag: Option<u32>,
 }
 
@@ -53,6 +60,7 @@ impl Transaction for EscrowCreate {
     }
 }
 
+/// Builds a [`EscrowCreate`] (from [`EscrowCreate::builder`]); `build` checks the required fields.
 pub struct EscrowCreateBuilder {
     common: TxCommon,
     amount: Option<String>,
@@ -64,6 +72,7 @@ pub struct EscrowCreateBuilder {
 }
 
 impl EscrowCreateBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -75,42 +84,52 @@ impl EscrowCreateBuilder {
             destination_tag: None,
         }
     }
+    /// Set `Amount`.
     pub fn amount(mut self, a: impl Into<String>) -> Self {
         self.amount = Some(a.into());
         self
     }
+    /// Set `Destination`.
     pub fn destination(mut self, d: impl Into<String>) -> Self {
         self.destination = Some(d.into());
         self
     }
+    /// Set `CancelAfter`.
     pub fn cancel_after(mut self, ca: u32) -> Self {
         self.cancel_after = Some(ca);
         self
     }
+    /// Set `FinishAfter`.
     pub fn finish_after(mut self, fa: u32) -> Self {
         self.finish_after = Some(fa);
         self
     }
+    /// Set `Condition`.
     pub fn condition(mut self, c: impl Into<String>) -> Self {
         self.condition = Some(c.into());
         self
     }
+    /// Set `DestinationTag`.
     pub fn destination_tag(mut self, dt: u32) -> Self {
         self.destination_tag = Some(dt);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<EscrowCreate, CoreError> {
         let amount = self
             .amount
@@ -133,6 +152,7 @@ impl EscrowCreateBuilder {
 }
 
 impl EscrowCreate {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> EscrowCreateBuilder {
         EscrowCreateBuilder::new(account)
     }
@@ -141,10 +161,15 @@ impl EscrowCreate {
 /// EscrowFinish transaction.
 #[derive(Debug, Clone)]
 pub struct EscrowFinish {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The account that owns the entry (`Owner`).
     pub owner: String,
+    /// The sequence of the transaction that created the entry (`OfferSequence`).
     pub offer_sequence: u32,
+    /// A PREIMAGE-SHA-256 crypto-condition that must be fulfilled (`Condition`).
     pub condition: Option<String>,
+    /// The fulfillment of the escrow's condition (`Fulfillment`).
     pub fulfillment: Option<String>,
 }
 
@@ -171,6 +196,7 @@ impl Transaction for EscrowFinish {
     }
 }
 
+/// Builds a [`EscrowFinish`] (from [`EscrowFinish::builder`]); `build` checks the required fields.
 pub struct EscrowFinishBuilder {
     common: TxCommon,
     owner: Option<String>,
@@ -179,6 +205,7 @@ pub struct EscrowFinishBuilder {
     fulfillment: Option<String>,
 }
 impl EscrowFinishBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -188,34 +215,42 @@ impl EscrowFinishBuilder {
             fulfillment: None,
         }
     }
+    /// Set `Owner`.
     pub fn owner(mut self, o: impl Into<String>) -> Self {
         self.owner = Some(o.into());
         self
     }
+    /// Set `OfferSequence`.
     pub fn offer_sequence(mut self, s: u32) -> Self {
         self.offer_sequence = Some(s);
         self
     }
+    /// Set `Condition`.
     pub fn condition(mut self, c: impl Into<String>) -> Self {
         self.condition = Some(c.into());
         self
     }
+    /// Set `Fulfillment`.
     pub fn fulfillment(mut self, f: impl Into<String>) -> Self {
         self.fulfillment = Some(f.into());
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<EscrowFinish, CoreError> {
         let owner = self
             .owner
@@ -233,6 +268,7 @@ impl EscrowFinishBuilder {
     }
 }
 impl EscrowFinish {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> EscrowFinishBuilder {
         EscrowFinishBuilder::new(account)
     }
@@ -241,8 +277,11 @@ impl EscrowFinish {
 /// EscrowCancel transaction.
 #[derive(Debug, Clone)]
 pub struct EscrowCancel {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The account that owns the entry (`Owner`).
     pub owner: String,
+    /// The sequence of the transaction that created the entry (`OfferSequence`).
     pub offer_sequence: u32,
 }
 
@@ -263,12 +302,14 @@ impl Transaction for EscrowCancel {
     }
 }
 
+/// Builds a [`EscrowCancel`] (from [`EscrowCancel::builder`]); `build` checks the required fields.
 pub struct EscrowCancelBuilder {
     common: TxCommon,
     owner: Option<String>,
     offer_sequence: Option<u32>,
 }
 impl EscrowCancelBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -276,26 +317,32 @@ impl EscrowCancelBuilder {
             offer_sequence: None,
         }
     }
+    /// Set `Owner`.
     pub fn owner(mut self, o: impl Into<String>) -> Self {
         self.owner = Some(o.into());
         self
     }
+    /// Set `OfferSequence`.
     pub fn offer_sequence(mut self, s: u32) -> Self {
         self.offer_sequence = Some(s);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<EscrowCancel, CoreError> {
         let owner = self
             .owner
@@ -311,6 +358,7 @@ impl EscrowCancelBuilder {
     }
 }
 impl EscrowCancel {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> EscrowCancelBuilder {
         EscrowCancelBuilder::new(account)
     }

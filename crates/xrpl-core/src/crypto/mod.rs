@@ -6,8 +6,11 @@
 
 #[cfg(feature = "std")]
 pub mod channel;
+/// Ed25519 keys and signatures.
 pub mod ed25519;
+/// secp256k1 keys and signatures (DER, low-S).
 pub mod secp256k1;
+/// Seeds, key pairs and transaction signing.
 pub mod signing;
 
 pub use crate::address::KeyType;

@@ -11,16 +11,26 @@ use serde_json::Value;
 /// One NFT as Clio describes it (`nft_info`, and each entry of `nfts_by_issuer`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NftInfo {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The NFT's current owner.
     pub owner: String,
+    /// The NFT's issuer.
     pub issuer: String,
+    /// Whether the NFT has been burned.
     pub is_burned: bool,
+    /// The NFT's flags.
     pub flags: u32,
+    /// The fee on secondary sales, in 1/100,000 (5000 = 5%); for tokens, see `TransferRate` (`TransferFee`).
     pub transfer_fee: u32,
+    /// The NFT's taxon.
     pub nft_taxon: u32,
+    /// The issuer's serial number for the NFT.
     pub nft_serial: u32,
+    /// A URI, hex (`URI`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
 }
@@ -29,8 +39,10 @@ pub struct NftInfo {
 /// an NFT, including burned ones.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NftInfoResult {
+    /// The NFT.
     #[serde(flatten)]
     pub nft: NftInfo,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -39,16 +51,23 @@ pub struct NftInfoResult {
 /// every transaction that touched an NFT.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NftHistoryResult {
+    /// The NFT's ID.
     pub nft_id: String,
+    /// The transactions.
     pub transactions: Vec<AccountTxEntry>,
+    /// The earliest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_min: Option<i64>,
+    /// The latest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_max: Option<i64>,
+    /// The most entries per page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -57,16 +76,23 @@ pub struct NftHistoryResult {
 /// every NFT an account issued.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NftsByIssuerResult {
+    /// The issuer (`Issuer`).
     pub issuer: String,
+    /// The NFTs.
     pub nfts: Vec<NftInfo>,
+    /// The NFT's taxon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nft_taxon: Option<u32>,
+    /// The most entries per page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -75,14 +101,20 @@ pub struct NftsByIssuerResult {
 /// the holders of an MPT issuance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MptHoldersResult {
+    /// The MPT issuance's ID.
     pub mpt_issuance_id: String,
+    /// The holders' MPToken entries.
     pub mptokens: Vec<MptHolder>,
+    /// The most entries per page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
+    /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
+    /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
 }
@@ -90,12 +122,15 @@ pub struct MptHoldersResult {
 /// One holder's `MPToken`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MptHolder {
+    /// The holder.
     pub account: String,
+    /// The MPToken's flags.
     pub flags: u32,
     /// The balance, in the issuance's smallest unit (base 10).
     pub mpt_amount: String,
     /// The `MPToken` entry's ID.
     pub mptoken_index: String,
+    /// The amount locked in escrow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locked_amount: Option<String>,
 }

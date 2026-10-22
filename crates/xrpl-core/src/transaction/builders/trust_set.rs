@@ -5,9 +5,13 @@ use serde_json::{json, Value};
 /// TrustSet transaction: set a trust line limit.
 #[derive(Debug, Clone)]
 pub struct TrustSet {
+    /// The fields every transaction has.
     pub common: TxCommon,
+    /// The most of the token the account will hold, and its issuer (`LimitAmount`).
     pub limit_amount: Value,
+    /// The value of incoming balances, in billionths (0 or 1,000,000,000 = face value) (`QualityIn`).
     pub quality_in: Option<u32>,
+    /// The value of outgoing balances, in billionths (`QualityOut`).
     pub quality_out: Option<u32>,
 }
 
@@ -46,6 +50,7 @@ impl Transaction for TrustSet {
     }
 }
 
+/// Builds a [`TrustSet`] (from [`TrustSet::builder`]); `build` checks the required fields.
 pub struct TrustSetBuilder {
     common: TxCommon,
     limit_amount: Option<Value>,
@@ -54,6 +59,7 @@ pub struct TrustSetBuilder {
 }
 
 impl TrustSetBuilder {
+    /// A builder for the transaction from `account`.
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: TxCommon::new(account),
@@ -62,35 +68,43 @@ impl TrustSetBuilder {
             quality_out: None,
         }
     }
+    /// Set `LimitAmount`.
     pub fn limit_amount(mut self, v: Value) -> Self {
         self.limit_amount = Some(v);
         self
     }
+    /// Set `QualityIn`.
     pub fn quality_in(mut self, q: u32) -> Self {
         self.quality_in = Some(q);
         self
     }
+    /// Set `QualityOut`.
     pub fn quality_out(mut self, q: u32) -> Self {
         self.quality_out = Some(q);
         self
     }
+    /// Set `Fee`.
     pub fn fee(mut self, f: impl Into<String>) -> Self {
         self.common.fee = Some(f.into());
         self
     }
+    /// Set `Sequence`.
     pub fn sequence(mut self, s: u32) -> Self {
         self.common.sequence = Some(s);
         self
     }
+    /// Set `LastLedgerSequence`.
     pub fn last_ledger_sequence(mut self, l: u32) -> Self {
         self.common.last_ledger_sequence = Some(l);
         self
     }
+    /// Set `Flags`.
     pub fn flags(mut self, f: u32) -> Self {
         self.common.flags = Some(f);
         self
     }
 
+    /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<TrustSet, CoreError> {
         let limit_amount = self.limit_amount.ok_or_else(|| {
             CoreError::ValidationError("TrustSet: limit_amount is required".into())
@@ -107,6 +121,7 @@ impl TrustSetBuilder {
 }
 
 impl TrustSet {
+    /// Start building one from `account`.
     pub fn builder(account: impl Into<String>) -> TrustSetBuilder {
         TrustSetBuilder::new(account)
     }
