@@ -1,0 +1,17 @@
+{
+ "method": "deposit_authorized",
+ "params": {
+  "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "destination_account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "ledger_index": 107831520
+ },
+ "result": {
+  "deposit_authorized": false,
+  "destination_account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
+  "ledger_index": 107831520,
+  "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "status": "success",
+  "validated": true
+ }
+}

@@ -24,10 +24,9 @@ welcome as GitHub issues.
 
 ## 0.3: every request, typed
 
-- [ ] A typed request and response for every public `rippled` and Clio method (`ledger_data`,
-      `nft_info`, `nft_buy_offers` / `nft_sell_offers`, `nfts_by_issuer`, `path_find`,
-      `ripple_path_find`, `deposit_authorized`, `server_state`, `submit_multisigned`,
-      `vault_info`, `get_aggregate_price`, …), each checked against recorded responses
+- [x] A typed request and response for every public `rippled` and Clio method: 43, each response
+      checked against one recorded from a real server, field by field (merged; ships in the next
+      release)
 - [ ] Typed WebSocket stream events (transactions, validations, order books, path finding)
 
 ## 0.4: every transaction, typed

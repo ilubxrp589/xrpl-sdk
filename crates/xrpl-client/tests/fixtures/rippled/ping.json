@@ -1,0 +1,8 @@
+{
+ "method": "ping",
+ "params": {},
+ "result": {
+  "role": "admin",
+  "status": "success"
+ }
+}

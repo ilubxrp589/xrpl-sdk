@@ -1,0 +1,44 @@
+{
+ "method": "account_info",
+ "params": {
+  "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "ledger_index": "current",
+  "queue": true
+ },
+ "result": {
+  "account_data": {
+   "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+   "Balance": "177622561085",
+   "Flags": 0,
+   "LedgerEntryType": "AccountRoot",
+   "OwnerCount": 24,
+   "PreviousTxnID": "9D85858F3A3D2A57250CEDE2C574DED8292821CC9BBE88C9B7C72445CD266869",
+   "PreviousTxnLgrSeq": 107831518,
+   "Sequence": 109300249,
+   "index": "B2220016B5A52B30D9297EF383200FF328197E160BFE8FB7B0C74E261FE32647"
+  },
+  "account_flags": {
+   "allowTrustLineClawback": false,
+   "allowTrustLineLocking": false,
+   "defaultRipple": false,
+   "depositAuth": false,
+   "disableMasterKey": false,
+   "disallowIncomingCheck": false,
+   "disallowIncomingNFTokenOffer": false,
+   "disallowIncomingPayChan": false,
+   "disallowIncomingTrustline": false,
+   "disallowIncomingXRP": false,
+   "globalFreeze": false,
+   "noFreeze": false,
+   "passwordSpent": false,
+   "requireAuthorization": false,
+   "requireDestinationTag": false
+  },
+  "ledger_current_index": 107831521,
+  "queue_data": {
+   "txn_count": 0
+  },
+  "status": "success",
+  "validated": false
+ }
+}

@@ -1,0 +1,20 @@
+{
+  "method": "nft_sell_offers",
+  "network": "testnet",
+  "params": {
+    "ledger_index": "validated",
+    "nft_id": "000801F42A03D6255E9764750942A3D27ECC9F274C8B8DCD5ADA84BA014BB922"
+  },
+  "result": {
+    "nft_id": "000801F42A03D6255E9764750942A3D27ECC9F274C8B8DCD5ADA84BA014BB922",
+    "offers": [
+      {
+        "amount": "1",
+        "flags": 1,
+        "nft_offer_index": "DA064A34F6716BAB52B6460F1A129F9BBB7C903B02C0DD6B8F695631D217CE09",
+        "owner": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC"
+      }
+    ],
+    "status": "success"
+  }
+}

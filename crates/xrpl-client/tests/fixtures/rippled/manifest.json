@@ -1,0 +1,17 @@
+{
+ "method": "manifest",
+ "params": {
+  "public_key": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C"
+ },
+ "result": {
+  "details": {
+   "domain": "ripple.ittc.ku.edu",
+   "ephemeral_key": "n9JeA5Q54JhUQYHieb2j7ZTCg9RTBagDkam3UP2kWQxTXfxFkA8R",
+   "master_key": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C",
+   "seq": 2
+  },
+  "manifest": "JAAAAAJxIe2VxRcrKtfTlDTuvENrZbO7fljVwc78ggtpcqytd24oanMhAg6iq1dKZE7XXfGeCo9U7Y4hY/pc8ERNvaKTvg7ae/s7dkYwRAIgApbc8jUY1E5Hso03IsE5OZq4fCUE8ZzM8SezczCJVp4CIBURb26isTGnNVfkn7aJ8n4Vgj609OWZklwMbMrxrkpWdxJyaXBwbGUuaXR0Yy5rdS5lZHVwEkAQtsFflCgnqY+vQatewCo1i3320SiKcZxovvETM/+c6sSOT+bWWQhsmT3Mh7VJxzMNT+y6SKpmQjtQDcswEcYB",
+  "requested": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C",
+  "status": "success"
+ }
+}

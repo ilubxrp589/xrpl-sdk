@@ -51,8 +51,8 @@ pub trait Client {
         ledger: &LedgerIndex,
     ) -> Result<AccountInfo, ClientError> {
         self.request(&AccountInfoRequest {
-            account: account.into(),
-            ledger_index: ledger.clone(),
+            ledger_index: *ledger,
+            ..AccountInfoRequest::new(account)
         })
         .await
     }
@@ -72,10 +72,7 @@ pub trait Client {
 
     /// Get ledger information.
     async fn ledger(&self, ledger: &LedgerIndex) -> Result<LedgerResult, ClientError> {
-        self.request(&LedgerRequest {
-            ledger_index: ledger.clone(),
-        })
-        .await
+        self.request(&LedgerRequest::new(*ledger)).await
     }
 
     /// Submit a signed transaction blob (hex). `tem`/`tef` and most `tel` results
@@ -83,21 +80,28 @@ pub trait Client {
     /// (`telINSUF_FEE_P`, `telCAN_NOT_QUEUE*`) are [`ClientError::TransactionRetry`];
     /// `tec` is [`ClientError::TransactionClaimed`].
     async fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
+        classify_submit(self.request(&SubmitRequest::new(tx_blob)).await?)
+    }
+
+    /// Submit a multi-signed transaction (JSON with `Signers` and an empty
+    /// `SigningPubKey`); the engine result is sorted as for [`Client::submit`].
+    async fn submit_multisigned(&self, tx_json: &Value) -> Result<SubmitResult, ClientError> {
         classify_submit(
-            self.request(&SubmitRequest {
-                tx_blob: tx_blob.into(),
-            })
-            .await?,
+            self.request(&SubmitMultisignedRequest::new(tx_json.clone()))
+                .await?,
         )
+    }
+
+    /// What a transaction would do in the open ledger, without signing or
+    /// submitting it (rippled 2.4+). Leave out `SigningPubKey` and
+    /// `TxnSignature`; `Fee`, `Sequence` and the like are filled in.
+    async fn simulate(&self, tx_json: &Value) -> Result<SimulateResult, ClientError> {
+        self.request(&SimulateRequest::new(tx_json.clone())).await
     }
 
     /// Look up a transaction by hash.
     async fn tx(&self, hash: &str) -> Result<TxResult, ClientError> {
-        self.request(&TxRequest {
-            transaction: hash.into(),
-            binary: false,
-        })
-        .await
+        self.request(&TxRequest::new(hash)).await
     }
 
     /// Get trust lines for an account (one page of up to 400).
@@ -134,20 +138,16 @@ pub trait Client {
         taker_gets: &Value,
     ) -> Result<BookOffersResult, ClientError> {
         self.request(&BookOffersRequest {
-            taker_pays: taker_pays.clone(),
-            taker_gets: taker_gets.clone(),
             limit: Some(20),
+            ..BookOffersRequest::new(taker_gets.clone(), taker_pays.clone())
         })
         .await
     }
 
     /// Get AMM pool information.
     async fn amm_info(&self, asset: &Value, asset2: &Value) -> Result<AmmInfoResult, ClientError> {
-        self.request(&AmmInfoRequest {
-            asset: asset.clone(),
-            asset2: asset2.clone(),
-        })
-        .await
+        self.request(&AmmInfoRequest::new(asset.clone(), asset2.clone()))
+            .await
     }
 
     /// Get transaction history for an account (bounds default to all
@@ -168,6 +168,7 @@ pub trait Client {
             limit: Some(limit.unwrap_or(200)),
             marker,
             forward: forward.unwrap_or(false),
+            binary: None,
         })
         .await
     }
@@ -197,7 +198,7 @@ pub trait Client {
     ) -> Result<AccountCurrenciesResult, ClientError> {
         self.request(&AccountCurrenciesRequest {
             account: account.into(),
-            ledger_index: ledger.clone(),
+            ledger_index: *ledger,
         })
         .await
     }
@@ -210,9 +211,9 @@ pub trait Client {
         ledger: &LedgerIndex,
     ) -> Result<AccountChannelsResult, ClientError> {
         self.request(&AccountChannelsRequest {
-            account: account.into(),
             destination_account: destination_account.map(Into::into),
-            ledger_index: ledger.clone(),
+            ledger_index: *ledger,
+            ..AccountChannelsRequest::new(account)
         })
         .await
     }
@@ -224,8 +225,8 @@ pub trait Client {
         ledger: &LedgerIndex,
     ) -> Result<LedgerEntryResult, ClientError> {
         self.request(&LedgerEntryRequest {
-            index: index.into(),
-            ledger_index: ledger.clone(),
+            ledger_index: *ledger,
+            ..LedgerEntryRequest::new(index)
         })
         .await
     }
@@ -243,9 +244,9 @@ pub trait Client {
         ledger: &LedgerIndex,
     ) -> Result<GatewayBalancesResult, ClientError> {
         self.request(&GatewayBalancesRequest {
-            account: account.into(),
             hotwallet: hotwallet.map(|h| h.into_iter().map(Into::into).collect()),
-            ledger_index: ledger.clone(),
+            ledger_index: *ledger,
+            ..GatewayBalancesRequest::new(account)
         })
         .await
     }
@@ -414,6 +415,7 @@ pub trait Client {
             limit: Some(200),
             marker: None,
             forward: false,
+            binary: None,
         })
         .await
     }
@@ -421,28 +423,25 @@ pub trait Client {
 
 fn account_lines_request(account: &str, ledger: &LedgerIndex) -> AccountLinesRequest {
     AccountLinesRequest {
-        account: account.into(),
-        ledger_index: ledger.clone(),
+        ledger_index: *ledger,
         limit: Some(400),
-        marker: None,
+        ..AccountLinesRequest::new(account)
     }
 }
 
 fn account_offers_request(account: &str, ledger: &LedgerIndex) -> AccountOffersRequest {
     AccountOffersRequest {
-        account: account.into(),
-        ledger_index: ledger.clone(),
+        ledger_index: *ledger,
         limit: Some(400),
-        marker: None,
+        ..AccountOffersRequest::new(account)
     }
 }
 
 fn account_nfts_request(account: &str, ledger: &LedgerIndex) -> AccountNftsRequest {
     AccountNftsRequest {
-        account: account.into(),
-        ledger_index: ledger.clone(),
+        ledger_index: *ledger,
         limit: Some(400),
-        marker: None,
+        ..AccountNftsRequest::new(account)
     }
 }
 
@@ -452,11 +451,10 @@ fn account_objects_request(
     ledger: &LedgerIndex,
 ) -> AccountObjectsRequest {
     AccountObjectsRequest {
-        account: account.into(),
         object_type: object_type.map(Into::into),
-        ledger_index: ledger.clone(),
+        ledger_index: *ledger,
         limit: Some(200),
-        marker: None,
+        ..AccountObjectsRequest::new(account)
     }
 }
 
@@ -564,18 +562,14 @@ mod tests {
             json!({"account": "rA", "type": "offer", "ledger_index": 7, "limit": 200})
         );
         assert_eq!(
-            p(&TxRequest {
-                transaction: "AB".into(),
-                binary: false
-            }),
+            p(&TxRequest::new("AB")),
             json!({"transaction": "AB", "binary": false})
         );
         assert_eq!(p(&FeeRequest {}), json!({}));
         assert_eq!(
             p(&AccountChannelsRequest {
-                account: "rA".into(),
-                destination_account: None,
                 ledger_index: LedgerIndex::Current,
+                ..AccountChannelsRequest::new("rA")
             }),
             json!({"account": "rA", "ledger_index": "current"})
         );

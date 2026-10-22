@@ -1,0 +1,12 @@
+{
+ "method": "version",
+ "params": {},
+ "result": {
+  "status": "success",
+  "version": {
+   "first": "1.0.0",
+   "good": "1.0.0",
+   "last": "1.0.0"
+  }
+ }
+}

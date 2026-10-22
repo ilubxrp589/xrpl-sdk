@@ -1,0 +1,50 @@
+{
+  "method": "submit_multisigned",
+  "network": "testnet",
+  "params": {
+    "tx_json": {
+      "Account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+      "Domain": "6578616D706C652E636F6D",
+      "Fee": "20",
+      "LastLedgerSequence": 21739849,
+      "Sequence": 21739821,
+      "Signers": [
+        {
+          "Signer": {
+            "Account": "rEcNXsa8DQCDfHAdBe5aQQF9B7z5tZbhLS",
+            "SigningPubKey": "EDE93D836037123631E367EBDE86665A1208A3304F3BC576CB50FAF4F6EFB476FB",
+            "TxnSignature": "A750B1FA56017B2C78CACC214127B3EB1CBA3EA5380E8E5A6414B1FA8167FE6FC8DA8AB6061FFE59439580B9A0AB59F7668C24F87C7A7602CE42EF419DBBFA00"
+          }
+        }
+      ],
+      "SigningPubKey": "",
+      "TransactionType": "AccountSet"
+    }
+  },
+  "result": {
+    "engine_result": "tesSUCCESS",
+    "engine_result_code": 0,
+    "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
+    "status": "success",
+    "tx_blob": "12000324014BB92D201B014BB9496840000000000000147300770B6578616D706C652E636F6D81142A03D6255E9764750942A3D27ECC9F274C8B8DCDF3E0107321EDE93D836037123631E367EBDE86665A1208A3304F3BC576CB50FAF4F6EFB476FB7440A750B1FA56017B2C78CACC214127B3EB1CBA3EA5380E8E5A6414B1FA8167FE6FC8DA8AB6061FFE59439580B9A0AB59F7668C24F87C7A7602CE42EF419DBBFA008114A03B9A916AD08035257475D9F0993B5E12606531E1F1",
+    "tx_json": {
+      "Account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+      "Domain": "6578616D706C652E636F6D",
+      "Fee": "20",
+      "LastLedgerSequence": 21739849,
+      "Sequence": 21739821,
+      "Signers": [
+        {
+          "Signer": {
+            "Account": "rEcNXsa8DQCDfHAdBe5aQQF9B7z5tZbhLS",
+            "SigningPubKey": "EDE93D836037123631E367EBDE86665A1208A3304F3BC576CB50FAF4F6EFB476FB",
+            "TxnSignature": "A750B1FA56017B2C78CACC214127B3EB1CBA3EA5380E8E5A6414B1FA8167FE6FC8DA8AB6061FFE59439580B9A0AB59F7668C24F87C7A7602CE42EF419DBBFA00"
+          }
+        }
+      ],
+      "SigningPubKey": "",
+      "TransactionType": "AccountSet",
+      "hash": "7F996D383585B8695239573F6BACDED3841C2614905288CAD639EA7D232C2A52"
+    }
+  }
+}

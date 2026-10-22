@@ -1,0 +1,9 @@
+{
+ "method": "ledger_closed",
+ "params": {},
+ "result": {
+  "ledger_hash": "737770F76A8D34F67F245B31BFBD23278AD47FF4C6DA086C07FB77F1EEE9DADF",
+  "ledger_index": 107831523,
+  "status": "success"
+ }
+}

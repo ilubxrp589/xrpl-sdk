@@ -1,0 +1,144 @@
+{
+ "method": "ripple_path_find",
+ "params": {
+  "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "destination_account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+  "destination_amount": "1000000",
+  "ledger_index": 107831520
+ },
+ "result": {
+  "alternatives": [
+   {
+    "paths_canonical": [],
+    "paths_computed": [
+     [
+      {
+       "account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+       "type": 1
+      },
+      {
+       "currency": "XRP",
+       "type": 16
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "BTC",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "0.00001624579066564171"
+    }
+   },
+   {
+    "paths_canonical": [],
+    "paths_computed": [
+     [
+      {
+       "account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+       "type": 1
+      },
+      {
+       "currency": "XRP",
+       "type": 16
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "ETH",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "0.0005813264480747962"
+    }
+   },
+   {
+    "paths_canonical": [],
+    "paths_computed": [
+     [
+      {
+       "account": "rUN5Zxt3K1AnMRJgEWywDJT8QDMMeLH5ok",
+       "type": 1
+      },
+      {
+       "currency": "XRP",
+       "type": 16
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "4155444400000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1.877299999960591"
+    }
+   },
+   {
+    "paths_canonical": [],
+    "paths_computed": [
+     [
+      {
+       "account": "rMkEuRii9w9uBMQDnWV5AA43gvYZR9JxVK",
+       "type": 1
+      },
+      {
+       "currency": "XRP",
+       "type": 16
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "4555524F50000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1.269509560692125"
+    }
+   },
+   {
+    "paths_canonical": [],
+    "paths_computed": [
+     [
+      {
+       "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 1
+      },
+      {
+       "currency": "XRP",
+       "type": 16
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "524C555344000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1.31362"
+    }
+   },
+   {
+    "paths_canonical": [],
+    "paths_computed": [
+     [
+      {
+       "account": "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE",
+       "type": 1
+      },
+      {
+       "currency": "XRP",
+       "type": 16
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "5553444300000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1.3139"
+    }
+   }
+  ],
+  "destination_account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+  "destination_amount": "1000000",
+  "destination_currencies": [
+   "XRP"
+  ],
+  "full_reply": true,
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
+  "ledger_index": 107831520,
+  "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "status": "success",
+  "validated": true
+ }
+}
