@@ -78,9 +78,10 @@ pub trait Client {
         .await
     }
 
-    /// Submit a signed transaction blob (hex). `tem`/`tef` results are
-    /// [`ClientError::TransactionFailed`], `ter` [`ClientError::TransactionRetry`]
-    /// and `tec` [`ClientError::TransactionClaimed`].
+    /// Submit a signed transaction blob (hex). `tem`/`tef` and most `tel` results
+    /// are [`ClientError::TransactionFailed`]; `ter` and the load/queue `tel`s
+    /// (`telINSUF_FEE_P`, `telCAN_NOT_QUEUE*`) are [`ClientError::TransactionRetry`];
+    /// `tec` is [`ClientError::TransactionClaimed`].
     async fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
         classify_submit(
             self.request(&SubmitRequest {
@@ -306,7 +307,7 @@ pub trait Client {
         Ok(())
     }
 
-    /// Submit a signed blob (resubmitting up to twice on `ter`) and poll
+    /// Submit a signed blob (resubmitting up to twice on a retry result) and poll
     /// until it is validated or `last_ledger_sequence` passes.
     async fn submit_and_wait(
         &self,
@@ -327,8 +328,8 @@ pub trait Client {
             }
         }
         let sr = submit_result.ok_or_else(|| ClientError::TransactionFailed {
-            engine_result: "ter_retry_exhausted".into(),
-            message: "ter result after 3 resubmit attempts".into(),
+            engine_result: "retry_exhausted".into(),
+            message: "retry result after 3 submit attempts".into(),
         })?;
 
         let hash = sr
@@ -459,20 +460,23 @@ fn account_objects_request(
     }
 }
 
-/// Sort a submit's engine result: `tes` (and anything unrecognised, e.g.
-/// `tel`) is Ok; `tem`/`tef` failed; `ter` retry; `tec` claimed a fee.
+/// Sort a submit's engine result: `tes` is Ok; `tem`/`tef` failed; `ter` retry;
+/// `tec` claimed a fee. A `tel` was neither applied nor relayed, so it never
+/// reaches a ledger: the load and queue ones may pass on a resubmit, the rest
+/// fail. Anything unrecognised is Ok.
 fn classify_submit(sr: SubmitResult) -> Result<SubmitResult, ClientError> {
     let r = sr.engine_result.as_str();
+    let tel_retry = r == "telINSUF_FEE_P" || r.starts_with("telCAN_NOT_QUEUE");
     if r.starts_with("tes") {
         Ok(sr)
-    } else if r.starts_with("tem") || r.starts_with("tef") {
+    } else if r.starts_with("ter") || tel_retry {
+        Err(ClientError::TransactionRetry {
+            engine_result: sr.engine_result,
+        })
+    } else if r.starts_with("tem") || r.starts_with("tef") || r.starts_with("tel") {
         Err(ClientError::TransactionFailed {
             engine_result: sr.engine_result,
             message: sr.engine_result_message,
-        })
-    } else if r.starts_with("ter") {
-        Err(ClientError::TransactionRetry {
-            engine_result: sr.engine_result,
         })
     } else if r.starts_with("tec") {
         Err(ClientError::TransactionClaimed {
@@ -642,7 +646,10 @@ mod tests {
             .reply("submit", reply("tesSUCCESS"))
             .reply("submit", reply("temMALFORMED"))
             .reply("submit", reply("terQUEUED"))
-            .reply("submit", reply("tecNO_DST"));
+            .reply("submit", reply("tecNO_DST"))
+            .reply("submit", reply("telINSUF_FEE_P"))
+            .reply("submit", reply("telCAN_NOT_QUEUE_FULL"))
+            .reply("submit", reply("telBAD_PUBLIC_KEY"));
         assert!(mock.submit("00").await.is_ok());
         assert!(matches!(
             mock.submit("00").await,
@@ -655,6 +662,19 @@ mod tests {
         assert!(matches!(
             mock.submit("00").await,
             Err(ClientError::TransactionClaimed { .. })
+        ));
+        // A tel never reaches a ledger: load/queue ones retry, the rest fail.
+        assert!(matches!(
+            mock.submit("00").await,
+            Err(ClientError::TransactionRetry { .. })
+        ));
+        assert!(matches!(
+            mock.submit("00").await,
+            Err(ClientError::TransactionRetry { .. })
+        ));
+        assert!(matches!(
+            mock.submit("00").await,
+            Err(ClientError::TransactionFailed { .. })
         ));
     }
 

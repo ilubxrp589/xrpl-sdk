@@ -1,4 +1,4 @@
-# xrpl-sdk
+# Halcyon XRPL SDK
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
@@ -6,21 +6,24 @@ Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and Web
 
 | Crate | Description | `no_std` |
 |-------|-------------|----------|
-| `xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
-| `xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
-| `xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
+| `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
+| `halcyon-xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
+| `halcyon-xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
+
+The packages are named `halcyon-*` on crates.io; in code they are `xrpl_core`, `xrpl_client`
+and `xrpl_sdk`.
 
 ## Install
 
 ```toml
 # Full SDK (recommended)
 [dependencies]
-xrpl-sdk = "0.1"
+halcyon-xrpl-sdk = "0.1"
 
 # Or individual crates
 [dependencies]
-xrpl-core = "0.1"      # types + codec + crypto only
-xrpl-client = "0.1"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.1"      # types + codec + crypto only
+halcyon-xrpl-client = "0.1"    # HTTP + WebSocket clients
 ```
 
 ## Quick Start
@@ -132,7 +135,7 @@ assert_eq!(json["TransactionType"], "Payment");
 - Pagination helpers (`_all` variants) for paginated endpoints
 - `tracing` instrumentation on all RPC calls
 
-### `xrpl-sdk`
+### `halcyon-xrpl-sdk`
 
 - `Wallet` — generate, from_seed, sign, sign_and_encode
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
@@ -141,7 +144,7 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ## Comparison
 
-| Feature | xrpl-sdk (this) | sephynox/xrpl-rust | gmosx/xrpl-sdk-rust |
+| Feature | halcyon-xrpl-sdk (this) | sephynox/xrpl-rust | gmosx/xrpl-sdk-rust |
 |---------|-----------------|-------------------|-------------------|
 | Binary codec | Full (34/34 tx + 261/261 ledger-object fixtures) | Full | Partial |
 | Ed25519 + Secp256k1 | Both | Both | Ed25519 only |

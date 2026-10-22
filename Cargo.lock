@@ -458,6 +458,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "halcyon-xrpl-client"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "halcyon-xrpl-core",
+ "js-sys",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "halcyon-xrpl-core"
+version = "0.1.0"
+dependencies = [
+ "bs58",
+ "ed25519-dalek",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "hex",
+ "hmac",
+ "js-sys",
+ "k256",
+ "rand 0.9.5",
+ "ripemd",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "thiserror",
+ "wasm-bindgen",
+ "zeroize",
+]
+
+[[package]]
+name = "halcyon-xrpl-sdk"
+version = "0.1.0"
+dependencies = [
+ "halcyon-xrpl-client",
+ "halcyon-xrpl-core",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1802,62 +1858,6 @@ name = "writeable"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
-
-[[package]]
-name = "xrpl-client"
-version = "0.1.0"
-dependencies = [
- "futures",
- "js-sys",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "xrpl-core",
-]
-
-[[package]]
-name = "xrpl-core"
-version = "0.1.0"
-dependencies = [
- "bs58",
- "ed25519-dalek",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "hex",
- "hmac",
- "js-sys",
- "k256",
- "rand 0.9.5",
- "ripemd",
- "serde",
- "serde_json",
- "sha2",
- "subtle",
- "thiserror",
- "wasm-bindgen",
- "zeroize",
-]
-
-[[package]]
-name = "xrpl-sdk"
-version = "0.1.0"
-dependencies = [
- "hex",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "xrpl-client",
- "xrpl-core",
- "zeroize",
-]
 
 [[package]]
 name = "yoke"

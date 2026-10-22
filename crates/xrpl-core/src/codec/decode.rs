@@ -67,7 +67,7 @@ static LEDGER_ENTRY_TYPE_NAMES: LazyLock<HashMap<u16, String>> = LazyLock::new(|
         .collect()
 });
 
-const DEFINITIONS_JSON: &str = include_str!("../../../../tests/vectors/definitions.json");
+use super::definitions::DEFINITIONS_JSON;
 
 /// Look up transaction type name by numeric code.
 fn transaction_type_name(code: u16) -> Option<&'static str> {

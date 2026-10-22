@@ -134,7 +134,8 @@ static FIELD_BY_ID: LazyLock<HashMap<(u16, u16), FieldDef>> = LazyLock::new(|| {
         .collect()
 });
 
-const DEFINITIONS_JSON: &str = include_str!("../../../../tests/vectors/definitions.json");
+/// rippled 3.4.1's `server_definitions` result, as embedded in this crate.
+pub const DEFINITIONS_JSON: &str = include_str!("definitions.json");
 
 /// Look up a field definition by name.
 pub fn lookup_field_def(name: &str) -> Option<&'static FieldDef> {

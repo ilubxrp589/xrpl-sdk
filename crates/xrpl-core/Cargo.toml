@@ -1,15 +1,17 @@
 [package]
-name = "xrpl-core"
+name = "halcyon-xrpl-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core types, binary codec, and cryptography for the XRP Ledger"
 license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
-authors = ["XRPL Rust SDK Contributors"]
+authors = ["James Turner"]
+readme = "../../README.md"
 keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
 categories = ["cryptography", "api-bindings"]
 
 [lib]
+name = "xrpl_core"
 crate-type = ["rlib"]
 
 [features]

@@ -148,7 +148,7 @@ Fields MUST be sorted before encoding. Sort ascending by:
 | SignerEntry | STObject | 17 | |
 | TransactionHash | Hash256 | 7 | |
 
-Full registry: `tests/vectors/definitions.json`, which is rippled 3.4.1's `server_definitions` (FIELDS,
+Full registry: `crates/xrpl-core/src/codec/definitions.json` (symlinked at `tests/vectors/definitions.json`), which is rippled 3.4.1's `server_definitions` (FIELDS,
 LEDGER_ENTRY_TYPES, TRANSACTION_RESULTS, TRANSACTION_TYPES, TYPES). Regenerate it from a rippled node
 when rippled adds fields. A field id the registry does not define is a decode error, as in rippled.
 

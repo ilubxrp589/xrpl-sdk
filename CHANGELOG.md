@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Changed (first crates.io release)
+- **The crates are published as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
+  `halcyon-xrpl-sdk`** (`xrpl-sdk` is taken on crates.io). The library names stay `xrpl_core`,
+  `xrpl_client` and `xrpl_sdk`, so `use` lines do not change; a path dependency needs
+  `package = "halcyon-xrpl-core"` (etc.).
+- `definitions.json` moved into the crate (`crates/xrpl-core/src/codec/`) so the published crate
+  carries it; `codec::definitions::DEFINITIONS_JSON` is public. tests/vectors/definitions.json is a
+  symlink to it.
+- `submit` sorts `tel` results: they are neither applied nor relayed, so they used to wait for a
+  validation that never came. `telINSUF_FEE_P` and `telCAN_NOT_QUEUE*` are retries (resubmitted by
+  `submit_and_wait`); the other `tel`s are failures.
+
+### Removed
+- `codec::field::{FieldCode, FIELD_DEFS, lookup_field, lookup_field_by_id}`: an unused, stale copy of
+  the field registry. `codec::definitions` (`lookup_field_def`, `lookup_field_def_by_id`) is the one
+  the codec uses.
+
 ### Added
 - Typed ledger objects: `types::ledger_object` has a struct for each of rippled 3.4.1's 31 ledger entry
   types, generated from its `LEDGER_ENTRY_FORMATS` (`scripts/gen_ledger_objects.py`), and
