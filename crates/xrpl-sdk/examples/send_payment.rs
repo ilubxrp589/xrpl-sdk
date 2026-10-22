@@ -8,7 +8,7 @@
 //!
 //! Usage: cargo run --example send_payment
 
-use xrpl_sdk::{autofill_and_sign, Wallet, XrplHttpClient};
+use xrpl_sdk::{autofill_and_sign, Client, Wallet, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

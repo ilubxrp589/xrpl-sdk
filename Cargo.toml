@@ -7,6 +7,16 @@ members = [
 ]
 exclude = ["fuzz"]
 
+# The CLAUDE.md safety rules, enforced: no unsafe, and no unwrap/expect/
+# unchecked indexing in library code (test modules opt out explicitly).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+
 [workspace.dependencies]
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = "1"

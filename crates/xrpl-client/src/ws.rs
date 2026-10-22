@@ -1,5 +1,5 @@
+use crate::client::Client;
 use crate::error::ClientError;
-use crate::types::*;
 use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
@@ -324,8 +324,71 @@ impl XrplWsClient {
         }
     }
 
-    /// Send a request and wait for the response.
-    pub async fn request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
+    /// Subscribe to ledger events.
+    pub async fn subscribe_ledger(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        let params = json!({"streams": ["ledger"]});
+        self.raw_request("subscribe", params.clone()).await?;
+        let mut subs = self.active_subs.lock().await;
+        if !subs.contains(&params) {
+            subs.push(params);
+        }
+        Ok(self.event_tx.subscribe())
+    }
+
+    /// Subscribe to all validated transactions.
+    pub async fn subscribe_transactions(
+        &self,
+    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        let params = json!({"streams": ["transactions"]});
+        self.raw_request("subscribe", params.clone()).await?;
+        let mut subs = self.active_subs.lock().await;
+        if !subs.contains(&params) {
+            subs.push(params);
+        }
+        Ok(self.event_tx.subscribe())
+    }
+
+    /// Subscribe to a specific account's transactions.
+    pub async fn subscribe_account(
+        &self,
+        account: &str,
+    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
+        let params = json!({"accounts": [account]});
+        self.raw_request("subscribe", params.clone()).await?;
+        let mut subs = self.active_subs.lock().await;
+        if !subs.contains(&params) {
+            subs.push(params);
+        }
+        Ok(self.event_tx.subscribe())
+    }
+
+    /// Unsubscribe from a ledger stream.
+    pub async fn unsubscribe_ledger(&self) -> Result<(), ClientError> {
+        let params = json!({"streams": ["ledger"]});
+        self.raw_request("unsubscribe", params.clone()).await?;
+        let mut subs = self.active_subs.lock().await;
+        subs.retain(|s| s != &params);
+        Ok(())
+    }
+
+    /// Get a receiver for all subscription events.
+    pub fn events(&self) -> broadcast::Receiver<WsEvent> {
+        self.event_tx.subscribe()
+    }
+
+    /// Returns true if the WebSocket is currently connected.
+    pub fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+
+    /// Get the URL this client is connected to.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl Client for XrplWsClient {
+    async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
         let mut wait_iters = 0u32;
         while !self.connected.load(Ordering::Relaxed) {
             if wait_iters >= 300 {
@@ -373,549 +436,10 @@ impl XrplWsClient {
             }
         }
     }
-
-    /// Subscribe to ledger events.
-    pub async fn subscribe_ledger(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        let params = json!({"streams": ["ledger"]});
-        self.request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(self.event_tx.subscribe())
-    }
-
-    /// Subscribe to all validated transactions.
-    pub async fn subscribe_transactions(
-        &self,
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        let params = json!({"streams": ["transactions"]});
-        self.request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(self.event_tx.subscribe())
-    }
-
-    /// Subscribe to a specific account's transactions.
-    pub async fn subscribe_account(
-        &self,
-        account: &str,
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        let params = json!({"accounts": [account]});
-        self.request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(self.event_tx.subscribe())
-    }
-
-    /// Unsubscribe from a ledger stream.
-    pub async fn unsubscribe_ledger(&self) -> Result<(), ClientError> {
-        let params = json!({"streams": ["ledger"]});
-        self.request("unsubscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
-        subs.retain(|s| s != &params);
-        Ok(())
-    }
-
-    /// Get a receiver for all subscription events.
-    pub fn events(&self) -> broadcast::Receiver<WsEvent> {
-        self.event_tx.subscribe()
-    }
-
-    /// Returns true if the WebSocket is currently connected.
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
-    }
-
-    // --- Mirrored HTTP methods ---
-
-    /// Get account information.
-    pub async fn account_info(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountInfo, ClientError> {
-        let result = self
-            .request(
-                "account_info",
-                json!({"account": account, "ledger_index": ledger.as_value()}),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get account trust lines.
-    pub async fn account_lines(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountLinesResult, ClientError> {
-        let result = self
-            .request(
-                "account_lines",
-                json!({"account": account, "ledger_index": ledger.as_value(), "limit": 400}),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get account offers.
-    pub async fn account_offers(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountOffersResult, ClientError> {
-        let result = self
-            .request(
-                "account_offers",
-                json!({"account": account, "ledger_index": ledger.as_value(), "limit": 400}),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get current fee information.
-    pub async fn fee(&self) -> Result<FeeResult, ClientError> {
-        let result = self.request("fee", json!({})).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get current ledger index.
-    pub async fn ledger_current(&self) -> Result<u32, ClientError> {
-        let result = self.request("ledger_current", json!({})).await?;
-        let lr: LedgerCurrentResult = serde_json::from_value(result)?;
-        Ok(lr.ledger_current_index)
-    }
-
-    /// Submit a signed transaction blob.
-    pub async fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
-        let result = self.request("submit", json!({"tx_blob": tx_blob})).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Look up a transaction by hash.
-    pub async fn tx(&self, hash: &str) -> Result<TxResult, ClientError> {
-        let result = self
-            .request("tx", json!({"transaction": hash, "binary": false}))
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get transaction history for an account.
-    pub async fn account_tx(
-        &self,
-        account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-        limit: Option<u32>,
-        marker: Option<Value>,
-        forward: Option<bool>,
-    ) -> Result<AccountTxResult, ClientError> {
-        let result = self
-            .request(
-                "account_tx",
-                json!({
-                    "account": account,
-                    "ledger_index_min": ledger_index_min.unwrap_or(-1),
-                    "ledger_index_max": ledger_index_max.unwrap_or(-1),
-                    "limit": limit.unwrap_or(200),
-                    "marker": marker,
-                    "forward": forward.unwrap_or(false)
-                }),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get objects owned by an account.
-    pub async fn account_objects(
-        &self,
-        account: &str,
-        object_type: Option<&str>,
-        ledger: &LedgerIndex,
-        limit: Option<u32>,
-        marker: Option<Value>,
-    ) -> Result<AccountObjectsResult, ClientError> {
-        let mut params = json!({
-            "account": account,
-            "ledger_index": ledger.as_value(),
-            "limit": limit.unwrap_or(200)
-        });
-        if let Some(obj) = params.as_object_mut() {
-            if let Some(t) = object_type {
-                obj.insert("type".to_string(), Value::String(t.to_string()));
-            }
-            if let Some(m) = marker {
-                obj.insert("marker".to_string(), m);
-            }
-        }
-        let result = self.request("account_objects", params).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get currencies an account can send or receive.
-    pub async fn account_currencies(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountCurrenciesResult, ClientError> {
-        let result = self
-            .request(
-                "account_currencies",
-                json!({
-                    "account": account,
-                    "ledger_index": ledger.as_value()
-                }),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get payment channels for an account.
-    pub async fn account_channels(
-        &self,
-        account: &str,
-        destination_account: Option<&str>,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountChannelsResult, ClientError> {
-        let mut params = json!({
-            "account": account,
-            "ledger_index": ledger.as_value()
-        });
-        if let (Some(dest), Some(obj)) = (destination_account, params.as_object_mut()) {
-            obj.insert(
-                "destination_account".to_string(),
-                Value::String(dest.to_string()),
-            );
-        }
-        let result = self.request("account_channels", params).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get a single ledger entry by index.
-    pub async fn ledger_entry(
-        &self,
-        index: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<LedgerEntryResult, ClientError> {
-        let result = self
-            .request(
-                "ledger_entry",
-                json!({
-                    "index": index,
-                    "ledger_index": ledger.as_value()
-                }),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get server information.
-    pub async fn server_info(&self) -> Result<ServerInfoResult, ClientError> {
-        let result = self.request("server_info", json!({})).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get gateway balances for an issuing account.
-    pub async fn gateway_balances(
-        &self,
-        account: &str,
-        hotwallet: Option<Vec<&str>>,
-        ledger: &LedgerIndex,
-    ) -> Result<GatewayBalancesResult, ClientError> {
-        let mut params = json!({
-            "account": account,
-            "ledger_index": ledger.as_value()
-        });
-        if let (Some(hw), Some(obj)) = (hotwallet, params.as_object_mut()) {
-            obj.insert(
-                "hotwallet".to_string(),
-                Value::Array(
-                    hw.into_iter()
-                        .map(|s| Value::String(s.to_string()))
-                        .collect(),
-                ),
-            );
-        }
-        let result = self.request("gateway_balances", params).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Autofill missing transaction fields (Sequence, Fee, LastLedgerSequence).
-    pub async fn autofill(&self, tx: &mut Value) -> Result<(), ClientError> {
-        let account = tx["Account"]
-            .as_str()
-            .ok_or_else(|| ClientError::UnexpectedResponse("tx missing Account field".into()))?
-            .to_string();
-
-        let need_seq = tx.get("Sequence").is_none() || tx["Sequence"].is_null();
-        let need_fee = tx.get("Fee").is_none() || tx["Fee"].is_null();
-        let need_lls = tx.get("LastLedgerSequence").is_none() || tx["LastLedgerSequence"].is_null();
-
-        if !need_seq && !need_fee && !need_lls {
-            return Ok(());
-        }
-
-        let (acct_info, fee_result, ledger_idx) = tokio::try_join!(
-            async {
-                if need_seq {
-                    self.account_info(&account, &LedgerIndex::Current)
-                        .await
-                        .map(Some)
-                } else {
-                    Ok(None)
-                }
-            },
-            async {
-                if need_fee {
-                    self.fee().await.map(Some)
-                } else {
-                    Ok(None)
-                }
-            },
-            async {
-                if need_lls {
-                    self.ledger_current().await.map(Some)
-                } else {
-                    Ok(None)
-                }
-            },
-        )?;
-
-        if let Some(info) = acct_info {
-            tx["Sequence"] = json!(info.account_data.sequence);
-        }
-        if let Some(fee) = fee_result {
-            tx["Fee"] = json!(fee.drops.open_ledger_fee);
-        }
-        if let Some(idx) = ledger_idx {
-            tx["LastLedgerSequence"] = json!(idx + 4);
-        }
-
-        Ok(())
-    }
-
-    /// Submit a signed blob and wait until the transaction is validated or expires.
-    pub async fn submit_and_wait(
-        &self,
-        tx_blob: &str,
-        last_ledger_sequence: u32,
-    ) -> Result<TxResult, ClientError> {
-        let sr = self.submit(tx_blob).await?;
-
-        let hash = sr
-            .tx_json
-            .as_ref()
-            .and_then(|j| j.get("hash").or_else(|| j.get("Hash")))
-            .and_then(|h| h.as_str())
-            .ok_or_else(|| {
-                ClientError::UnexpectedResponse("submit response missing tx hash".into())
-            })?
-            .to_string();
-
-        for _ in 0..20 {
-            let current = self.ledger_current().await?;
-            if current > last_ledger_sequence {
-                return Err(ClientError::TransactionExpired(last_ledger_sequence));
-            }
-
-            match self.tx(&hash).await {
-                Ok(tx_result) => {
-                    if tx_result.validated == Some(true) {
-                        return Ok(tx_result);
-                    }
-                }
-                Err(ClientError::RpcError { ref code, .. }) if code == "txnNotFound" => {}
-                Err(e) => return Err(e),
-            }
-
-            tokio::time::sleep(Duration::from_secs(4)).await;
-        }
-
-        Err(ClientError::Timeout(Duration::from_secs(80)))
-    }
-
-    // --- Pagination helpers ---
-
-    /// Get all trust lines for an account, following marker chain.
-    pub async fn account_lines_all(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<TrustLine>, ClientError> {
-        let mut all = Vec::new();
-        let mut marker: Option<Value> = None;
-        for page in 0..50 {
-            let result = self
-                .request(
-                    "account_lines",
-                    json!({
-                        "account": account,
-                        "ledger_index": ledger.as_value(),
-                        "limit": 400,
-                        "marker": marker
-                    }),
-                )
-                .await?;
-            let page_result: AccountLinesResult = serde_json::from_value(result)?;
-            all.extend(page_result.lines);
-            marker = page_result.marker;
-            if marker.is_none() {
-                break;
-            }
-            if page == 49 {
-                return Err(ClientError::PaginationLimitReached(50));
-            }
-        }
-        Ok(all)
-    }
-
-    /// Get all offers for an account, following marker chain.
-    pub async fn account_offers_all(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<AccountOffer>, ClientError> {
-        let mut all = Vec::new();
-        let mut marker: Option<Value> = None;
-        for page in 0..50 {
-            let result = self
-                .request(
-                    "account_offers",
-                    json!({
-                        "account": account,
-                        "ledger_index": ledger.as_value(),
-                        "limit": 400,
-                        "marker": marker
-                    }),
-                )
-                .await?;
-            let page_result: AccountOffersResult = serde_json::from_value(result)?;
-            all.extend(page_result.offers);
-            marker = page_result.marker;
-            if marker.is_none() {
-                break;
-            }
-            if page == 49 {
-                return Err(ClientError::PaginationLimitReached(50));
-            }
-        }
-        Ok(all)
-    }
-
-    /// Get all NFTs for an account, following marker chain.
-    pub async fn account_nfts_all(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<NFToken>, ClientError> {
-        let mut all = Vec::new();
-        let mut marker: Option<Value> = None;
-        for page in 0..50 {
-            let result = self
-                .request(
-                    "account_nfts",
-                    json!({
-                        "account": account,
-                        "ledger_index": ledger.as_value(),
-                        "limit": 400,
-                        "marker": marker
-                    }),
-                )
-                .await?;
-            let page_result: AccountNftsResult = serde_json::from_value(result)?;
-            all.extend(page_result.account_nfts);
-            marker = page_result.marker;
-            if marker.is_none() {
-                break;
-            }
-            if page == 49 {
-                return Err(ClientError::PaginationLimitReached(50));
-            }
-        }
-        Ok(all)
-    }
-
-    /// Get all objects for an account, following marker chain.
-    pub async fn account_objects_all(
-        &self,
-        account: &str,
-        object_type: Option<&str>,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<Value>, ClientError> {
-        let mut all = Vec::new();
-        let mut marker: Option<Value> = None;
-        for page in 0..50 {
-            let mut params = json!({
-                "account": account,
-                "ledger_index": ledger.as_value(),
-                "limit": 200,
-                "marker": marker
-            });
-            if let (Some(t), Some(obj)) = (object_type, params.as_object_mut()) {
-                obj.insert("type".to_string(), Value::String(t.to_string()));
-            }
-            let result = self.request("account_objects", params).await?;
-            let page_result: AccountObjectsResult = serde_json::from_value(result)?;
-            all.extend(page_result.account_objects);
-            marker = page_result.marker;
-            if marker.is_none() {
-                break;
-            }
-            if page == 49 {
-                return Err(ClientError::PaginationLimitReached(50));
-            }
-        }
-        Ok(all)
-    }
-
-    /// Get all transaction history for an account, following marker chain.
-    pub async fn account_tx_all(
-        &self,
-        account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-    ) -> Result<Vec<AccountTxEntry>, ClientError> {
-        let mut all = Vec::new();
-        let mut marker: Option<Value> = None;
-        for page in 0..50 {
-            let result = self
-                .request(
-                    "account_tx",
-                    json!({
-                        "account": account,
-                        "ledger_index_min": ledger_index_min.unwrap_or(-1),
-                        "ledger_index_max": ledger_index_max.unwrap_or(-1),
-                        "limit": 200,
-                        "marker": marker,
-                        "forward": false
-                    }),
-                )
-                .await?;
-            let page_result: AccountTxResult = serde_json::from_value(result)?;
-            all.extend(page_result.transactions);
-            marker = page_result.marker;
-            if marker.is_none() {
-                break;
-            }
-            if page == 49 {
-                return Err(ClientError::PaginationLimitReached(50));
-            }
-        }
-        Ok(all)
-    }
-
-    /// Get the URL this client is connected to.
-    pub fn url(&self) -> &str {
-        &self.url
-    }
 }
 
 #[cfg(all(test, feature = "live-tests"))]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;
 

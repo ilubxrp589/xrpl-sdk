@@ -167,6 +167,7 @@ impl<'de> Deserialize<'de> for Currency {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 
@@ -223,7 +224,10 @@ mod tests {
         for good in ["<>(", "){}", "[]|", "?!@", "#$%", "^&*", "a1Z"] {
             assert!(Currency::from_ascii(good).is_ok(), "{good}");
         }
-        for bad in ["A B", "A.B", "A,B", "A-B", "A_B", "A/B", "A\\B", "A~B", "A`B", "A'B", "A\"B", "A;B", "A:B", "A+B", "A=B"] {
+        for bad in [
+            "A B", "A.B", "A,B", "A-B", "A_B", "A/B", "A\\B", "A~B", "A`B", "A'B", "A\"B", "A;B",
+            "A:B", "A+B", "A=B",
+        ] {
             assert!(Currency::from_ascii(bad).is_err(), "{bad}");
         }
     }

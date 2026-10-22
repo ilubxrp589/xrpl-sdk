@@ -134,7 +134,8 @@ static FIELD_BY_ID: LazyLock<HashMap<(u16, u16), FieldDef>> = LazyLock::new(|| {
         .collect()
 });
 
-const DEFINITIONS_JSON: &str = include_str!("../../../../tests/vectors/definitions.json");
+/// rippled 3.4.1's `server_definitions` result, as embedded in this crate.
+pub const DEFINITIONS_JSON: &str = include_str!("definitions.json");
 
 /// Look up a field definition by name.
 pub fn lookup_field_def(name: &str) -> Option<&'static FieldDef> {
@@ -180,6 +181,14 @@ static GRANULAR_PERMISSIONS: LazyLock<HashMap<&'static str, u32>> = LazyLock::ne
     m.insert("MPTokenIssuanceUnlock", 65548);
     m
 });
+
+/// The granular permission named by a PermissionValue code, if it is one.
+pub fn granular_permission_name(code: u32) -> Option<&'static str> {
+    GRANULAR_PERMISSIONS
+        .iter()
+        .find(|(_, &c)| c == code)
+        .map(|(&name, _)| name)
+}
 
 /// Resolve a PermissionValue string to its u32 code.
 /// Checks granular permissions first, then falls back to transaction type + 1.

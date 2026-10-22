@@ -1,0 +1,18 @@
+{
+  "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "limit": 2,
+  "marker": "03189B049B9600530B61EE1A1EB89D910AF79C724A8B794D61CC34AADFB9486E,1",
+  "offers": [
+    {
+      "flags": 0,
+      "quality": "756584.1737722531",
+      "seq": 109289909,
+      "taker_gets": {
+        "currency": "5553444300000000000000000000000000000000",
+        "issuer": "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE",
+        "value": "39939.7889587579"
+      },
+      "taker_pays": "30217812230"
+    }
+  ]
+}

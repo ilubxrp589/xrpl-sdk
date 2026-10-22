@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+
 use xrpl_core::codec::encode_transaction_json;
 
 #[test]
@@ -35,15 +37,10 @@ fn codec_transaction_vectors() {
                         encoded.len(),
                         expected_bytes.len()
                     );
+                    eprintln!("  got:    {}...", &actual_hex[..80.min(actual_hex.len())]);
                     eprintln!(
-                        "  got:    {}...{}",
-                        &actual_hex[..80.min(actual_hex.len())],
-                        if actual_hex.len() > 80 { "" } else { "" }
-                    );
-                    eprintln!(
-                        "  expect: {}...{}",
-                        &expected_hex[..80.min(expected_hex.len())],
-                        if expected_hex.len() > 80 { "" } else { "" }
+                        "  expect: {}...",
+                        &expected_hex[..80.min(expected_hex.len())]
                     );
                 }
             }

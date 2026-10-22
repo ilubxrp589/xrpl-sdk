@@ -31,7 +31,8 @@ wire_public_key = [0xED] + public_key_bytes  // 33 bytes total
 ```
 
 **Signing:**
-- Sign 32-byte SHA512-half hash
+- Sign the signing data itself (hash prefix + serialized fields), with NO hash first:
+  rippled verifies Ed25519 over the whole message (PublicKey.cpp `verify`). `Keypair::sign_signing_data`.
 - Signature: 64 bytes (r || s)
 - `SigningPubKey` field: 33 bytes with `0xED` prefix
 
@@ -75,7 +76,7 @@ account_public = account_private * G  // 33-byte compressed
 ```
 
 **Signing:**
-- Sign 32-byte SHA512-half hash using ECDSA
+- Sign the 32-byte SHA512-half of the signing data using ECDSA (RFC 6979 nonces)
 - Signature: DER-encoded, typically 70–72 bytes
 - Use low-S normalization (XRPL requires canonical low-S)
 - `SigningPubKey` field: 33 bytes compressed point

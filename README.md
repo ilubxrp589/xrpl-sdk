@@ -1,4 +1,4 @@
-# xrpl-sdk
+# Halcyon XRPL SDK
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
@@ -6,21 +6,24 @@ Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and Web
 
 | Crate | Description | `no_std` |
 |-------|-------------|----------|
-| `xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
-| `xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
-| `xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
+| `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
+| `halcyon-xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
+| `halcyon-xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
+
+The packages are named `halcyon-*` on crates.io; in code they are `xrpl_core`, `xrpl_client`
+and `xrpl_sdk`.
 
 ## Install
 
 ```toml
 # Full SDK (recommended)
 [dependencies]
-xrpl-sdk = "0.1"
+halcyon-xrpl-sdk = "0.1"
 
 # Or individual crates
 [dependencies]
-xrpl-core = "0.1"      # types + codec + crypto only
-xrpl-client = "0.1"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.1"      # types + codec + crypto only
+halcyon-xrpl-client = "0.1"    # HTTP + WebSocket clients
 ```
 
 ## Quick Start
@@ -108,24 +111,31 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `xrpl-core`
 
-- Binary codec: `encode_transaction_json` / `decode_transaction_binary` (33/34 XRPL codec fixtures pass)
-- Ed25519 + Secp256k1 key derivation & signing
-- All XRPL primitive types with serde support
-- Typed transaction builders for 24 transaction types
+- Binary codec: `encode_transaction_json` / `decode_transaction_binary`. Its field registry is rippled 3.4.1's
+  `server_definitions` (82 transaction types, 357 fields); all 34 transaction and 261 ledger-object
+  XRPL codec fixtures round-trip byte for byte
+- Ed25519 + Secp256k1 key derivation & signing, checked byte for byte against rippled's `sign` / `sign_for`
+  and xrpl.js's keypair fixtures
+- X-addresses (XLS-5d): encode/decode, and accepted by the codec in `Account` / `Destination`
+- All XRPL primitive types with serde support; amounts typed for XRP, IOU and MPT
+- Typed ledger objects for all 31 entry types, generated from rippled's own formats
+- Typed transaction builders for 28 transaction types
 - Reserve calculation utilities
 - DEX price/spread/liquidity utilities
 - `no_std` compatible (types + crypto, no codec)
+- No `unsafe`, and no `unwrap` / `expect` / unchecked indexing in library code (workspace lints)
 
 ### `xrpl-client`
 
-- HTTP JSON-RPC client with 18+ methods
+- One `Client` trait over HTTP JSON-RPC, WebSocket and browser WebSocket (wasm); 18+ methods
+- Typed requests: each `Request` names its method and response type; `request_all` follows markers
 - WebSocket client with subscriptions & automatic reconnection
 - Autofill (Sequence, Fee, LastLedgerSequence) with concurrent fetch
 - `submit_and_wait` — reliable submission with polling until validated
 - Pagination helpers (`_all` variants) for paginated endpoints
 - `tracing` instrumentation on all RPC calls
 
-### `xrpl-sdk`
+### `halcyon-xrpl-sdk`
 
 - `Wallet` — generate, from_seed, sign, sign_and_encode
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
@@ -134,13 +144,13 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ## Comparison
 
-| Feature | xrpl-sdk (this) | sephynox/xrpl-rust | gmosx/xrpl-sdk-rust |
+| Feature | halcyon-xrpl-sdk (this) | sephynox/xrpl-rust | gmosx/xrpl-sdk-rust |
 |---------|-----------------|-------------------|-------------------|
-| Binary codec | Full (33/34 fixtures) | Full | Partial |
+| Binary codec | Full (34/34 tx + 261/261 ledger-object fixtures) | Full | Partial |
 | Ed25519 + Secp256k1 | Both | Both | Ed25519 only |
 | HTTP client | Yes | Yes | Yes |
 | WebSocket + auto-reconnect | Yes | No | Partial |
-| Typed transaction builders | 24 types | All types | Some types |
+| Typed transaction builders | 28 types | All types | Some types |
 | Autofill | Yes | Yes | No |
 | submit_and_wait | Yes | No | No |
 | Multi-signing | Yes | Yes | No |

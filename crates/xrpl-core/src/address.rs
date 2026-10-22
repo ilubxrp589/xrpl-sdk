@@ -166,6 +166,92 @@ pub fn decode_account_id(addr: &str) -> Result<[u8; 20], CoreError> {
     Ok(result)
 }
 
+/// X-address prefixes (XLS-5d): mainnet addresses start with "X", testnet with "T".
+const X_ADDRESS_MAIN: [u8; 2] = [0x05, 0x44];
+const X_ADDRESS_TEST: [u8; 2] = [0x04, 0x93];
+
+/// Encode an account ID and optional tag as an X-address (XLS-5d): prefix,
+/// account ID, flag (1 = tag present), the tag as 4 little-endian bytes,
+/// 4 reserved zero bytes (64-bit tags), then the base58check checksum.
+pub fn encode_x_address(account_id: &[u8; 20], tag: Option<u32>, test: bool) -> String {
+    let mut payload = Vec::with_capacity(35);
+    payload.extend_from_slice(if test {
+        &X_ADDRESS_TEST
+    } else {
+        &X_ADDRESS_MAIN
+    });
+    payload.extend_from_slice(account_id);
+    payload.push(u8::from(tag.is_some()));
+    payload.extend_from_slice(&tag.unwrap_or(0).to_le_bytes());
+    payload.extend_from_slice(&[0; 4]);
+    let cksum = checksum(&payload);
+    payload.extend_from_slice(&cksum);
+    base58_encode(&payload)
+}
+
+/// Decode an X-address to (account ID, tag, is_test). Rejects unknown
+/// prefixes and flags, 64-bit tags, and tag bytes without the tag flag.
+pub fn decode_x_address(x_address: &str) -> Result<([u8; 20], Option<u32>, bool), CoreError> {
+    let decoded: [u8; 35] = base58_decode(x_address)?.try_into().map_err(|d: Vec<u8>| {
+        CoreError::InvalidAddress(format!("X-address: expected 35 bytes, got {}", d.len()))
+    })?;
+    let expected_checksum = checksum(&decoded[..31]);
+    let actual_checksum: [u8; 4] = [decoded[31], decoded[32], decoded[33], decoded[34]];
+    if expected_checksum.ct_eq(&actual_checksum).unwrap_u8() != 1 {
+        return Err(CoreError::InvalidChecksum {
+            expected: expected_checksum,
+            got: actual_checksum,
+        });
+    }
+    let test = match [decoded[0], decoded[1]] {
+        X_ADDRESS_MAIN => false,
+        X_ADDRESS_TEST => true,
+        [a, b] => {
+            return Err(CoreError::InvalidAddress(format!(
+                "X-address: unknown prefix {a:02X}{b:02X}"
+            )))
+        }
+    };
+    if decoded[27..31] != [0; 4] {
+        return Err(CoreError::InvalidAddress(
+            "X-address: 64-bit tags are not supported".to_string(),
+        ));
+    }
+    let tag_bytes = [decoded[23], decoded[24], decoded[25], decoded[26]];
+    let tag = match decoded[22] {
+        0 if tag_bytes == [0; 4] => None,
+        0 => {
+            return Err(CoreError::InvalidAddress(
+                "X-address: tag bytes set without the tag flag".to_string(),
+            ))
+        }
+        1 => Some(u32::from_le_bytes(tag_bytes)),
+        flag => {
+            return Err(CoreError::InvalidAddress(format!(
+                "X-address: unknown flag {flag}"
+            )))
+        }
+    };
+    let mut account_id = [0u8; 20];
+    account_id.copy_from_slice(&decoded[2..22]);
+    Ok((account_id, tag, test))
+}
+
+/// Classic address (+ optional tag) → X-address.
+pub fn classic_to_x_address(
+    classic: &str,
+    tag: Option<u32>,
+    test: bool,
+) -> Result<String, CoreError> {
+    Ok(encode_x_address(&decode_account_id(classic)?, tag, test))
+}
+
+/// X-address → (classic address, tag, is_test).
+pub fn x_address_to_classic(x_address: &str) -> Result<(String, Option<u32>, bool), CoreError> {
+    let (account_id, tag, test) = decode_x_address(x_address)?;
+    Ok((encode_account_id(&account_id), tag, test))
+}
+
 /// Key type for seed encoding/decoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyType {
@@ -240,6 +326,207 @@ pub fn decode_seed(seed: &str) -> Result<([u8; 16], KeyType), CoreError> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+
+    // xrpl.js ripple-address-codec test/index.test.ts: classic, tag, mainnet X, testnet X.
+    const X_ADDRESS_CASES: &[(&str, Option<u32>, &str, &str)] = &[
+        (
+            "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+            None,
+            "X7AcgcsBL6XDcUb289X4mJ8djcdyKaB5hJDWMArnXr61cqZ",
+            "T719a5UwUCnEs54UsxG9CJYYDhwmFCqkr7wxCcNcfZ6p5GZ",
+        ),
+        (
+            "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+            Some(1),
+            "X7AcgcsBL6XDcUb289X4mJ8djcdyKaGZMhc9YTE92ehJ2Fu",
+            "T719a5UwUCnEs54UsxG9CJYYDhwmFCvbJNZbi37gBGkRkbE",
+        ),
+        (
+            "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+            Some(14),
+            "X7AcgcsBL6XDcUb289X4mJ8djcdyKaGo2K5VpXpmCqbV2gS",
+            "T719a5UwUCnEs54UsxG9CJYYDhwmFCvqXVCALUGJGSbNV3x",
+        ),
+        (
+            "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+            Some(11747),
+            "X7AcgcsBL6XDcUb289X4mJ8djcdyKaLFuhLRuNXPrDeJd9A",
+            "T719a5UwUCnEs54UsxG9CJYYDhwmFCziiNHtUukubF2Mg6t",
+        ),
+        (
+            "rLczgQHxPhWtjkaQqn3Q6UM8AbRbbRvs5K",
+            None,
+            "XVZVpQj8YSVpNyiwXYSqvQoQqgBttTxAZwMcuJd4xteQHyt",
+            "TVVrSWtmQQssgVcmoMBcFQZKKf56QscyWLKnUyiuZW8ALU4",
+        ),
+        (
+            "rpZc4mVfWUif9CRoHRKKcmhu1nx2xktxBo",
+            None,
+            "X7YenJqxv3L66CwhBSfd3N8RzGXxYqPopMGMsCcpho79rex",
+            "T77wVQzA8ntj9wvCTNiQpNYLT5hmhRsFyXDoMLqYC4BzQtV",
+        ),
+        (
+            "rpZc4mVfWUif9CRoHRKKcmhu1nx2xktxBo",
+            Some(58),
+            "X7YenJqxv3L66CwhBSfd3N8RzGXxYqV56ZkTCa9UCzgaao1",
+            "T77wVQzA8ntj9wvCTNiQpNYLT5hmhR9kej6uxm4jGcQD7rZ",
+        ),
+        (
+            "rsA2LpzuawewSBQXkiju3YQTMzW13pAAdW",
+            Some(23480),
+            "X7d3eHCXzwBeWrZec1yT24iZerQjYL8m8zCJ16ACxu1BrBY",
+            "T7YChPFWifjCAXLEtg5N74c7fSAYsvSokwcmBPBUZWhxH5P",
+        ),
+        (
+            "rsA2LpzuawewSBQXkiju3YQTMzW13pAAdW",
+            Some(11747),
+            "X7d3eHCXzwBeWrZec1yT24iZerQjYLo2CJf8oVC5CMWey5m",
+            "T7YChPFWifjCAXLEtg5N74c7fSAYsvTcc7nEfwuEEvn5Q4w",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            None,
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtV5fdx1mHp98tDMoQXb",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQn49b3qD26PK7FcGSKE",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(0),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtV8AqEL4xcZj5whKbmc",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnSy8RHqGHoGJ59spi2",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(1),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtV8xvjGQTYPiAx6gwDC",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnSz1uDimDdPYXzSpyw",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(2),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtV8zpDURx7DzBCkrQE7",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnTryP9tG9TW8GeMBmd",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(32),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtVoYiC9UvKfjKar4LJe",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnT2oqaCDzMEuCDAj1j",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(276),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtVoKj3MnFGMXEFMnvJV",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnTMgJJYfAbsiPsc6Zg",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(65591),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtVozpjdhPQVdt3ghaWw",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQn7ryu2W6njw7mT1jmS",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(16781933),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtVqrDUk2vDpkTjPsY73",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnVsw45sDtGHhLi27Qa",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(4294967294),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtV1kAsixQTdMjbWi39u",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnX8tDFQ53itLNqs6vU",
+        ),
+        (
+            "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            Some(4294967295),
+            "XVLhHMPHU98es4dbozjVtdWzVrDjtV18pX8yuPT7y4xaEHi",
+            "TVE26TYGhfLC7tQDno7G8dGtxSkYQnXoy6kSDh6rZzApc69",
+        ),
+        (
+            "rPEPPER7kfTD9w2To4CQk6UCfuHM9c6GDY",
+            None,
+            "XV5sbjUmgPpvXv4ixFWZ5ptAYZ6PD2gYsjNFQLKYW33DzBm",
+            "TVd2rqMkYL2AyS97NdELcpeiprNBjwLZzuUG5rZnaewsahi",
+        ),
+        (
+            "rPEPPER7kfTD9w2To4CQk6UCfuHM9c6GDY",
+            Some(0),
+            "XV5sbjUmgPpvXv4ixFWZ5ptAYZ6PD2m4Er6SnvjVLpMWPjR",
+            "TVd2rqMkYL2AyS97NdELcpeiprNBjwRQUBetPbyrvXSTuxU",
+        ),
+        (
+            "rPEPPER7kfTD9w2To4CQk6UCfuHM9c6GDY",
+            Some(13371337),
+            "XV5sbjUmgPpvXv4ixFWZ5ptAYZ6PD2qwGkhgc48zzcx6Gkr",
+            "TVd2rqMkYL2AyS97NdELcpeiprNBjwVUDvp3vhpXbNhLwJi",
+        ),
+    ];
+
+    #[test]
+    fn x_addresses_match_xrpl_js() {
+        for &(classic, tag, main, test) in X_ADDRESS_CASES {
+            assert_eq!(
+                classic_to_x_address(classic, tag, false).unwrap(),
+                main,
+                "{classic} {tag:?}"
+            );
+            assert_eq!(
+                classic_to_x_address(classic, tag, true).unwrap(),
+                test,
+                "{classic} {tag:?}"
+            );
+            assert_eq!(
+                x_address_to_classic(main).unwrap(),
+                (classic.to_string(), tag, false)
+            );
+            assert_eq!(
+                x_address_to_classic(test).unwrap(),
+                (classic.to_string(), tag, true)
+            );
+        }
+    }
+
+    #[test]
+    fn x_address_rejects_what_xls5d_does_not_define() {
+        let raw = |prefix: [u8; 2], flag: u8, tail: [u8; 8]| {
+            let mut p = prefix.to_vec();
+            p.extend_from_slice(&[0x11; 20]);
+            p.push(flag);
+            p.extend_from_slice(&tail);
+            let c = checksum(&p);
+            p.extend_from_slice(&c);
+            base58_encode(&p)
+        };
+        assert!(decode_x_address(&raw(X_ADDRESS_MAIN, 1, [1, 0, 0, 0, 0, 0, 0, 0])).is_ok());
+        assert!(
+            decode_x_address(&raw(X_ADDRESS_MAIN, 1, [1, 0, 0, 0, 1, 0, 0, 0])).is_err(),
+            "64-bit tag"
+        );
+        assert!(
+            decode_x_address(&raw(X_ADDRESS_MAIN, 0, [1, 0, 0, 0, 0, 0, 0, 0])).is_err(),
+            "tag bytes, no flag"
+        );
+        assert!(
+            decode_x_address(&raw(X_ADDRESS_MAIN, 2, [0; 8])).is_err(),
+            "unknown flag"
+        );
+        assert!(
+            decode_x_address(&raw([0x05, 0x45], 0, [0; 8])).is_err(),
+            "unknown prefix"
+        );
+        let good = X_ADDRESS_CASES[0].2;
+        let bad_checksum = format!(
+            "{}{}",
+            &good[..good.len() - 1],
+            if good.ends_with('Z') { 'Y' } else { 'Z' }
+        );
+        assert!(decode_x_address(&bad_checksum).is_err(), "checksum");
+        assert!(
+            decode_x_address("rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf").is_err(),
+            "classic address"
+        );
+    }
 
     #[test]
     fn account_id_roundtrip_known() {

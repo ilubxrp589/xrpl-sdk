@@ -11,7 +11,9 @@ pub use xrpl_core::CoreError;
 // Re-exports from xrpl-client
 pub use xrpl_client::error::ClientError;
 pub use xrpl_client::http::XrplHttpClient;
+pub use xrpl_client::requests::{self, Paginated, Request};
 pub use xrpl_client::types::*;
+pub use xrpl_client::Client;
 pub use xrpl_client::XrplWsClient;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -21,7 +23,7 @@ pub use wallet::Wallet;
 
 /// Autofill a transaction, sign it, and return the hex-encoded blob.
 pub async fn autofill_and_sign(
-    client: &XrplHttpClient,
+    client: &impl Client,
     tx: &mut serde_json::Value,
     wallet: &Wallet,
 ) -> Result<String, ClientError> {
@@ -32,7 +34,7 @@ pub async fn autofill_and_sign(
 
 /// Autofill, sign, submit, and wait for validation. All-in-one transaction submission.
 pub async fn submit_transaction(
-    client: &XrplHttpClient,
+    client: &impl Client,
     tx: &mut serde_json::Value,
     wallet: &Wallet,
 ) -> Result<TxResult, ClientError> {

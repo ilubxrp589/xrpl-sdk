@@ -5,7 +5,7 @@
 //!
 //! Usage: cargo run --example check_balance
 
-use xrpl_sdk::{LedgerIndex, XrplHttpClient};
+use xrpl_sdk::{Client, LedgerIndex, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

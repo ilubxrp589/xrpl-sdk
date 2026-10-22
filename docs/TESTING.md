@@ -46,22 +46,26 @@ fn codec_transaction_vectors() {
 
 ## Phase 1: Known Address Vectors
 
+From xrpl.js's ripple-keypairs fixtures (`test/fixtures/api.json`); rippled's `wallet_propose` derives the
+same keys and addresses. The tests (crypto/signing.rs) also check the private and public keys, the fixture
+signatures, and a Payment signed by rippled's `sign` (offline) byte for byte.
+
 | Seed (base58) | Key Type | Classic Address |
 |---|---|---|
-| `sn3nxiW7v8KXzPzAqzyHXbSSKNuN9` | secp256k1 | `rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh` |
-| `sEdTM1uX8pu2do5XvTnutH6HsouMaM2` | ed25519 | `rGWrZyax5eXbi5gs49MRZKkBENe7EI2q8L` |
+| `sp5fghtJtpUorTwvof1NpDXAzNwf5` | secp256k1 | `rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1` |
+| `sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r` | ed25519 | `rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD` |
 
 ```rust
 #[test]
 fn address_derivation_secp256k1() {
-    let wallet = Wallet::from_seed("sn3nxiW7v8KXzPzAqzyHXbSSKNuN9").unwrap();
-    assert_eq!(wallet.address, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    let wallet = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5").unwrap();
+    assert_eq!(wallet.address, "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
 }
 
 #[test]
 fn address_derivation_ed25519() {
-    let wallet = Wallet::from_seed("sEdTM1uX8pu2do5XvTnutH6HsouMaM2").unwrap();
-    assert_eq!(wallet.address, "rGWrZyax5eXbi5gs49MRZKkBENe7EI2q8L");
+    let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r").unwrap();
+    assert_eq!(wallet.address, "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
 }
 ```
 

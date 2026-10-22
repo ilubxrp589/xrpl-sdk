@@ -1,19 +1,21 @@
 [package]
-name = "xrpl-client"
+name = "halcyon-xrpl-client"
 version = "0.1.0"
 edition = "2021"
 description = "HTTP and WebSocket clients for the XRP Ledger"
 license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
-authors = ["XRPL Rust SDK Contributors"]
+authors = ["James Turner"]
+readme = "../../README.md"
 keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
 categories = ["cryptography", "api-bindings"]
 
 [lib]
+name = "xrpl_client"
 crate-type = ["rlib"]
 
 [dependencies]
-xrpl-core = { path = "../xrpl-core", version = "0.1" }
+xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.1" }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true, features = ["std"] }
@@ -48,3 +50,6 @@ ws = []
 full = ["http", "ws"]
 live-tests = []
 wasm = ["xrpl-core/wasm"]
+
+[lints]
+workspace = true

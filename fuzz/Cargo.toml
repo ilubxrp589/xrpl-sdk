@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-xrpl-core = { path = "../crates/xrpl-core" }
+xrpl-core = { package = "halcyon-xrpl-core", path = "../crates/xrpl-core" }
 serde_json = "1"
 
 [[bin]]

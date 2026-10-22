@@ -1,5 +1,5 @@
 use crate::codec::amount;
-use crate::codec::definitions::lookup_field_def_by_id;
+use crate::codec::definitions::{granular_permission_name, lookup_field_def_by_id};
 use crate::codec::field::{decode_vl, FieldId, TypeCode};
 use crate::types::{AccountId, Currency};
 use crate::CoreError;
@@ -67,7 +67,7 @@ static LEDGER_ENTRY_TYPE_NAMES: LazyLock<HashMap<u16, String>> = LazyLock::new(|
         .collect()
 });
 
-const DEFINITIONS_JSON: &str = include_str!("../../../../tests/vectors/definitions.json");
+use super::definitions::DEFINITIONS_JSON;
 
 /// Look up transaction type name by numeric code.
 fn transaction_type_name(code: u16) -> Option<&'static str> {
@@ -136,43 +136,13 @@ fn decode_fields(
         let field_name = match &field_def {
             Some(fd) => fd.name.clone(),
             None => {
-                // Skip unknown fields instead of failing.
-                // Determine byte length based on type code and skip.
-                let remaining = get_slice_from(bytes, pos, "buffer underflow skipping unknown")?;
-                let skip_len = match field_id.type_code {
-                    // Fixed-size types
-                    1 => 2,  // UINT16
-                    2 => 4,  // UINT32
-                    3 => 8,  // UINT64
-                    4 => 16, // HASH128
-                    5 => 32, // HASH256
-                    6 => {
-                        // AMOUNT: 8 bytes for XRP, 48 for IOU
-                        // High bit: 0=XRP(8), 1=IOU(48)
-                        if !remaining.is_empty() && (remaining[0] & 0x80) != 0 {
-                            48
-                        } else {
-                            8
-                        }
-                    }
-                    8 => 20, // ACCOUNTID
-                    // Variable-length types
-                    7 | 18 | 19 => {
-                        // VL (blob), Transaction, Validation — length-prefixed
-                        match decode_vl(remaining) {
-                            Ok((vl_len, vl_header)) => vl_header + vl_len,
-                            Err(_) => break, // can't determine length, stop parsing
-                        }
-                    }
-                    // STObject end marker or STArray
-                    14 | 15 => 0, // handled by markers
-                    _ => break,   // unknown type, stop parsing
-                };
-                if skip_len > remaining.len() {
-                    break;
-                }
-                pos += skip_len;
-                continue;
+                // rippled refuses a field it does not know (the SField lookup
+                // throws). Skipping one would drop data from the JSON, and its
+                // length cannot be known in general (objects, arrays, PathSet).
+                return Err(CoreError::UnknownField(format!(
+                    "type {} nth {}",
+                    field_id.type_code, field_id.field_code
+                )));
             }
         };
 
@@ -206,7 +176,7 @@ fn decode_field_value(
     match tc {
         Some(TypeCode::UInt8) => decode_uint8(buf),
         Some(TypeCode::UInt16) => decode_uint16(buf, field_name),
-        Some(TypeCode::UInt32) => decode_uint32(buf),
+        Some(TypeCode::UInt32) => decode_uint32(buf, field_name),
         Some(TypeCode::UInt64) => decode_uint64(buf, field_name),
         Some(TypeCode::Hash128) => decode_hash(buf, 16),
         Some(TypeCode::Hash160) => decode_hash(buf, 20),
@@ -215,6 +185,7 @@ fn decode_field_value(
         Some(TypeCode::Blob) => decode_blob(buf),
         Some(TypeCode::AccountId) => decode_account_id_field(buf),
         Some(TypeCode::Number) => decode_number(buf),
+        Some(TypeCode::Int32) => decode_int32(buf),
         Some(TypeCode::StObject) => decode_st_object(buf, depth),
         Some(TypeCode::StArray) => decode_st_array(buf, depth),
         Some(TypeCode::PathSet) => decode_pathset(buf),
@@ -269,7 +240,7 @@ fn decode_uint16(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreErr
     Ok((Value::Number(val.into()), 2))
 }
 
-fn decode_uint32(buf: &[u8]) -> Result<(Value, usize), CoreError> {
+fn decode_uint32(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreError> {
     let bytes = buf
         .get(..4)
         .ok_or_else(|| CoreError::CodecError("buffer too short for UInt32".to_string()))?;
@@ -277,7 +248,26 @@ fn decode_uint32(buf: &[u8]) -> Result<(Value, usize), CoreError> {
         .try_into()
         .map_err(|_| CoreError::CodecError("buffer too short for UInt32".to_string()))?;
     let val = u32::from_be_bytes(arr);
+    // rippled names a PermissionValue (Permissions.cpp getPermissionName): a
+    // granular permission's name, else the name of TxType (value - 1), cast to
+    // the 16-bit TxType as rippled's static_cast does.
+    if field_name == "PermissionValue" {
+        let name = granular_permission_name(val)
+            .or_else(|| transaction_type_name(val.wrapping_sub(1) as u16));
+        if let Some(name) = name {
+            return Ok((Value::String(name.to_string()), 4));
+        }
+    }
     Ok((Value::Number(val.into()), 4))
+}
+
+/// Int32: big-endian two's complement; rippled's JSON is the number.
+fn decode_int32(buf: &[u8]) -> Result<(Value, usize), CoreError> {
+    let arr: [u8; 4] = buf
+        .get(..4)
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| CoreError::CodecError("buffer too short for Int32".to_string()))?;
+    Ok((Value::Number(i32::from_be_bytes(arr).into()), 4))
 }
 
 fn decode_uint64(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreError> {
@@ -293,7 +283,9 @@ fn decode_uint64(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreErr
         "LockedAmount",
     ];
     if BASE_TEN.contains(&field_name) {
-        let arr: [u8; 8] = bytes.try_into().expect("length checked");
+        let arr: [u8; 8] = bytes
+            .try_into()
+            .map_err(|_| CoreError::CodecError("buffer too short for UInt64".to_string()))?;
         return Ok((Value::String(u64::from_be_bytes(arr).to_string()), 8));
     }
     let hex_str = hex::encode_upper(bytes);
@@ -320,17 +312,18 @@ fn decode_amount_field(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     if first_byte & 0x80 == 0 && first_byte & 0x20 != 0 {
         // MPT amount (STAmount::add): lead byte (0x20 marker, 0x40 positive)
         // + 8-byte value + 192-bit MPTokenIssuanceID = 33 bytes.
-        let bytes = buf
-            .get(..33)
+        let (value_bytes, issuance_id) = buf
+            .get(1..33)
+            .and_then(|b| b.split_first_chunk::<8>())
             .ok_or_else(|| CoreError::CodecError("buffer too short for MPT amount".to_string()))?;
-        let value = u64::from_be_bytes(bytes[1..9].try_into().expect("length checked"));
+        let value = u64::from_be_bytes(*value_bytes);
         let sign = if first_byte & 0x40 == 0 && value != 0 {
             "-"
         } else {
             ""
         };
         let obj = json!({
-            "mpt_issuance_id": hex::encode_upper(&bytes[9..33]),
+            "mpt_issuance_id": hex::encode_upper(issuance_id),
             "value": format!("{sign}{value}"),
         });
         return Ok((obj, 33));
@@ -798,6 +791,118 @@ fn decode_raw_hex(buf: &[u8], len: usize) -> Result<(Value, usize), CoreError> {
 mod tests {
     use super::*;
     use crate::codec::encode_transaction_json;
+    use serde_json::json;
+
+    #[test]
+    fn decodes_a_mainnet_delegate_set_as_rippled_does() {
+        // 4A242D3BBE512789… in ledger #107804444: rippled 3.4.1's `tx` (binary)
+        // and its JSON, which names each PermissionValue (TxType + 1).
+        let blob = "12004024066B3B57201B066CF72D68400000000000000C7321ED35D4A0AB1968E2C9B104D243574E7867A58F23B0D3B4F5491DEE3094FD740C9E7440C80B1A0C044BF8BC45DB69CC2B109AFF2234CB0711BA41308BF1AE24D9A7D54A97ABBBB2F01F67DAF62B96FDF203484646BCE52C984C8BD5729B137CC01BB20B811476D532936E2AC465EDB25E40566165EB170C8B6185147D1CBA3091C51F2B0A33C9298C32229DB887AD1BF01DEF20340000001CE1EF20340000001DE1F1";
+        let rippled = json!({
+            "Account": "rBqL31rm5w2kW8VQFF6WXXQaG8avSym1ij",
+            "Authorize": "rUQX1zNmDTKyaM1tCbY84J7eumKXtN9b6F",
+            "Fee": "12",
+            "LastLedgerSequence": 107804461,
+            "Permissions": [
+                {"Permission": {"PermissionValue": "NFTokenCreateOffer"}},
+                {"Permission": {"PermissionValue": "NFTokenCancelOffer"}}
+            ],
+            "Sequence": 107690839,
+            "SigningPubKey": "ED35D4A0AB1968E2C9B104D243574E7867A58F23B0D3B4F5491DEE3094FD740C9E",
+            "TransactionType": "DelegateSet",
+            "TxnSignature": "C80B1A0C044BF8BC45DB69CC2B109AFF2234CB0711BA41308BF1AE24D9A7D54A97ABBBB2F01F67DAF62B96FDF203484646BCE52C984C8BD5729B137CC01BB20B"
+        });
+        let bytes = hex::decode(blob).unwrap();
+        assert_eq!(decode_transaction_binary(&bytes).unwrap(), rippled);
+        assert_eq!(encode_transaction_json(&rippled, false).unwrap(), bytes);
+    }
+
+    #[test]
+    fn permission_value_names_follow_rippled() {
+        // Permissions.cpp getPermissionName: a granular permission's name, else
+        // the name of TxType (value - 1), else the number.
+        let tx = json!({"Permissions": [
+            {"Permission": {"PermissionValue": 1}},
+            {"Permission": {"PermissionValue": 65_537}},
+            {"Permission": {"PermissionValue": 65_548}},
+            {"Permission": {"PermissionValue": 70_000}}
+        ]});
+        let back =
+            decode_transaction_binary(&encode_transaction_json(&tx, false).unwrap()).unwrap();
+        let names: Vec<&Value> = (0..4)
+            .map(|i| &back["Permissions"][i]["Permission"]["PermissionValue"])
+            .collect();
+        assert_eq!(
+            names,
+            [
+                &json!("Payment"),
+                &json!("TrustlineAuthorize"),
+                &json!("MPTokenIssuanceUnlock"),
+                &json!(70_000)
+            ]
+        );
+    }
+
+    #[test]
+    fn int32_is_signed_big_endian() {
+        // STInteger<int32_t>: add32 (big-endian two's complement); JSON is the
+        // number, and rippled also accepts a decimal string (STParsedJSON).
+        let bytes = encode_transaction_json(&json!({"LoanScale": -5}), false).unwrap();
+        assert_eq!(bytes, [0xA1, 0xFF, 0xFF, 0xFF, 0xFB]);
+        assert_eq!(
+            decode_transaction_binary(&bytes).unwrap(),
+            json!({"LoanScale": -5})
+        );
+        assert_eq!(
+            encode_transaction_json(&json!({"LoanScale": "-5"}), false).unwrap(),
+            bytes
+        );
+        assert!(encode_transaction_json(&json!({"LoanScale": 2_147_483_648_i64}), false).is_err());
+    }
+
+    #[test]
+    fn x_addresses_become_classic_addresses_and_tags() {
+        // As xrpl.js's codec does: Account's tag → SourceTag, Destination's → DestinationTag.
+        let classic = json!({
+            "TransactionType": "Payment",
+            "Account": "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf",
+            "SourceTag": 1,
+            "Destination": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+            "DestinationTag": 11_747,
+            "Amount": "1000000"
+        });
+        let x = json!({
+            "TransactionType": "Payment",
+            "Account": "XVLhHMPHU98es4dbozjVtdWzVrDjtV8xvjGQTYPiAx6gwDC",
+            "Destination": "X7AcgcsBL6XDcUb289X4mJ8djcdyKaLFuhLRuNXPrDeJd9A",
+            "Amount": "1000000"
+        });
+        let want = encode_transaction_json(&classic, false).unwrap();
+        assert_eq!(encode_transaction_json(&x, false).unwrap(), want);
+        // An untagged X-address is just the classic address.
+        let untagged = json!({"Account": "XVLhHMPHU98es4dbozjVtdWzVrDjtV5fdx1mHp98tDMoQXb"});
+        assert_eq!(
+            encode_transaction_json(&untagged, false).unwrap(),
+            encode_transaction_json(
+                &json!({"Account": "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf"}),
+                false
+            )
+            .unwrap()
+        );
+        // A tag twice, or a tag on a field that has no tag field, is an error.
+        let twice =
+            json!({"Account": "XVLhHMPHU98es4dbozjVtdWzVrDjtV8xvjGQTYPiAx6gwDC", "SourceTag": 1});
+        assert!(encode_transaction_json(&twice, false).is_err());
+        let elsewhere = json!({"Authorize": "XVLhHMPHU98es4dbozjVtdWzVrDjtV8xvjGQTYPiAx6gwDC"});
+        assert!(encode_transaction_json(&elsewhere, false).is_err());
+    }
+
+    #[test]
+    fn an_unknown_field_is_an_error_not_skipped() {
+        // STObject nth 14 was Hooks' "Hook"; rippled 3.4.1 defines no such field.
+        let err = decode_transaction_binary(&[0xEE, 0xE1]).unwrap_err();
+        assert!(matches!(err, CoreError::UnknownField(_)), "{err}");
+    }
 
     #[test]
     fn decode_simple_payment() {

@@ -1,0 +1,45 @@
+{
+  "offers": [
+    {
+      "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+      "BookDirectory": "54123B870896F4964184D7042DB75D78913D3E377BFC4ECA4F04B4DA652A8C00",
+      "BookNode": "0",
+      "Flags": 131072,
+      "LedgerEntryType": "Offer",
+      "OwnerNode": "1",
+      "PreviousTxnID": "73F5C2B8BD1C714D7371EC67E5805FD29F726B0D21791A1CB86E1E8537A052F1",
+      "PreviousTxnLgrSeq": 107827028,
+      "Sequence": 109289913,
+      "TakerGets": "7554674570",
+      "TakerPays": {
+        "currency": "524C555344000000000000000000000000000000",
+        "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+        "value": "10008.0551366075"
+      },
+      "index": "F544C7805F7654861C215BAEA1D6098433834C6DC8C24AB67DBAAF5D18B3E5BD",
+      "owner_funds": "355235082467",
+      "quality": "0.00000132475"
+    },
+    {
+      "Account": "rUMBUV11gQBUadbW9LF58oWeBBPaSGGF2V",
+      "BookDirectory": "54123B870896F4964184D7042DB75D78913D3E377BFC4ECA4F04B4EA70396840",
+      "BookNode": "0",
+      "Expiration": 845986460,
+      "Flags": 0,
+      "LedgerEntryType": "Offer",
+      "OwnerNode": "0",
+      "PreviousTxnID": "0000000000000000000000000000000000000000000000000000000000000000",
+      "PreviousTxnLgrSeq": 0,
+      "Sequence": 107906563,
+      "TakerGets": "200000000",
+      "TakerPays": {
+        "currency": "524C555344000000000000000000000000000000",
+        "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+        "value": "264.963781"
+      },
+      "index": "48CDCA779461F4437F124CADF057634B74784E28C5E0AA0650C7BADA17F3D8D1",
+      "owner_funds": "611486905",
+      "quality": "0.000001324818905"
+    }
+  ]
+}

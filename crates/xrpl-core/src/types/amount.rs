@@ -1,4 +1,4 @@
-use super::{AccountId, Currency};
+use super::{AccountId, Currency, Hash192};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -154,7 +154,7 @@ impl IouAmount {
 
         // rippled STAmount::getText: extreme exponents print as
         // "<mantissa>e<exponent>" (STAmount.cpp:696).
-        if exp != 0 && (exp < -25 || exp > -5) {
+        if exp != 0 && !(-25..=-5).contains(&exp) {
             return format!("{sign}{s}e{exp}");
         }
 
@@ -206,7 +206,8 @@ impl<'de> Deserialize<'de> for IouAmount {
     }
 }
 
-/// XRPL amount — either XRP (drops) or IOU (value + currency + issuer).
+/// XRPL amount — XRP (drops), an IOU (value + currency + issuer), or an MPT
+/// (integer value + MPTokenIssuanceID).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Amount {
     /// XRP amount in drops. 1 XRP = 1,000,000 drops.
@@ -217,6 +218,8 @@ pub enum Amount {
         currency: Currency,
         issuer: AccountId,
     },
+    /// MPT amount: rippled's JSON is `{"mpt_issuance_id": <hex>, "value": "<integer>"}`.
+    Mpt { value: i64, issuance_id: Hash192 },
 }
 
 impl Amount {
@@ -252,6 +255,13 @@ impl Serialize for Amount {
                 map.serialize_entry("issuer", issuer)?;
                 map.end()
             }
+            Amount::Mpt { value, issuance_id } => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("mpt_issuance_id", issuance_id)?;
+                map.serialize_entry("value", &value.to_string())?;
+                map.end()
+            }
         }
     }
 }
@@ -266,6 +276,18 @@ impl<'de> Deserialize<'de> for Amount {
             Value::String(s) => {
                 let drops: u64 = s.parse().map_err(serde::de::Error::custom)?;
                 Ok(Amount::Xrp(drops))
+            }
+            Value::Object(map) if map.contains_key("mpt_issuance_id") => {
+                let value = map
+                    .get("value")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| serde::de::Error::missing_field("value"))?
+                    .parse::<i64>()
+                    .map_err(serde::de::Error::custom)?;
+                let issuance_id: Hash192 =
+                    serde_json::from_value(map.get("mpt_issuance_id").cloned().unwrap_or_default())
+                        .map_err(serde::de::Error::custom)?;
+                Ok(Amount::Mpt { value, issuance_id })
             }
             Value::Object(map) => {
                 let value_str = map
@@ -297,8 +319,29 @@ impl<'de> Deserialize<'de> for Amount {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn amounts_round_trip_rippled_json() {
+        // The three shapes rippled's JSON uses (STAmount::getJson).
+        for j in [
+            serde_json::json!("1000000"),
+            serde_json::json!({"value": "1.5e-20", "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"}),
+            serde_json::json!({"mpt_issuance_id": "0000012FFD9EE5DA93AC614B4DB94D7E0FCE415CA51BED47", "value": "100"}),
+        ] {
+            let a: Amount = serde_json::from_value(j.clone()).unwrap();
+            let back = serde_json::to_value(&a).unwrap();
+            let again: Amount = serde_json::from_value(back).unwrap();
+            assert_eq!(a, again, "{j}");
+        }
+        let mpt: Amount = serde_json::from_value(serde_json::json!(
+            {"mpt_issuance_id": "0000012FFD9EE5DA93AC614B4DB94D7E0FCE415CA51BED47", "value": "100"}
+        ))
+        .unwrap();
+        assert!(matches!(mpt, Amount::Mpt { value: 100, .. }));
+    }
 
     #[test]
     fn iou_normalize_1_5() {
@@ -369,6 +412,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod getext_tests {
     use super::*;
 

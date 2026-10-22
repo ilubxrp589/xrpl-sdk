@@ -1,7 +1,7 @@
 //! WebSocket client for WASM environments using browser-native WebSocket via web-sys.
 
+use crate::client::Client;
 use crate::error::ClientError;
-use crate::types::*;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -99,8 +99,10 @@ impl XrplWsClient {
                     let result = if let Some(result) = value.get("result") {
                         Ok(result.clone())
                     } else if value.get("error").is_some() {
-                        let code = value["error"].as_str().unwrap_or("unknown").to_string();
-                        let message = value["error_message"].as_str().unwrap_or("").to_string();
+                        let text =
+                            |k: &str| value.get(k).and_then(Value::as_str).map(str::to_string);
+                        let code = text("error").unwrap_or_else(|| "unknown".to_string());
+                        let message = text("error_message").unwrap_or_default();
                         Err(ClientError::RpcError { code, message })
                     } else {
                         Ok(value.clone())
@@ -141,8 +143,61 @@ impl XrplWsClient {
         })
     }
 
-    /// Send a request and wait for the response.
-    pub async fn request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
+    /// Subscribe to ledger events.
+    pub async fn subscribe_ledger(&self) -> Result<(), ClientError> {
+        let params = json!({"streams": ["ledger"]});
+        self.raw_request("subscribe", params.clone()).await?;
+        let mut subs = self
+            .active_subs
+            .lock()
+            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
+        if !subs.contains(&params) {
+            subs.push(params);
+        }
+        Ok(())
+    }
+
+    /// Subscribe to all validated transactions.
+    pub async fn subscribe_transactions(&self) -> Result<(), ClientError> {
+        let params = json!({"streams": ["transactions"]});
+        self.raw_request("subscribe", params.clone()).await?;
+        let mut subs = self
+            .active_subs
+            .lock()
+            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
+        if !subs.contains(&params) {
+            subs.push(params);
+        }
+        Ok(())
+    }
+
+    /// Subscribe to a specific account's transactions.
+    pub async fn subscribe_account(&self, account: &str) -> Result<(), ClientError> {
+        let params = json!({"accounts": [account]});
+        self.raw_request("subscribe", params.clone()).await?;
+        let mut subs = self
+            .active_subs
+            .lock()
+            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
+        if !subs.contains(&params) {
+            subs.push(params);
+        }
+        Ok(())
+    }
+
+    /// Returns true if the WebSocket is currently connected.
+    pub fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+
+    /// Get the URL this client is connected to.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl Client for XrplWsClient {
+    async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
         if !self.connected.load(Ordering::Relaxed) {
             return Err(ClientError::Disconnected);
         }
@@ -175,119 +230,5 @@ impl XrplWsClient {
             .map_err(|_| ClientError::Disconnected)?;
 
         rx.await.map_err(|_| ClientError::Disconnected)?
-    }
-
-    /// Subscribe to ledger events.
-    pub async fn subscribe_ledger(&self) -> Result<(), ClientError> {
-        let params = json!({"streams": ["ledger"]});
-        self.request("subscribe", params.clone()).await?;
-        let mut subs = self
-            .active_subs
-            .lock()
-            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(())
-    }
-
-    /// Subscribe to all validated transactions.
-    pub async fn subscribe_transactions(&self) -> Result<(), ClientError> {
-        let params = json!({"streams": ["transactions"]});
-        self.request("subscribe", params.clone()).await?;
-        let mut subs = self
-            .active_subs
-            .lock()
-            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(())
-    }
-
-    /// Subscribe to a specific account's transactions.
-    pub async fn subscribe_account(&self, account: &str) -> Result<(), ClientError> {
-        let params = json!({"accounts": [account]});
-        self.request("subscribe", params.clone()).await?;
-        let mut subs = self
-            .active_subs
-            .lock()
-            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(())
-    }
-
-    /// Returns true if the WebSocket is currently connected.
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
-    }
-
-    /// Get the URL this client is connected to.
-    pub fn url(&self) -> &str {
-        &self.url
-    }
-
-    /// Get account information.
-    pub async fn account_info(
-        &self,
-        account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountInfo, ClientError> {
-        let result = self
-            .request(
-                "account_info",
-                json!({"account": account, "ledger_index": ledger.as_value()}),
-            )
-            .await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get current fee information.
-    pub async fn fee(&self) -> Result<FeeResult, ClientError> {
-        let result = self.request("fee", json!({})).await?;
-        Ok(serde_json::from_value(result)?)
-    }
-
-    /// Get current ledger index.
-    pub async fn ledger_current(&self) -> Result<u32, ClientError> {
-        let result = self.request("ledger_current", json!({})).await?;
-        let lr: LedgerCurrentResult = serde_json::from_value(result)?;
-        Ok(lr.ledger_current_index)
-    }
-
-    /// Submit a signed transaction blob.
-    pub async fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
-        let result = self.request("submit", json!({"tx_blob": tx_blob})).await?;
-        let sr: SubmitResult = serde_json::from_value(result)?;
-        if sr.engine_result == "tesSUCCESS" || sr.engine_result.starts_with("tes") {
-            return Ok(sr);
-        }
-        if sr.engine_result.starts_with("tem") || sr.engine_result.starts_with("tef") {
-            return Err(ClientError::TransactionFailed {
-                engine_result: sr.engine_result,
-                message: sr.engine_result_message,
-            });
-        }
-        if sr.engine_result.starts_with("ter") {
-            return Err(ClientError::TransactionRetry {
-                engine_result: sr.engine_result,
-            });
-        }
-        if sr.engine_result.starts_with("tec") {
-            return Err(ClientError::TransactionClaimed {
-                engine_result: sr.engine_result,
-            });
-        }
-        Ok(sr)
-    }
-
-    /// Look up a transaction by hash.
-    pub async fn tx(&self, hash: &str) -> Result<TxResult, ClientError> {
-        let result = self
-            .request("tx", json!({"transaction": hash, "binary": false}))
-            .await?;
-        Ok(serde_json::from_value(result)?)
     }
 }

@@ -1,0 +1,8 @@
+# Public XRPL test seeds — published test vectors, not secrets, no keys of ours.
+# xrpl.js ripple-keypairs fixtures (packages/ripple-keypairs/test/fixtures/api.json):
+# crypto/signing.rs, xrpl-sdk wallet.rs and docs/TESTING.md check against them.
+sp5fghtJtpUorTwvof1NpDXAzNwf5
+sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r
+# docs/TESTING.md's old (wrong) vectors, named in the commit that replaced them.
+sn3nxiW7v8KXzPzAqzyHXbSSKNuN9
+sEdTM1uX8pu2do5XvTnutH6HsouMaM2
