@@ -21,12 +21,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.1"
+halcyon-xrpl-sdk = "0.2"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.1"      # types + codec + crypto only
-halcyon-xrpl-client = "0.1"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.2"      # types + codec + crypto only
+halcyon-xrpl-client = "0.2"    # HTTP + WebSocket clients
 ```
 
 ## Quick Start

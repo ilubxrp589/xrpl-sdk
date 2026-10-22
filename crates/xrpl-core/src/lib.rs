@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.1"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.2"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -108,7 +108,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.1", default-features = false }
+//! halcyon-xrpl-core = { version = "0.2", default-features = false }
 //! ```
 //!
 //! ## How it is checked
