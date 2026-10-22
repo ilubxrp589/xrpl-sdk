@@ -131,6 +131,10 @@ fn generate_random_bytes_16() -> [u8; 16] {
 
 /// Generate 16 random bytes using browser WebCrypto (WASM).
 #[cfg(all(feature = "std", target_arch = "wasm32"))]
+#[allow(
+    clippy::expect_used,
+    reason = "no CSPRNG means no safe key; the native rand::rng() path panics the same way"
+)]
 fn generate_random_bytes_16() -> [u8; 16] {
     let mut bytes = [0u8; 16];
     getrandom::getrandom(&mut bytes)

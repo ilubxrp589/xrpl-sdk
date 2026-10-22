@@ -283,7 +283,9 @@ fn decode_uint64(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreErr
         "LockedAmount",
     ];
     if BASE_TEN.contains(&field_name) {
-        let arr: [u8; 8] = bytes.try_into().expect("length checked");
+        let arr: [u8; 8] = bytes
+            .try_into()
+            .map_err(|_| CoreError::CodecError("buffer too short for UInt64".to_string()))?;
         return Ok((Value::String(u64::from_be_bytes(arr).to_string()), 8));
     }
     let hex_str = hex::encode_upper(bytes);
@@ -310,17 +312,18 @@ fn decode_amount_field(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     if first_byte & 0x80 == 0 && first_byte & 0x20 != 0 {
         // MPT amount (STAmount::add): lead byte (0x20 marker, 0x40 positive)
         // + 8-byte value + 192-bit MPTokenIssuanceID = 33 bytes.
-        let bytes = buf
-            .get(..33)
+        let (value_bytes, issuance_id) = buf
+            .get(1..33)
+            .and_then(|b| b.split_first_chunk::<8>())
             .ok_or_else(|| CoreError::CodecError("buffer too short for MPT amount".to_string()))?;
-        let value = u64::from_be_bytes(bytes[1..9].try_into().expect("length checked"));
+        let value = u64::from_be_bytes(*value_bytes);
         let sign = if first_byte & 0x40 == 0 && value != 0 {
             "-"
         } else {
             ""
         };
         let obj = json!({
-            "mpt_issuance_id": hex::encode_upper(&bytes[9..33]),
+            "mpt_issuance_id": hex::encode_upper(issuance_id),
             "value": format!("{sign}{value}"),
         });
         return Ok((obj, 33));

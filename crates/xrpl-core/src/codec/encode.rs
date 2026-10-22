@@ -695,8 +695,8 @@ fn encode_currency_type(value: &Value) -> Result<Vec<u8>, CoreError> {
     // (UintTypes.cpp) — an Oracle BaseAsset/QuoteAsset can carry it
     // (xrpl-validator finding 369).
     if s == "1" {
-        let mut b = vec![0u8; 20];
-        b[19] = 1;
+        let mut b = vec![0u8; 19];
+        b.push(1);
         return Ok(b);
     }
 

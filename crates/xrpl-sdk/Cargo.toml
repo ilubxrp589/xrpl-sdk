@@ -25,3 +25,6 @@ http = ["xrpl-client/http"]
 ws = ["xrpl-client/ws"]
 full = ["http", "ws"]
 live-tests = ["xrpl-client/live-tests"]
+
+[lints]
+workspace = true

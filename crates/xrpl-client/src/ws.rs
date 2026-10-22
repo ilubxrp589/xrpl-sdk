@@ -916,6 +916,7 @@ impl XrplWsClient {
 }
 
 #[cfg(all(test, feature = "live-tests"))]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;
 

@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+
 use xrpl_core::codec::encode_transaction_json;
 
 #[test]

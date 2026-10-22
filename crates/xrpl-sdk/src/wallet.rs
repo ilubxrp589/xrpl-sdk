@@ -15,8 +15,12 @@ pub struct Wallet {
 impl Wallet {
     /// Generate a new random wallet (Ed25519 by default).
     ///
-    /// Freshly generated random seeds always produce valid keypairs, so
-    /// `unwrap_or_else` is used as a defensive fallback that should never trigger.
+    /// A freshly generated random seed always derives a valid keypair, so this
+    /// is infallible; use [`Wallet::from_seed`] for seeds from elsewhere.
+    #[allow(
+        clippy::expect_used,
+        reason = "a random 16-byte seed always derives a keypair"
+    )]
     pub fn generate() -> Self {
         let seed = Seed::generate();
         Self::from_keypair(
@@ -25,6 +29,10 @@ impl Wallet {
     }
 
     /// Generate a new random wallet with a specific key type.
+    #[allow(
+        clippy::expect_used,
+        reason = "a random 16-byte seed always derives a keypair"
+    )]
     pub fn generate_with_type(key_type: KeyType) -> Self {
         let seed = Seed::generate_with_type(key_type);
         Self::from_keypair(

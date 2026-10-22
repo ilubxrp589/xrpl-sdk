@@ -48,3 +48,6 @@ ws = []
 full = ["http", "ws"]
 live-tests = []
 wasm = ["xrpl-core/wasm"]
+
+[lints]
+workspace = true
