@@ -106,23 +106,39 @@ impl Wallet {
 }
 
 /// Combine multiple Signer entries into the Signers array on a transaction.
-/// Sorts signers by Account address (required by rippled for canonical order).
-pub fn collect_signers(tx: &mut serde_json::Value, mut signers: Vec<serde_json::Value>) {
-    signers.sort_by(|a, b| {
-        let acct_a = a
-            .get("Signer")
-            .and_then(|s| s.get("Account"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let acct_b = b
-            .get("Signer")
-            .and_then(|s| s.get("Account"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        acct_a.cmp(acct_b)
-    });
-    tx["Signers"] = serde_json::Value::Array(signers);
-    tx["SigningPubKey"] = serde_json::Value::String(String::new());
+/// Sorts signers by 20-byte AccountID, the order rippled requires. Base58
+/// text order is not the same order, so every Account is decoded first.
+pub fn collect_signers(
+    tx: &mut serde_json::Value,
+    signers: Vec<serde_json::Value>,
+) -> Result<(), CoreError> {
+    let mut keyed = signers
+        .into_iter()
+        .map(|signer| {
+            let account = signer
+                .get("Signer")
+                .and_then(|s| s.get("Account"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    CoreError::InvalidAddress("Signer entry has no Account".to_string())
+                })?;
+            Ok((xrpl_core::address::decode_account_id(account)?, signer))
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    keyed.sort_by_key(|a| a.0);
+
+    let obj = tx
+        .as_object_mut()
+        .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
+    obj.insert(
+        "Signers".to_string(),
+        serde_json::Value::Array(keyed.into_iter().map(|(_, signer)| signer).collect()),
+    );
+    obj.insert(
+        "SigningPubKey".to_string(),
+        serde_json::Value::String(String::new()),
+    );
+    Ok(())
 }
 
 impl std::fmt::Debug for Wallet {
@@ -238,7 +254,30 @@ mod tests {
     }
 
     #[test]
-    fn collect_signers_sorts_by_account() {
+    fn collect_signers_rejects_signer_without_valid_account() {
+        let mut tx = serde_json::json!({"TransactionType": "Payment"});
+        let bad = vec![
+            serde_json::json!({"Signer": {"Account": "rZZZ", "SigningPubKey": "AA", "TxnSignature": "BB"}}),
+        ];
+        assert!(super::collect_signers(&mut tx, bad).is_err());
+        let missing = vec![serde_json::json!({"Signer": {"SigningPubKey": "AA"}})];
+        assert!(super::collect_signers(&mut tx, missing).is_err());
+        assert!(tx.get("Signers").is_none());
+    }
+
+    #[test]
+    fn collect_signers_orders_by_account_id_bytes_not_base58() {
+        use xrpl_core::address::decode_account_id;
+        // rippled (STTx.cpp) rejects "Unsorted Signers array" unless the
+        // signers ascend by 20-byte AccountID. The base58 alphabet is not in
+        // ASCII order: 'P' < 'w' as text, but 'w' is the lower base58 digit.
+        let low = "rw2ciyaNshpHe7bCHo4bRWq6pqqynnWKQg";
+        let high = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        assert!(high < low, "precondition: text order puts `high` first");
+        assert!(
+            decode_account_id(low).unwrap() < decode_account_id(high).unwrap(),
+            "precondition: AccountID order puts `low` first"
+        );
         let mut tx = serde_json::json!({
             "TransactionType": "Payment",
             "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
@@ -248,14 +287,14 @@ mod tests {
             "Sequence": 1
         });
         let signers = vec![
-            serde_json::json!({"Signer": {"Account": "rZZZ", "SigningPubKey": "AA", "TxnSignature": "BB"}}),
-            serde_json::json!({"Signer": {"Account": "rAAA", "SigningPubKey": "CC", "TxnSignature": "DD"}}),
+            serde_json::json!({"Signer": {"Account": high, "SigningPubKey": "AA", "TxnSignature": "BB"}}),
+            serde_json::json!({"Signer": {"Account": low, "SigningPubKey": "CC", "TxnSignature": "DD"}}),
         ];
-        super::collect_signers(&mut tx, signers);
+        super::collect_signers(&mut tx, signers).unwrap();
         assert_eq!(tx["SigningPubKey"], "");
         let arr = tx["Signers"].as_array().unwrap();
-        assert_eq!(arr[0]["Signer"]["Account"], "rAAA");
-        assert_eq!(arr[1]["Signer"]["Account"], "rZZZ");
+        assert_eq!(arr[0]["Signer"]["Account"], low);
+        assert_eq!(arr[1]["Signer"]["Account"], high);
     }
 
     #[test]
