@@ -2,6 +2,9 @@
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
+[Documentation](https://docs.rs/halcyon-xrpl-sdk) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) ·
+[How it is checked](#how-it-is-checked)
+
 ## Crates
 
 | Crate | Description | `no_std` |
@@ -28,27 +31,46 @@ halcyon-xrpl-client = "0.1"    # HTTP + WebSocket clients
 
 ## Quick Start
 
-### Send XRP Payment
+### Send XRP Payment (on Testnet, with a faucet-funded wallet)
 
 ```rust,no_run
 use xrpl_sdk::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
-    let wallet = Wallet::from_seed("sEdTM1uX8pu2do5XvTnutH6HsouMaM2")?; // Example testnet seed — do not use on mainnet
+    // A new wallet, funded with test XRP. Only its address leaves this machine.
+    let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
+    let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
 
     let mut tx = serde_json::json!({
         "TransactionType": "Payment",
         "Account": wallet.classic_address(),
         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-        "Amount": "1000000"
+        "Amount": utils::xrp_to_drops("1.5")?.to_string()
     });
 
     let result = submit_transaction(&client, &mut tx, &wallet).await?;
-    println!("Validated: {:?}", result.validated);
+    for change in utils::get_balance_changes(result.meta.as_ref().unwrap())? {
+        println!("{}: {:?}", change.account, change.balances);
+    }
+    println!("seed to keep: {}", wallet.seed().unwrap());
     Ok(())
 }
+```
+
+Run it: `cargo run --example testnet_quickstart`.
+
+### Hashes, ledger IDs and everyday helpers
+
+```rust,ignore
+use xrpl_sdk::*;
+
+let tx_id = hash_signed_tx_blob(&blob)?;                      // the hash rippled will give it
+let line = keylet::trust_line("rA…", "rB…", "USD")?;           // ID of any ledger entry
+let when = utils::ripple_time_to_iso8601(814_406_400);         // ledger time → ISO 8601
+let nft = utils::parse_nftoken_id("000B0539C35B55AA…")?;       // issuer, taxon, fee, flags
+let changes = utils::get_balance_changes(&meta)?;              // exact, never floating point
+let ok = verify_payment_channel_claim(&channel, 1_000_000, &signature, &public_key)?;
 ```
 
 ### Subscribe to Ledger Closes (WebSocket)
@@ -120,6 +142,12 @@ assert_eq!(json["TransactionType"], "Payment");
 - All XRPL primitive types with serde support; amounts typed for XRP, IOU and MPT
 - Typed ledger objects for all 31 entry types, generated from rippled's own formats
 - Typed transaction builders for 28 transaction types
+- Transaction hashes (`hash_signed_tx`, `hash_signed_tx_blob`) and ledger entry IDs for every entry
+  type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, …)
+- Payment channel claims: sign and verify
+- Utilities: XRP ↔ drops, ledger time ↔ Unix / ISO 8601, text ↔ hex, TransferRate and quality,
+  NFTokenID parsing, the NFTokenID a mint created, balance changes from metadata. Amounts are
+  computed in exact decimal, never floating point
 - Reserve calculation utilities
 - DEX price/spread/liquidity utilities
 - `no_std` compatible (types + crypto, no codec)
@@ -134,29 +162,29 @@ assert_eq!(json["TransactionType"], "Payment");
 - `submit_and_wait` — reliable submission with polling until validated
 - Pagination helpers (`_all` variants) for paginated endpoints
 - `tracing` instrumentation on all RPC calls
+- Testnet / Devnet faucet (`faucet::fund`, `fund_and_wait`)
 
 ### `halcyon-xrpl-sdk`
 
-- `Wallet` — generate, from_seed, sign, sign_and_encode
+- `Wallet` — generate, from_seed, seed, sign, sign_and_encode, sign_payment_channel_claim
+- `generate_faucet_wallet` — a funded Testnet / Devnet wallet in one call
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
 - `autofill_and_sign` / `submit_transaction` convenience functions
 - Full re-exports from core + client
 
-## Comparison
+## How it is checked
 
-| Feature | halcyon-xrpl-sdk (this) | sephynox/xrpl-rust | gmosx/xrpl-sdk-rust |
-|---------|-----------------|-------------------|-------------------|
-| Binary codec | Full (34/34 tx + 261/261 ledger-object fixtures) | Full | Partial |
-| Ed25519 + Secp256k1 | Both | Both | Ed25519 only |
-| HTTP client | Yes | Yes | Yes |
-| WebSocket + auto-reconnect | Yes | No | Partial |
-| Typed transaction builders | 28 types | All types | Some types |
-| Autofill | Yes | Yes | No |
-| submit_and_wait | Yes | No | No |
-| Multi-signing | Yes | Yes | No |
-| no_std core | Yes | No | No |
-| tracing | Yes | No | No |
-| Pagination helpers | Yes | No | No |
+Everything that has to match the XRP Ledger is tested against the real thing, not against
+itself:
+
+| What | Checked against |
+|------|-----------------|
+| Signatures, multisign, transaction hashes, channel claims | rippled 3.4.1's own `sign`, `sign_for` and `channel_authorize`, byte for byte, Ed25519 and secp256k1 |
+| Binary codec | all 34 transaction and 261 ledger-object XRPL codec fixtures; mainnet transactions and ledger entries |
+| Ledger entry IDs | the `index` of real mainnet entries, xrpl.js's hash tests, and a live run that creates each entry type on Testnet |
+| Balance changes, NFTokenIDs, rates, time, hex, X-addresses | xrpl.js's own test fixtures and expected results |
+| Typed responses | recorded rippled 3.4.1 responses |
+| End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and every ID, hash and balance change must be what the network recorded |
 
 ## License
 

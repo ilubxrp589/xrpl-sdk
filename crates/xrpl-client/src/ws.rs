@@ -1,3 +1,7 @@
+//! [`XrplWsClient`] for native targets: requests and subscriptions over one
+//! WebSocket, matched by request ID, with automatic reconnection that restores
+//! subscriptions.
+
 use crate::client::Client;
 use crate::error::ClientError;
 use futures::stream::{SplitSink, SplitStream};

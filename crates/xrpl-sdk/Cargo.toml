@@ -2,13 +2,15 @@
 name = "halcyon-xrpl-sdk"
 version = "0.1.0"
 edition = "2021"
-description = "Community-built Rust SDK for the XRP Ledger"
+description = "Rust SDK for the XRP Ledger (XRPL): wallets, signing, multisign, autofill and submit, HTTP and WebSocket clients, typed ledger objects, hashes, faucet; checked against rippled"
 license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["James Turner"]
 readme = "../../README.md"
-keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
-categories = ["cryptography", "api-bindings"]
+homepage = "https://github.com/ilubxrp589/xrpl-sdk"
+documentation = "https://docs.rs/halcyon-xrpl-sdk"
+keywords = ["xrpl", "xrp", "ripple", "blockchain", "sdk"]
+categories = ["cryptography::cryptocurrencies", "api-bindings", "network-programming"]
 
 [lib]
 name = "xrpl_sdk"
@@ -32,3 +34,7 @@ live-tests = ["xrpl-client/live-tests"]
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+features = ["full"]
+rustdoc-args = ["--cfg", "docsrs"]

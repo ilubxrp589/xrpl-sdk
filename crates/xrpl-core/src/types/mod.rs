@@ -1,3 +1,8 @@
+//! XRPL data types: [`Amount`] (XRP drops, tokens, MPTs), [`AccountId`],
+//! [`Currency`], fixed-size hashes, blobs, and [`LedgerObject`], a typed
+//! struct for each of `rippled` 3.4.1's 31 ledger entry types. All of them
+//! (de)serialize as `rippled`'s JSON.
+
 mod account_id;
 mod amount;
 mod blob;

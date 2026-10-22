@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+//! Typed `rippled` responses, and [`LedgerIndex`] for choosing a ledger.
+
+use serde::{Deserialize, Deserializer, Serialize};
 use xrpl_core::types::{Amount, LedgerObject};
 
 /// Ledger index specifier for API requests: serializes as rippled expects
@@ -56,10 +58,41 @@ pub struct AccountData {
 #[derive(Debug, Clone, Deserialize)]
 pub struct FeeResult {
     pub drops: FeeDrops,
+    #[serde(default, deserialize_with = "u32_from_string_or_number")]
     pub current_ledger_size: Option<u32>,
+    #[serde(default, deserialize_with = "u32_from_string_or_number")]
     pub current_queue_size: Option<u32>,
+    #[serde(default, deserialize_with = "u32_from_string_or_number")]
     pub expected_ledger_size: Option<u32>,
+    #[serde(default, deserialize_with = "u32_from_string_or_number")]
+    pub max_queue_size: Option<u32>,
     pub ledger_current_index: Option<u32>,
+    pub levels: Option<FeeLevels>,
+}
+
+/// Fee levels (256 = the reference transaction cost), as rippled's strings.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FeeLevels {
+    pub median_level: String,
+    pub minimum_level: String,
+    pub open_ledger_level: String,
+    pub reference_level: String,
+}
+
+/// rippled writes some counts as strings (`fee`'s `"current_queue_size": "28"`)
+/// and others as numbers; take either.
+fn u32_from_string_or_number<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Count {
+        Number(u32),
+        Text(String),
+    }
+    match Option::<Count>::deserialize(d)? {
+        None => Ok(None),
+        Some(Count::Number(n)) => Ok(Some(n)),
+        Some(Count::Text(s)) => s.parse().map(Some).map_err(serde::de::Error::custom),
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

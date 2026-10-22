@@ -1,15 +1,363 @@
+//! # Halcyon XRPL SDK
+//!
+//! A Rust SDK for the [XRP Ledger](https://xrpl.org): create wallets, build,
+//! sign and submit transactions, query `rippled` over HTTP or WebSocket, and
+//! work with every XRPL data type. Signatures, hashes, the binary codec and
+//! ledger entry IDs are checked byte for byte against `rippled` itself (see
+//! [How it is checked](#how-it-is-checked)).
+//!
+//! This crate (`halcyon-xrpl-sdk` on crates.io, `xrpl_sdk` in code) is the one
+//! most applications need. It is built from two smaller crates and re-exports
+//! everything in them:
+//!
+//! | Crate (crates.io) | In code | What it holds |
+//! |---|---|---|
+//! | `halcyon-xrpl-core` | `xrpl_core` | Types, binary codec, keys and signing, hashes and ledger entry IDs, utilities. No networking. Types and crypto build without `std`. |
+//! | `halcyon-xrpl-client` | `xrpl_client` | The [`Client`] trait over HTTP JSON-RPC, WebSocket and browser WebSocket (wasm); typed requests and responses; the Testnet/Devnet faucet. |
+//! | `halcyon-xrpl-sdk` | `xrpl_sdk` | [`Wallet`], autofill + sign + submit in one call, and everything above. |
+//!
+//! ## Install
+//!
+//! ```toml
+//! [dependencies]
+//! halcyon-xrpl-sdk = "0.1"
+//! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+//! serde_json = "1"
+//! ```
+//!
+//! ## Quick start: a funded Testnet wallet and a payment
+//!
+//! [`generate_faucet_wallet`] makes a new wallet on this machine and asks the
+//! Testnet faucet to fund it. Only the address is sent; the seed never leaves.
+//! [`submit_transaction`] fills in `Sequence`, `Fee` and `LastLedgerSequence`,
+//! signs, submits, and waits until a validated ledger includes the
+//! transaction.
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
+//!     let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
+//!
+//!     let mut tx = serde_json::json!({
+//!         "TransactionType": "Payment",
+//!         "Account": wallet.classic_address(),
+//!         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+//!         "Amount": utils::xrp_to_drops("1.5")?.to_string(), // "1500000" drops
+//!     });
+//!     let result = submit_transaction(&client, &mut tx, &wallet).await?;
+//!
+//!     let meta = result.meta.as_ref().expect("a validated transaction has metadata");
+//!     println!("result: {}", meta["TransactionResult"]);
+//!     for account in utils::get_balance_changes(meta)? {
+//!         println!("{}: {:?}", account.account, account.balances);
+//!     }
+//!     println!("keep this seed to reuse the wallet: {}", wallet.seed().unwrap());
+//!     Ok(())
+//! }
+//! ```
+//!
+//! The same program is `examples/testnet_quickstart.rs`:
+//! `cargo run --example testnet_quickstart`.
+//!
+//! ## Wallets and signing
+//!
+//! A [`Wallet`] is a key pair and its address. New wallets use Ed25519, as
+//! `rippled` does by default; [`Wallet::generate_with_type`] makes secp256k1
+//! ones. [`Wallet::from_seed`] restores a wallet from its seed (`s…`), and
+//! [`Wallet::seed`] gives the seed of a wallet made from one. Private keys and
+//! seeds are wiped from memory when dropped.
+//!
+//! Signing needs no network. This example signs a payment and checks the
+//! result against `rippled` 3.4.1, which signed the same transaction with the
+//! same (public, test-only) seed and reported this hash:
+//!
+//! ```
+//! use xrpl_sdk::*;
+//!
+//! let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+//! assert_eq!(wallet.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+//!
+//! let tx = serde_json::json!({
+//!     "TransactionType": "Payment",
+//!     "Account": wallet.classic_address(),
+//!     "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+//!     "Amount": "1000000",
+//!     "Fee": "12",
+//!     "Sequence": 1,
+//!     "Flags": 0,
+//! });
+//! let blob = wallet.sign_and_encode(&tx)?; // hex, ready for `submit`
+//! assert_eq!(
+//!     hash_signed_tx_blob(&blob)?.to_string(),
+//!     "05DD129B3CBA984E7DEB24FA2522C9DA9AAF4A518F1A01C78F2BD35B46298BF3",
+//! );
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ### Multi-signing
+//!
+//! Each signer signs the same transaction with
+//! [`Wallet::sign_for_multisigning`]; [`wallet::collect_signers`] puts the
+//! signatures in the order `rippled` requires (by account ID, which is not the
+//! order of the addresses as text) and clears `SigningPubKey`:
+//!
+//! ```
+//! use xrpl_sdk::*;
+//! use xrpl_sdk::wallet::collect_signers;
+//!
+//! let (alice, bob) = (Wallet::generate(), Wallet::generate());
+//! let mut tx = serde_json::json!({
+//!     "TransactionType": "Payment",
+//!     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", // has a SignerList of Alice and Bob
+//!     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+//!     "Amount": "1000000",
+//!     "Fee": "30", // (1 + number of signers) × the 10-drop base fee
+//!     "Sequence": 7,
+//!     "SigningPubKey": "",
+//! });
+//! let signatures = vec![alice.sign_for_multisigning(&tx)?, bob.sign_for_multisigning(&tx)?];
+//! collect_signers(&mut tx, signatures)?;
+//! let blob = hex::encode_upper(encode_transaction_json(&tx, false)?);
+//! # assert_eq!(tx["Signers"].as_array().unwrap().len(), 2);
+//! # let _ = blob;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Building transactions
+//!
+//! Transactions are `serde_json::Value`s in the same JSON `rippled` and
+//! xrpl.js use, so every one of the 83 transaction types in `rippled` 3.4.1
+//! works, including `Batch`, `DelegateSet`, `MPToken*`, `Credential*`,
+//! `Vault*` and `Loan*`. The codec refuses fields it does not know, as
+//! `rippled` does, instead of dropping them.
+//!
+//! For common transactions there are typed builders that check required
+//! fields ([`transactions`]):
+//!
+//! ```
+//! use xrpl_sdk::transactions::{Payment, Transaction};
+//!
+//! let tx = Payment::builder("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+//!     .amount(serde_json::json!("1000000"))
+//!     .destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
+//!     .build()?
+//!     .to_json();
+//! assert_eq!(tx["TransactionType"], "Payment");
+//! # Ok::<(), xrpl_sdk::CoreError>(())
+//! ```
+//!
+//! ## Submitting, and what can go wrong
+//!
+//! | Function | What it does |
+//! |---|---|
+//! | [`submit_transaction`] | autofill, sign, submit, wait for validation |
+//! | [`autofill_and_sign`] | autofill and sign; returns the blob |
+//! | [`Client::autofill`] | fill `Sequence`, `Fee`, `LastLedgerSequence` where missing |
+//! | [`Client::submit`] | submit a signed blob once |
+//! | [`Client::submit_and_wait`] | submit, resubmit on a retry result, wait until validated or expired |
+//!
+//! [`Client::submit`] sorts the engine result into a [`ClientError`]:
+//!
+//! | Result | Error | Meaning |
+//! |---|---|---|
+//! | `tes…` | none | applied (still check the validated result) |
+//! | `tec…` | [`ClientError::TransactionClaimed`] | failed, but the fee was charged |
+//! | `tem…`, `tef…`, most `tel…` | [`ClientError::TransactionFailed`] | refused; never reaches a ledger |
+//! | `ter…`, `telINSUF_FEE_P`, `telCAN_NOT_QUEUE…` | [`ClientError::TransactionRetry`] | may succeed if submitted again |
+//!
+//! [`Client::submit_and_wait`] returns [`ClientError::TransactionExpired`] if
+//! `LastLedgerSequence` passes without the transaction being validated.
+//!
+//! ## Querying the ledger
+//!
+//! [`XrplHttpClient`] and [`XrplWsClient`] implement the same [`Client`]
+//! trait, so code written against one works with the other. Bring the trait
+//! into scope (`use xrpl_sdk::*` does) to call its methods.
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! # async fn run() -> Result<(), ClientError> {
+//! let client = XrplHttpClient::new("https://xrplcluster.com")?;
+//!
+//! // A method with typed arguments and response.
+//! let info = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated).await?;
+//! println!("{} drops, sequence {}", info.account_data.balance, info.account_data.sequence);
+//!
+//! // Any typed request, by value.
+//! let fee = client.request(&requests::FeeRequest {}).await?;
+//! println!("open ledger fee: {} drops", fee.drops.open_ledger_fee);
+//!
+//! // Every page of a paginated request, following `marker`.
+//! let lines = client
+//!     .request_all(requests::AccountLinesRequest {
+//!         account: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh".into(),
+//!         ledger_index: LedgerIndex::Validated,
+//!         limit: Some(400),
+//!         marker: None,
+//!     })
+//!     .await?;
+//! println!("{} trust lines", lines.len());
+//!
+//! // Anything else rippled offers, as JSON.
+//! let state = client.raw_request("server_state", serde_json::json!({})).await?;
+//! println!("{}", state["state"]["server_state"]);
+//! # Ok(()) }
+//! ```
+//!
+//! ## Streaming over WebSocket
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! # async fn run() -> Result<(), ClientError> {
+//! let ws = XrplWsClient::connect("wss://xrplcluster.com").await?;
+//! let mut ledgers = ws.subscribe_ledger().await?;
+//! while let Ok(event) = ledgers.recv().await {
+//!     match event {
+//!         WsEvent::Ledger(l) => println!("ledger {} closed with {:?} transactions", l.ledger_index, l.txn_count),
+//!         WsEvent::Reconnected => println!("reconnected; subscriptions restored"),
+//!         _ => {}
+//!     }
+//! }
+//! # Ok(()) }
+//! ```
+//!
+//! The WebSocket client reconnects on its own and resubscribes; it also
+//! offers [`XrplWsClient::subscribe_account`] and
+//! [`XrplWsClient::subscribe_transactions`].
+//!
+//! ## Hashes and ledger entry IDs
+//!
+//! [`hash_signed_tx`] and [`hash_signed_tx_blob`] give a transaction's ID
+//! before it is submitted. [`keylet`] gives the ID of any ledger entry, for
+//! `ledger_entry` lookups or to recognise entries in metadata:
+//!
+//! ```
+//! use xrpl_sdk::keylet;
+//!
+//! let account = keylet::account("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+//! assert_eq!(account.to_string(), "2B6AC232AA4C4BE41BF49D2459FA4A0347E1B543A4C92FCEE0821C0201E2E9A8");
+//!
+//! // Order does not matter: a trust line has one ID for both accounts.
+//! let a = keylet::trust_line("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rB5TihdPbKgMrkFqrqUC3yLdE8hhv4BdeY", "USD")?;
+//! let b = keylet::trust_line("rB5TihdPbKgMrkFqrqUC3yLdE8hhv4BdeY", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "USD")?;
+//! assert_eq!(a, b);
+//! # Ok::<(), xrpl_sdk::CoreError>(())
+//! ```
+//!
+//! ## Utilities
+//!
+//! [`utils`] holds the conversions an application needs every day. Amounts
+//! are computed in exact decimal, never in floating point.
+//!
+//! | Function | Does |
+//! |---|---|
+//! | [`utils::xrp_to_drops`], [`utils::drops_to_xrp`] | XRP ↔ drops, refusing more than 6 decimals |
+//! | [`utils::ripple_time_to_iso8601`], [`utils::iso8601_to_ripple_time`], [`utils::ripple_time_to_unix`], [`utils::unix_to_ripple_time`] | ledger time (seconds since 2000-01-01) ↔ ISO 8601 / Unix |
+//! | [`utils::str_to_hex`], [`utils::hex_to_str`] | text ↔ hex for `Domain`, memos, URIs |
+//! | [`utils::percent_to_transfer_rate`], [`utils::decimal_to_quality`] and their inverses | `TransferRate`, `QualityIn` / `QualityOut` |
+//! | [`utils::parse_nftoken_id`] | issuer, taxon, transfer fee, flags and sequence of an NFTokenID |
+//! | [`utils::get_nftoken_id`] | the NFTokenID a mint created, from its metadata |
+//! | [`utils::get_balance_changes`] | every account's balance changes, from metadata |
+//!
+//! ```
+//! use xrpl_sdk::utils;
+//!
+//! assert_eq!(utils::xrp_to_drops("1.5")?, 1_500_000);
+//! assert_eq!(utils::drops_to_xrp(12), "0.000012");
+//! assert_eq!(utils::ripple_time_to_iso8601(0), "2000-01-01T00:00:00Z");
+//! assert_eq!(utils::percent_to_transfer_rate("0.5%")?, 1_005_000_000);
+//! assert_eq!(utils::hex_to_str(&utils::str_to_hex("example.com"))?, "example.com");
+//!
+//! let nft = utils::parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?;
+//! assert_eq!((nft.issuer.as_str(), nft.taxon, nft.transfer_fee), ("rJoxBSzpXhPtAuqFmqxQtGKjA13jUJWthE", 1337, 1337));
+//! # Ok::<(), xrpl_sdk::CoreError>(())
+//! ```
+//!
+//! ## Payment channels
+//!
+//! [`Wallet::sign_payment_channel_claim`] signs a claim off-ledger;
+//! [`verify_payment_channel_claim`] checks one, as `rippled`'s
+//! `channel_verify` does. The amount is the channel's running total, in drops.
+//!
+//! ```
+//! use xrpl_sdk::*;
+//!
+//! let channel = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";
+//! let source = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+//! let claim = source.sign_payment_channel_claim(channel, 1_000_000)?;
+//! assert!(verify_payment_channel_claim(channel, 1_000_000, &claim, &source.public_key_hex())?);
+//! assert!(!verify_payment_channel_claim(channel, 2_000_000, &claim, &source.public_key_hex())?);
+//! # Ok::<(), xrpl_sdk::CoreError>(())
+//! ```
+//!
+//! ## Feature flags
+//!
+//! | Crate | Feature | Default | Enables |
+//! |---|---|---|---|
+//! | `halcyon-xrpl-sdk`, `halcyon-xrpl-client` | `http`, `ws`, `full` | `http` | accepted for compatibility; on native targets both the HTTP and the WebSocket client are always built |
+//! | | `live-tests` | no | the tests that talk to Testnet |
+//! | `halcyon-xrpl-client` | `wasm` | no | the browser build: HTTP through `fetch`, WebSocket through the browser's `WebSocket` |
+//! | `halcyon-xrpl-core` | `std` | yes | the codec, hashes, utilities and JSON support; without it, types and crypto only (`no_std` + `alloc`) |
+//! | | `wasm` | no | `wasm32-unknown-unknown` builds and the JavaScript bindings |
+//!
+//! ## How it is checked
+//!
+//! Everything that has to agree with the XRP Ledger is tested against the
+//! real thing, not against itself:
+//!
+//! - **Signatures, multi-signatures, transaction hashes and channel claims**:
+//!   byte for byte against `rippled` 3.4.1's `sign`, `sign_for` and
+//!   `channel_authorize`, for Ed25519 and secp256k1 keys.
+//! - **Binary codec**: all 34 transaction and 261 ledger-object fixtures of the
+//!   XRPL codec test suite, plus mainnet transactions and ledger entries.
+//! - **Ledger entry IDs**: the `index` of real mainnet entries, xrpl.js's hash
+//!   tests, and a live run that creates each kind of entry on Testnet.
+//! - **Utilities**: xrpl.js's own fixtures and expected results.
+//! - **End to end** (`cargo test -p halcyon-xrpl-sdk --features live-tests`):
+//!   two faucet wallets create a Ticket, Check, Escrow, payment channel (and
+//!   redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding,
+//!   Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on
+//!   Testnet; every ID, hash and balance change must be what the network
+//!   recorded.
+//!
+//! ## Safety
+//!
+//! No `unsafe` code, and no `unwrap`, `expect` or unchecked indexing in
+//! library code (enforced by workspace lints). Private keys and seeds are
+//! zeroized on drop.
+//!
+//! ## License
+//!
+//! MIT, with an attribution requirement: if you use, copy or modify this code,
+//! credit James Turner with a link to <https://github.com/ilubxrp589/xrpl-sdk>.
+
 pub mod wallet;
+
+/// The client crate (`halcyon-xrpl-client`), in full.
+pub use xrpl_client;
+/// The core crate (`halcyon-xrpl-core`), in full.
+pub use xrpl_core;
 
 // Re-exports from xrpl-core
 pub use xrpl_core::address::KeyType;
 pub use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
-pub use xrpl_core::crypto::{sign_transaction, Keypair, Seed};
+pub use xrpl_core::crypto::{
+    sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, Keypair, Seed,
+};
+pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::builders::{self as transactions, Transaction, TxCommon};
 pub use xrpl_core::types::*;
+pub use xrpl_core::utils;
 pub use xrpl_core::CoreError;
 
 // Re-exports from xrpl-client
 pub use xrpl_client::error::ClientError;
+pub use xrpl_client::faucet::{self, FaucetNetwork};
 pub use xrpl_client::http::XrplHttpClient;
 pub use xrpl_client::requests::{self, Paginated, Request};
 pub use xrpl_client::types::*;
@@ -20,6 +368,15 @@ pub use xrpl_client::XrplWsClient;
 pub use xrpl_client::ws::{LedgerEvent, TransactionEvent, WsEvent};
 
 pub use wallet::Wallet;
+
+/// Generate a new wallet (Ed25519) and fund it with test XRP from `network`'s
+/// faucet; returns once a validated ledger shows the account. Only the
+/// address leaves this machine; keep the seed with [`Wallet::seed`].
+pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, ClientError> {
+    let wallet = Wallet::generate();
+    faucet::fund_and_wait(network, &wallet.address).await?;
+    Ok(wallet)
+}
 
 /// Autofill a transaction, sign it, and return the hex-encoded blob.
 pub async fn autofill_and_sign(

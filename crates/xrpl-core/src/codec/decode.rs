@@ -67,7 +67,7 @@ static LEDGER_ENTRY_TYPE_NAMES: LazyLock<HashMap<u16, String>> = LazyLock::new(|
         .collect()
 });
 
-use super::definitions::DEFINITIONS_JSON;
+use super::definitions::{DEFINITIONS_JSON, UINT64_BASE_TEN};
 
 /// Look up transaction type name by numeric code.
 fn transaction_type_name(code: u16) -> Option<&'static str> {
@@ -270,19 +270,20 @@ fn decode_int32(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     Ok((Value::Number(i32::from_be_bytes(arr).into()), 4))
 }
 
+/// `decode_uint64` for the encoder's round-trip test.
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+pub(crate) fn tests_decode_uint64(buf: &[u8], field_name: &str) -> (Value, usize) {
+    decode_uint64(buf, field_name).unwrap()
+}
+
 fn decode_uint64(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreError> {
     let bytes = buf
         .get(..8)
         .ok_or_else(|| CoreError::CodecError("buffer too short for UInt64".to_string()))?;
     // kSmdBaseTen UInt64 fields render as base-10 strings in rippled JSON
     // (sfields.macro); every other UInt64 renders as padded hex.
-    const BASE_TEN: &[&str] = &[
-        "MaximumAmount",
-        "OutstandingAmount",
-        "MPTAmount",
-        "LockedAmount",
-    ];
-    if BASE_TEN.contains(&field_name) {
+    if UINT64_BASE_TEN.contains(&field_name) {
         let arr: [u8; 8] = bytes
             .try_into()
             .map_err(|_| CoreError::CodecError("buffer too short for UInt64".to_string()))?;

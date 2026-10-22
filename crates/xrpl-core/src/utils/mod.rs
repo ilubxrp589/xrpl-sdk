@@ -1,3 +1,16 @@
+//! Everyday conversions, all exact (decimal arithmetic, never floating point):
+//!
+//! | Module | Functions |
+//! |---|---|
+//! | [`xrp`] | [`xrp_to_drops`], [`drops_to_xrp`] |
+//! | [`time`] | ledger time ↔ Unix seconds, ISO 8601, `SystemTime` |
+//! | [`strings`] | [`str_to_hex`], [`hex_to_str`] for `Domain`, memos, URIs |
+//! | [`rates`] | `TransferRate` and `QualityIn`/`QualityOut` ↔ decimal and percent |
+//! | [`nftoken`] | [`parse_nftoken_id`], [`get_nftoken_id`] |
+//! | [`balance_changes`] | [`get_balance_changes`]: every account's balance changes, from metadata |
+//! | [`reserve`] | account reserves and spendable balance |
+//! | [`dex`] | offer quality, midpoint, spread, liquidity |
+
 #[cfg(feature = "std")]
 pub mod balance_changes;
 #[cfg(feature = "std")]

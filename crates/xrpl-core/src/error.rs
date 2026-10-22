@@ -1,3 +1,5 @@
+//! The error type of every fallible function in this crate.
+
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 

@@ -1,3 +1,6 @@
+//! [`ClientError`]: transport and JSON failures, `rippled` errors, and the
+//! sorted outcome of a submitted transaction.
+
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     #[error("HTTP error: {0}")]

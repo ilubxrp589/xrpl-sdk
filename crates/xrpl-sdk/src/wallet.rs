@@ -10,6 +10,8 @@ pub struct Wallet {
     pub keypair: Keypair,
     pub address: String,
     pub account_id: AccountId,
+    /// The seed the keypair came from, when the wallet was made from one.
+    seed: Option<Seed>,
 }
 
 impl Wallet {
@@ -23,9 +25,9 @@ impl Wallet {
     )]
     pub fn generate() -> Self {
         let seed = Seed::generate();
-        Self::from_keypair(
-            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair"),
-        )
+        let keypair =
+            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair");
+        Self::from_keypair(keypair).with_seed(seed)
     }
 
     /// Generate a new random wallet with a specific key type.
@@ -35,16 +37,16 @@ impl Wallet {
     )]
     pub fn generate_with_type(key_type: KeyType) -> Self {
         let seed = Seed::generate_with_type(key_type);
-        Self::from_keypair(
-            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair"),
-        )
+        let keypair =
+            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair");
+        Self::from_keypair(keypair).with_seed(seed)
     }
 
     /// Create a wallet from a base58-encoded seed string.
     pub fn from_seed(seed_str: &str) -> Result<Self, CoreError> {
         let seed = Seed::from_base58(seed_str)?;
         let keypair = Keypair::from_seed(&seed)?;
-        Ok(Self::from_keypair(keypair))
+        Ok(Self::from_keypair(keypair).with_seed(seed))
     }
 
     /// Alias for `from_seed` — XRPL often uses "secret" to mean seed.
@@ -60,7 +62,29 @@ impl Wallet {
             keypair,
             address,
             account_id,
+            seed: None,
         }
+    }
+
+    fn with_seed(mut self, seed: Seed) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    /// The seed (`s…`), to store and restore this wallet with
+    /// [`Wallet::from_seed`]. `None` for a wallet made from a bare keypair.
+    pub fn seed(&self) -> Option<String> {
+        self.seed.as_ref().map(Seed::to_base58)
+    }
+
+    /// Sign a payment channel claim for `amount_drops` (the channel's total
+    /// paid out, not an increment) with this wallet's key.
+    pub fn sign_payment_channel_claim(
+        &self,
+        channel_id: &str,
+        amount_drops: u64,
+    ) -> Result<String, CoreError> {
+        xrpl_core::crypto::sign_payment_channel_claim(channel_id, amount_drops, &self.keypair)
     }
 
     /// Sign a transaction (JSON). Returns the signed tx JSON with
@@ -173,6 +197,21 @@ mod tests {
         let wallet2 = Wallet::from_seed(&seed_str).unwrap();
         assert_eq!(wallet.address, wallet2.address);
         assert_eq!(wallet.public_key_hex(), wallet2.public_key_hex());
+        assert_eq!(wallet.seed().as_deref(), Some(seed_str.as_str()));
+    }
+
+    #[test]
+    fn a_generated_wallet_keeps_its_seed() {
+        for wallet in [
+            Wallet::generate(),
+            Wallet::generate_with_type(KeyType::Secp256k1),
+        ] {
+            let restored = Wallet::from_seed(&wallet.seed().unwrap()).unwrap();
+            assert_eq!(restored.address, wallet.address);
+            assert_eq!(restored.keypair.key_type, wallet.keypair.key_type);
+        }
+        let bare = Wallet::from_keypair(Wallet::generate().keypair.clone());
+        assert!(bare.seed().is_none());
     }
 
     #[test]
