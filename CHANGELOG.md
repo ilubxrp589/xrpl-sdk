@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- Typed ledger objects: `types::ledger_object` has a struct for each of rippled 3.4.1's 31 ledger entry
+  types, generated from its `LEDGER_ENTRY_FORMATS` (`scripts/gen_ledger_objects.py`), and
+  `LedgerObject` over them (unknown types → `Other`). 1,207 mainnet entries of 15 types parse typed
+  and serialize back to exactly rippled's JSON; a 20-entry sample is a fixture test.
+  `account_objects` / `account_objects_all` / `ledger_entry` return them (breaking).
+- `Amount::Mpt` and `Hash192`; typed amounts in `AccountOffer`, `BookOffer` (+ `taker_*_funded`) and
+  `AmmInfo` (breaking: they were `serde_json::Value`), checked against mainnet responses.
 - Int32 fields (LoanScale, RemainingOwnerCountDelta): encode/decode as rippled's STInteger<int32_t>.
 - PermissionValue decodes to rippled's names (granular permission, else TxType + 1).
 - X-addresses (XLS-5d): `address::{encode_x_address, decode_x_address, classic_to_x_address,

@@ -114,7 +114,8 @@ assert_eq!(json["TransactionType"], "Payment");
 - Ed25519 + Secp256k1 key derivation & signing, checked byte for byte against rippled's `sign` / `sign_for`
   and xrpl.js's keypair fixtures
 - X-addresses (XLS-5d): encode/decode, and accepted by the codec in `Account` / `Destination`
-- All XRPL primitive types with serde support
+- All XRPL primitive types with serde support; amounts typed for XRP, IOU and MPT
+- Typed ledger objects for all 31 entry types, generated from rippled's own formats
 - Typed transaction builders for 28 transaction types
 - Reserve calculation utilities
 - DEX price/spread/liquidity utilities
@@ -123,7 +124,8 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `xrpl-client`
 
-- HTTP JSON-RPC client with 18+ methods
+- One `Client` trait over HTTP JSON-RPC, WebSocket and browser WebSocket (wasm); 18+ methods
+- Typed requests: each `Request` names its method and response type; `request_all` follows markers
 - WebSocket client with subscriptions & automatic reconnection
 - Autofill (Sequence, Fee, LastLedgerSequence) with concurrent fetch
 - `submit_and_wait` — reliable submission with polling until validated
