@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Ed25519 signing: transactions and multisign Signer entries were signed over SHA512Half of the signing
+  data; rippled verifies Ed25519 over the data itself, so every Ed25519 signature was rejected.
+  New `Keypair::sign_signing_data` signs the way rippled verifies (secp256k1 signing is unchanged).
+- `collect_signers` orders Signers by 20-byte AccountID (base58 text order differs, and rippled rejects
+  an unsorted Signers array); it now returns `Result`.
+- docs/TESTING.md: the two known-address vectors were wrong; replaced by xrpl.js's fixtures.
+
 ## v0.1.0 (2026-03-19)
 
 Initial release.
