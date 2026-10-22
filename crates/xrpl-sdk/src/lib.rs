@@ -449,6 +449,8 @@ pub use xrpl_core::CoreError;
 
 // Re-exports from xrpl-client
 pub use xrpl_client::error::ClientError;
+#[cfg(not(target_arch = "wasm32"))]
+pub use xrpl_client::blocking::BlockingClient;
 pub use xrpl_client::faucet::{self, FaucetNetwork};
 pub use xrpl_client::http::XrplHttpClient;
 pub use xrpl_client::requests::{self, Paginated, Request};

@@ -133,6 +133,8 @@
 //! (`tests/rippled_responses.rs`). `account_objects`, `ledger_data` and
 //! `ledger_entry` return typed [`xrpl_core::types::LedgerObject`]s.
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blocking;
 pub mod client;
 pub mod error;
 pub mod faucet;
