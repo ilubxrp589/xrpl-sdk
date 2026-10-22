@@ -9,6 +9,8 @@ pub mod address;
 pub mod codec;
 pub mod crypto;
 pub mod error;
+#[cfg(feature = "std")]
+pub mod hashes;
 pub mod transaction;
 pub mod types;
 pub mod utils;
