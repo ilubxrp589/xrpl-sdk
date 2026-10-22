@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "halcyon-xrpl-client"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures",
  "halcyon-xrpl-core",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "halcyon-xrpl-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bs58",
  "ed25519-dalek",
@@ -507,7 +507,7 @@ dependencies = [
 
 [[package]]
 name = "halcyon-xrpl-sdk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "halcyon-xrpl-client",
  "halcyon-xrpl-core",

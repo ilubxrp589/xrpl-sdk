@@ -7,7 +7,7 @@ every release ships with documentation and examples.
 Progress is tracked here and in [CHANGELOG.md](CHANGELOG.md). Suggestions and bug reports are
 welcome as GitHub issues.
 
-## 0.1: foundations (current)
+## 0.2: foundations (current, the first crates.io release)
 
 - [x] Binary codec on `rippled` 3.4.1's definitions: all 83 transaction types, 357 fields,
       byte-exact on the XRPL codec fixtures and mainnet data
@@ -22,7 +22,7 @@ welcome as GitHub issues.
 - [x] Testnet / Devnet faucet and `generate_faucet_wallet`
 - [x] A live Testnet test that checks IDs, hashes and helpers against what the network records
 
-## 0.2: every request, typed
+## 0.3: every request, typed
 
 - [ ] A typed request and response for every public `rippled` and Clio method (`ledger_data`,
       `nft_info`, `nft_buy_offers` / `nft_sell_offers`, `nfts_by_issuer`, `path_find`,
@@ -30,14 +30,14 @@ welcome as GitHub issues.
       `vault_info`, `get_aggregate_price`, …), each checked against recorded responses
 - [ ] Typed WebSocket stream events (transactions, validations, order books, path finding)
 
-## 0.3: every transaction, typed
+## 0.4: every transaction, typed
 
 - [ ] A typed model for each of `rippled`'s transaction types, generated from its own
       definitions, with required-field checks
 - [ ] `Batch` (XLS-56): building, inner-transaction signing, `BatchSigners`
 - [ ] Transaction flags as named constants for every type
 
-## 0.4: developer experience
+## 0.5: developer experience
 
 - [ ] A cookbook: send XRP, issue a token, trust lines, NFTs, AMM, escrow, checks, payment
       channels, multisign, batch, subscriptions, DEX orders

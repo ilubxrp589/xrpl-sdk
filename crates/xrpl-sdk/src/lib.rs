@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-sdk = "0.1"
+//! halcyon-xrpl-sdk = "0.2"
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! serde_json = "1"
 //! ```

@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 (2026-10-22)
+
+The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
+`halcyon-xrpl-sdk`. v0.1.0 (below) was released on GitHub only.
 
 ### Changed (first crates.io release)
 - **The crates are published as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
