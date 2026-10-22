@@ -154,7 +154,7 @@ impl IouAmount {
 
         // rippled STAmount::getText: extreme exponents print as
         // "<mantissa>e<exponent>" (STAmount.cpp:696).
-        if exp != 0 && (exp < -25 || exp > -5) {
+        if exp != 0 && !(-25..=-5).contains(&exp) {
             return format!("{sign}{s}e{exp}");
         }
 

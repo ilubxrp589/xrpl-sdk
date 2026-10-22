@@ -830,7 +830,11 @@ mod tests {
             let blob = hex::decode(blob_hex).unwrap();
             let json = crate::codec::decode::decode_transaction_binary(&blob).unwrap();
             assert_eq!(json["Account"], account, "{json}");
-            assert_eq!(encode_transaction_json(&json, false).unwrap(), blob, "{json}");
+            assert_eq!(
+                encode_transaction_json(&json, false).unwrap(),
+                blob,
+                "{json}"
+            );
         }
         assert_eq!(encode_account_id_field(&json!("")).unwrap(), vec![0x00]);
     }
