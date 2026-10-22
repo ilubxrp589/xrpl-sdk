@@ -3076,6 +3076,15 @@ pub struct OfferCreate {
     pub offer_sequence: Option<u32>,
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+    /// What the owner holds of `TakerGets`' asset: `rippled` adds it in transaction
+    /// streams and in `ledger` with `owner_funds: true`. Not a transaction field: the
+    /// codec ignores it.
+    #[serde(
+        rename = "owner_funds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub owner_funds: Option<String>,
 }
 
 impl OfferCreate {
@@ -3101,6 +3110,7 @@ impl OfferCreate {
             expiration: None,
             offer_sequence: None,
             domain_id: None,
+            owner_funds: None,
         }
     }
 }

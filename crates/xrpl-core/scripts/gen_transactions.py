@@ -116,6 +116,12 @@ for n in names:
     for f in own:
         out.extend(field(f, f["optionality"] != 0))
         nfields += 1
+    if n == "OfferCreate":
+        out += ['    /// What the owner holds of `TakerGets`\' asset: `rippled` adds it in transaction',
+                '    /// streams and in `ledger` with `owner_funds: true`. Not a transaction field: the',
+                '    /// codec ignores it.',
+                '    #[serde(rename = "owner_funds", default, skip_serializing_if = "Option::is_none")]',
+                '    pub owner_funds: Option<String>,']
     if n == "Payment":
         out += ['    /// `rippled`\'s API name for `Amount` in what it returns (API v1 writes both; v2 only',
                 '    /// this). Not a transaction field: the codec ignores it, and a transaction read',
@@ -154,6 +160,8 @@ for n in names:
             out.append(f"            {s},")
     if n == "Payment":
         out.append("            deliver_max: None,")
+    if n == "OfferCreate":
+        out.append("            owner_funds: None,")
     out.append("        }")
     out.append("    }")
     out.append("}")

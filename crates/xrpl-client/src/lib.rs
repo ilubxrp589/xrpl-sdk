@@ -138,6 +138,7 @@ pub mod error;
 pub mod faucet;
 pub mod http;
 pub mod requests;
+pub mod stream;
 pub mod types;
 
 #[cfg(not(target_arch = "wasm32"))]

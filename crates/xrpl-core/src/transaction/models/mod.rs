@@ -169,6 +169,11 @@ pub struct Common {
     /// into the JSON it returns. The codec ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash: Option<Hash256>,
+    /// The close time of the ledger it is in (ledger time): not a
+    /// transaction field, but `rippled` adds it in streams and `tx`. The
+    /// codec ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<u64>,
 }
 
 impl Common {
@@ -195,6 +200,7 @@ impl Common {
             sponsor_flags: None,
             sponsor_signature: None,
             hash: None,
+            date: None,
         }
     }
 }

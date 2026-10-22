@@ -1,0 +1,10 @@
+[
+ {
+  "consensus": "accepted",
+  "type": "consensusPhase"
+ },
+ {
+  "consensus": "open",
+  "type": "consensusPhase"
+ }
+]
