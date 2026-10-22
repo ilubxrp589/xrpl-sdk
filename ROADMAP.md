@@ -7,7 +7,7 @@ every release ships with documentation and examples.
 Progress is tracked here and in [CHANGELOG.md](CHANGELOG.md). Suggestions and bug reports are
 welcome as GitHub issues.
 
-## 0.2: foundations (current, the first crates.io release)
+## 0.2: foundations and every request typed (released 2026-10-22, the first crates.io release)
 
 - [x] Binary codec on `rippled` 3.4.1's definitions: all 83 transaction types, 357 fields,
       byte-exact on the XRPL codec fixtures and mainnet data
@@ -19,27 +19,23 @@ welcome as GitHub issues.
 - [x] Transaction hashes and the ID of every ledger entry type (`keylet`)
 - [x] Utilities: XRP ↔ drops, ledger time, text ↔ hex, rates, NFTokenIDs, balance changes
 - [x] Payment channel claims: sign and verify
+- [x] A typed request and response for every public `rippled` and Clio method (43), each response
+      checked field by field against one recorded from a real server
 - [x] Testnet / Devnet faucet and `generate_faucet_wallet`
 - [x] A live Testnet test that checks IDs, hashes and helpers against what the network records
 
-## 0.3: every request, typed
-
-- [x] A typed request and response for every public `rippled` and Clio method: 43, each response
-      checked against one recorded from a real server, field by field (merged; ships in the next
-      release)
-- [ ] Typed WebSocket stream events (transactions, validations, order books, path finding)
-
-## 0.4: every transaction, typed
+## 0.3: every transaction, typed
 
 - [ ] A typed model for each of `rippled`'s transaction types, generated from its own
       definitions, with required-field checks
 - [ ] `Batch` (XLS-56): building, inner-transaction signing, `BatchSigners`
 - [ ] Transaction flags as named constants for every type
 
-## 0.5: developer experience
+## 0.4: developer experience
 
 - [ ] A cookbook: send XRP, issue a token, trust lines, NFTs, AMM, escrow, checks, payment
       channels, multisign, batch, subscriptions, DEX orders
+- [ ] Typed WebSocket stream events (transactions, validations, order books, path finding)
 - [ ] A blocking (non-async) client
 - [ ] A command-line tool (`cargo install`)
 - [ ] An example of every public item on docs.rs
