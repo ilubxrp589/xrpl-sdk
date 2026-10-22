@@ -2,13 +2,15 @@
 name = "halcyon-xrpl-core"
 version = "0.1.0"
 edition = "2021"
-description = "Core types, binary codec, and cryptography for the XRP Ledger"
+description = "XRP Ledger types, binary codec, Ed25519/secp256k1 signing, transaction hashes and ledger entry IDs, checked byte for byte against rippled"
 license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["James Turner"]
 readme = "../../README.md"
-keywords = ["xrpl", "xrp", "ripple", "blockchain", "crypto"]
-categories = ["cryptography", "api-bindings"]
+homepage = "https://github.com/ilubxrp589/xrpl-sdk"
+documentation = "https://docs.rs/halcyon-xrpl-core"
+keywords = ["xrpl", "xrp", "ripple", "blockchain", "sdk"]
+categories = ["cryptography::cryptocurrencies", "encoding", "no-std", "wasm"]
 
 [lib]
 name = "xrpl_core"
@@ -47,3 +49,7 @@ serde_json = { workspace = true }
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+features = ["std"]
+rustdoc-args = ["--cfg", "docsrs"]

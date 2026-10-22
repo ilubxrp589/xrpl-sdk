@@ -1,3 +1,6 @@
+//! [`XrplHttpClient`]: JSON-RPC over HTTPS (rustls on native targets, the
+//! browser's `fetch` on `wasm32`), with a 30-second timeout.
+
 use crate::client::Client;
 use crate::error::ClientError;
 use serde_json::{json, Value};
@@ -16,7 +19,7 @@ impl XrplHttpClient {
         #[cfg(not(target_arch = "wasm32"))]
         let inner = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
-            .user_agent("xrpl-rust-sdk/0.1")
+            .user_agent(concat!("halcyon-xrpl-client/", env!("CARGO_PKG_VERSION")))
             .build()?;
 
         #[cfg(target_arch = "wasm32")]
@@ -87,6 +90,16 @@ impl Client for XrplHttpClient {
 mod tests {
     use super::*;
     use crate::types::*;
+
+    #[test]
+    fn mainnet_fee_deserializes() {
+        // rippled 3.4.1 (.39) `fee`, 2026-10-22: the queue and ledger sizes are strings.
+        let fee: FeeResult =
+            serde_json::from_str(include_str!("../tests/fixtures/mainnet_fee.json")).unwrap();
+        assert!(fee.current_ledger_size.is_some() && fee.max_queue_size.is_some());
+        assert!(fee.ledger_current_index.unwrap() > 107_000_000);
+        assert_eq!(fee.levels.unwrap().reference_level, "256");
+    }
 
     #[test]
     fn mainnet_amounts_deserialize_typed() {

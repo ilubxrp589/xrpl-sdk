@@ -134,6 +134,15 @@ static FIELD_BY_ID: LazyLock<HashMap<(u16, u16), FieldDef>> = LazyLock::new(|| {
         .collect()
 });
 
+/// UInt64 fields rippled's JSON writes in base 10 (`kSmdBaseTen` in
+/// sfields.macro); every other UInt64 is hex.
+pub(crate) const UINT64_BASE_TEN: &[&str] = &[
+    "MaximumAmount",
+    "OutstandingAmount",
+    "MPTAmount",
+    "LockedAmount",
+];
+
 /// rippled 3.4.1's `server_definitions` result, as embedded in this crate.
 pub const DEFINITIONS_JSON: &str = include_str!("definitions.json");
 

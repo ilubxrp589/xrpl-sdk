@@ -14,6 +14,26 @@
   validation that never came. `telINSUF_FEE_P` and `telCAN_NOT_QUEUE*` are retries (resubmitted by
   `submit_and_wait`); the other `tel`s are failures.
 
+### Added (utilities)
+- `hashes`: `hash_signed_tx`, `hash_signed_tx_blob`, `transaction_id`, and `keylet::*`, the ID of
+  every ledger entry type in rippled 3.4.1.
+- `crypto::{sign_payment_channel_claim, verify_payment_channel_claim}` and
+  `Wallet::sign_payment_channel_claim`.
+- `utils`: `xrp_to_drops` / `drops_to_xrp`, ledger time ↔ Unix / ISO 8601 / `SystemTime`,
+  `str_to_hex` / `hex_to_str`, TransferRate and quality conversions, `parse_nftoken_id`,
+  `get_nftoken_id`, `get_balance_changes` — exact decimal arithmetic throughout.
+- `faucet` (Testnet / Devnet) and `generate_faucet_wallet`; `Wallet::seed`.
+- A live Testnet test (`--features live-tests`) that checks keylets, hashes, NFTokenIDs, balance
+  changes and channel claims against what the network records.
+
+### Fixed (found by the live Testnet test)
+- `fee` (and so `autofill` and `submit_transaction`) failed against real rippled servers: rippled
+  sends `current_ledger_size`, `current_queue_size`, `expected_ledger_size` and `max_queue_size` as
+  strings. Both forms are accepted now; `max_queue_size` and `levels` are added.
+- The codec took a UInt64 only as exactly 16 hex digits. It now takes what rippled does: a JSON
+  integer, or hex of any length that fits, and base 10 for `MaximumAmount`, `OutstandingAmount`,
+  `MPTAmount` and `LockedAmount` (an MPTokenIssuanceCreate's `MaximumAmount` was refused).
+
 ### Removed
 - `codec::field::{FieldCode, FIELD_DEFS, lookup_field, lookup_field_by_id}`: an unused, stale copy of
   the field registry. `codec::definitions` (`lookup_field_def`, `lookup_field_def_by_id`) is the one

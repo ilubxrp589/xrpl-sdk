@@ -153,7 +153,7 @@ fn encode_field_value(
         Some(TypeCode::UInt8) => encode_uint8(value),
         Some(TypeCode::UInt16) => encode_uint16(value),
         Some(TypeCode::UInt32) => encode_uint32(value, field_name),
-        Some(TypeCode::UInt64) => encode_uint64(value),
+        Some(TypeCode::UInt64) => encode_uint64(value, field_name),
         Some(TypeCode::Int32) => encode_int32(value, field_name),
         Some(TypeCode::Hash128) => encode_hash(value, 16),
         Some(TypeCode::Hash160) => encode_hash(value, 20),
@@ -243,18 +243,26 @@ fn encode_int32(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
     })
 }
 
-fn encode_uint64(value: &Value) -> Result<Vec<u8>, CoreError> {
-    let s = value
-        .as_str()
-        .ok_or_else(|| CoreError::CodecError("UInt64 must be a hex string".to_string()))?;
-    let bytes = hex::decode(s).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-    if bytes.len() != 8 {
-        return Err(CoreError::CodecError(format!(
-            "UInt64 hex must be 8 bytes, got {}",
-            bytes.len()
-        )));
-    }
-    Ok(bytes)
+/// UInt64 as rippled's STParsedJSON takes it: a JSON integer, or a string of
+/// hex digits (any length that fits), base 10 for the `kSmdBaseTen` fields
+/// (`MaximumAmount`, `MPTAmount`, …).
+fn encode_uint64(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
+    let base_ten = super::definitions::UINT64_BASE_TEN.contains(&field_name);
+    let n = match value {
+        Value::Number(n) => n.as_u64(),
+        Value::String(s) => {
+            let radix = if base_ten { 10 } else { 16 };
+            let digits = !s.is_empty() && s.chars().all(|c| c.is_digit(radix));
+            digits.then(|| u64::from_str_radix(s, radix).ok()).flatten()
+        }
+        _ => None,
+    };
+    n.map(|n| n.to_be_bytes().to_vec()).ok_or_else(|| {
+        CoreError::CodecError(format!(
+            "UInt64 field '{field_name}' must be a non-negative integer or a {} string that fits 64 bits, got: {value}",
+            if base_ten { "base-10" } else { "hex" }
+        ))
+    })
 }
 
 fn encode_hash(value: &Value, expected_len: usize) -> Result<Vec<u8>, CoreError> {
@@ -879,6 +887,46 @@ pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// UInt64 in every form rippled's STParsedJSON accepts (found by the live
+    /// testnet test: OracleSet's AssetPrice as a number, MaximumAmount in base 10).
+    #[test]
+    fn uint64_takes_what_rippled_takes() {
+        let enc = |v: Value, field: &str| encode_uint64(&v, field).map(hex::encode_upper);
+        assert_eq!(enc(json!(74), "AssetPrice").unwrap(), "000000000000004A");
+        assert_eq!(enc(json!("2E4"), "AssetPrice").unwrap(), "00000000000002E4");
+        assert_eq!(
+            enc(json!("00000000000002e4"), "AssetPrice").unwrap(),
+            "00000000000002E4"
+        );
+        assert_eq!(
+            enc(json!("100000"), "MaximumAmount").unwrap(),
+            "00000000000186A0"
+        );
+        assert_eq!(
+            enc(json!("18446744073709551615"), "MPTAmount").unwrap(),
+            "FFFFFFFFFFFFFFFF"
+        );
+        for (bad, field) in [
+            (json!(-1), "AssetPrice"),
+            (json!("10000000000000000"), "AssetPrice"),
+            (json!("+5"), "AssetPrice"),
+            (json!(""), "AssetPrice"),
+            (json!("1A"), "MaximumAmount"),
+            (json!(1.5), "AssetPrice"),
+        ] {
+            assert!(enc(bad.clone(), field).is_err(), "{bad} for {field}");
+        }
+        // What the decoder writes, the encoder reads back.
+        for (field, hex) in [
+            ("MaximumAmount", "00000000000186A0"),
+            ("AssetPrice", "00000000000002E4"),
+        ] {
+            let (json, _) =
+                crate::codec::decode::tests_decode_uint64(&hex::decode(hex).unwrap(), field);
+            assert_eq!(enc(json, field).unwrap(), hex);
+        }
+    }
 
     /// Mainnet pseudo-transactions round-trip byte for byte. A UNLModify's Account is never set: an empty
     /// VL (`81 00`), "" in JSON (#107068416). An EnableAmendment's is set to the zero account: a 20-byte VL

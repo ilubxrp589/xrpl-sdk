@@ -1,3 +1,7 @@
+//! Classic addresses (`r…`), X-addresses (XLS-5d: an address with its
+//! destination tag) and seeds (`s…`): base58check with the XRP Ledger's
+//! alphabet, as `rippled` encodes them.
+
 use crate::CoreError;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -115,7 +119,7 @@ fn base58_decode(s: &str) -> Result<Vec<u8>, CoreError> {
 }
 
 /// Encode a 20-byte account ID to a classic address with base58check.
-/// Prefix: [0x00], checksum appended.
+/// Prefix: `0x00`, checksum appended.
 pub fn encode_account_id(bytes: &[u8; 20]) -> String {
     let mut payload = Vec::with_capacity(25);
     payload.push(0x00); // account ID prefix
@@ -126,7 +130,7 @@ pub fn encode_account_id(bytes: &[u8; 20]) -> String {
 }
 
 /// Decode a classic address to a 20-byte account ID.
-/// Validates prefix [0x00] and checksum.
+/// Validates prefix `0x00` and checksum.
 pub fn decode_account_id(addr: &str) -> Result<[u8; 20], CoreError> {
     let decoded = base58_decode(addr)?;
 
@@ -261,7 +265,7 @@ pub enum KeyType {
 
 /// Encode a 16-byte seed to base58check.
 /// Ed25519 prefix: [0x01, 0xE1, 0x4B] → starts with "sEd"
-/// Secp256k1 prefix: [0x21] → starts with "s"
+/// Secp256k1 prefix: `0x21` → starts with "s"
 pub fn encode_seed(bytes: &[u8; 16], key_type: KeyType) -> String {
     let prefix: &[u8] = match key_type {
         KeyType::Ed25519 => &[0x01, 0xE1, 0x4B],
