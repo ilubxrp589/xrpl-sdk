@@ -1784,7 +1784,6 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
- "sha2",
  "thiserror",
  "tokio",
  "xrpl-client",

@@ -84,16 +84,8 @@ impl Wallet {
         &self,
         tx: &serde_json::Value,
     ) -> Result<serde_json::Value, CoreError> {
-        use sha2::{Digest, Sha512};
-
         let encoded = xrpl_core::codec::encode_for_multisigning(tx, &self.address)?;
-
-        // SHA512Half
-        let hash: [u8; 64] = Sha512::digest(&encoded).into();
-        let hash_bytes = &hash[..32];
-
-        // Sign the hash
-        let signature = self.keypair.sign(hash_bytes)?;
+        let signature = self.keypair.sign_signing_data(&encoded)?;
 
         Ok(serde_json::json!({
             "Signer": {
@@ -318,6 +310,29 @@ mod tests {
             s1["Signer"]["TxnSignature"].as_str().unwrap(),
             s2["Signer"]["TxnSignature"].as_str().unwrap()
         );
+    }
+
+    #[test]
+    fn sign_for_multisigning_matches_rippled() {
+        // rippled 3.4.1 `sign_for` (offline) with xrpl.js's keypair fixture
+        // seeds; both schemes are deterministic.
+        let tx = serde_json::json!({
+            "TransactionType": "Payment",
+            "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+            "Amount": "1000000",
+            "Fee": "30",
+            "Sequence": 1,
+            "Flags": 0,
+            "SigningPubKey": ""
+        });
+        for (seed, sig) in [
+            ("sp5fghtJtpUorTwvof1NpDXAzNwf5", "30450221009A24EEBC327296E293759F66713325FD9FDF60CF8D7FD9F31D9792CE3281709902203F5FEE128F51892B6A7278E28E8724F05ED55D9B062967B6FF866B53CA67A52B"),
+            ("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r", "1209DCDAE666452AB21CA541F6653A80290F96336C52872463AD1D2A9B9D69CC6480E4397FFC9EA0678E45AB93E85D2AFE2AD36D86898387270F851296408406"),
+        ] {
+            let signer = Wallet::from_seed(seed).unwrap().sign_for_multisigning(&tx).unwrap();
+            assert_eq!(signer["Signer"]["TxnSignature"], sig, "{seed}");
+        }
     }
 
     #[test]

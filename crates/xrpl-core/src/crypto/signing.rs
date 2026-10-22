@@ -101,6 +101,16 @@ impl Keypair {
         }
     }
 
+    /// Sign XRPL signing data (a hash prefix plus serialized fields) the way
+    /// rippled verifies it (PublicKey.cpp `verify`): secp256k1 signs
+    /// SHA512Half(data), Ed25519 signs the data itself.
+    pub fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
+        match self.key_type {
+            KeyType::Ed25519 => self.sign(data),
+            KeyType::Secp256k1 => self.sign(&sha512_half(data)),
+        }
+    }
+
     /// Verify a signature.
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
         match self.key_type {
@@ -152,7 +162,7 @@ pub fn sha512_half(data: &[u8]) -> [u8; 32] {
 /// 1. Sets SigningPubKey
 /// 2. Removes TxnSignature
 /// 3. Serializes for signing (prefix "STX\0")
-/// 4. SHA512-half, sign, sets TxnSignature
+/// 4. Signs it (`Keypair::sign_signing_data`), sets TxnSignature
 ///
 /// Returns the signed transaction as a JSON Value with TxnSignature and SigningPubKey set.
 #[cfg(feature = "std")]
@@ -182,11 +192,7 @@ pub fn sign_transaction(
     let mut payload = vec![0x53, 0x54, 0x58, 0x00];
     payload.extend_from_slice(&encoded);
 
-    // SHA512-half
-    let hash = sha512_half(&payload);
-
-    // Sign
-    let signature = keypair.sign(&hash)?;
+    let signature = keypair.sign_signing_data(&payload)?;
 
     // Set TxnSignature — tx was cloned from a known object, so this always succeeds
     let obj = tx
@@ -269,6 +275,100 @@ mod tests {
         let message = sha512_half(b"test transaction data");
         let sig = keypair.sign(&message).unwrap();
         assert!(keypair.verify(&message, &sig).unwrap());
+    }
+
+    // Known answers. Keys, addresses and the "test message" signatures are
+    // xrpl.js's ripple-keypairs fixtures (test/fixtures/api.json); rippled's
+    // wallet_propose derives the same keys and addresses. The fixture writes
+    // private keys with a type byte (00 / ED) that the keypair does not hold.
+    const SECP_SEED: &str = "sp5fghtJtpUorTwvof1NpDXAzNwf5";
+    const SECP_ADDRESS: &str = "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1";
+    const ED_SEED: &str = "sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r";
+    const ED_ADDRESS: &str = "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD";
+
+    fn known_keypair(
+        seed: &str,
+        key_type: KeyType,
+        private_key: &str,
+        public_key: &str,
+        address: &str,
+    ) -> Keypair {
+        let seed = Seed::from_base58(seed).unwrap();
+        assert_eq!(seed.key_type, key_type);
+        let keypair = Keypair::from_seed(&seed).unwrap();
+        assert_eq!(hex::encode_upper(&keypair.private_key), private_key[2..]);
+        assert_eq!(hex::encode_upper(&keypair.public_key), public_key);
+        assert_eq!(keypair.classic_address(), address);
+        keypair
+    }
+
+    #[test]
+    fn known_answer_secp256k1_keys_address_and_signature() {
+        let keypair = known_keypair(
+            SECP_SEED,
+            KeyType::Secp256k1,
+            "00D78B9735C3F26501C7337B8A5727FD53A6EFDBC6AA55984F098488561F985E23",
+            "030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D435",
+            SECP_ADDRESS,
+        );
+        // secp256k1 signs SHA512Half(message) (RFC 6979, low S).
+        let hash = sha512_half(b"test message");
+        let sig = "30440220583A91C95E54E6A651C47BEC22744E0B101E2C4060E7B08F6341657DAD9BC3EE02207D1489C7395DB0188D3A56A977ECBA54B36FA9371B40319655B1B4429E33EF2D";
+        assert_eq!(hex::encode_upper(keypair.sign(&hash).unwrap()), sig);
+        assert!(keypair.verify(&hash, &hex::decode(sig).unwrap()).unwrap());
+    }
+
+    #[test]
+    fn known_answer_ed25519_keys_address_and_signature() {
+        let keypair = known_keypair(
+            ED_SEED,
+            KeyType::Ed25519,
+            "EDB4C4E046826BD26190D09715FC31F4E6A728204EADD112905B08B14B7F15C4F3",
+            "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+            ED_ADDRESS,
+        );
+        // Ed25519 signs the message itself, with no hash first.
+        let sig = "CB199E1BFD4E3DAA105E4832EEDFA36413E1F44205E4EFB9E27E826044C21E3E2E848BBC8195E8959BADF887599B7310AD1B7047EF11B682E0D068F73749750E";
+        assert_eq!(
+            hex::encode_upper(keypair.sign(b"test message").unwrap()),
+            sig
+        );
+        assert!(keypair
+            .verify(b"test message", &hex::decode(sig).unwrap())
+            .unwrap());
+    }
+
+    // rippled 3.4.1 signed this Payment with the seeds above (`sign`, offline).
+    // Both schemes are deterministic, so the blobs must match byte for byte.
+    fn signed_blob(seed: &str, account: &str) -> String {
+        let keypair = Keypair::from_seed(&Seed::from_base58(seed).unwrap()).unwrap();
+        let tx = serde_json::json!({
+            "TransactionType": "Payment",
+            "Account": account,
+            "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "Amount": "1000000",
+            "Fee": "12",
+            "Sequence": 1,
+            "Flags": 0
+        });
+        let signed = sign_transaction(&tx, &keypair).unwrap();
+        hex::encode_upper(crate::codec::encode_transaction_json(&signed, false).unwrap())
+    }
+
+    #[test]
+    fn sign_transaction_matches_rippled_secp256k1() {
+        assert_eq!(
+            signed_blob(SECP_SEED, SECP_ADDRESS),
+            "120000220000000024000000016140000000000F424068400000000000000C7321030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D43574473045022100BC95504DC72DDBDAA0F5EAA973EC07E057FD9A3E7500AC3CF07454C68219985E02200B0992C47857A867F5664BB6F74E62F086A59A0C31848E0FB3819127E8EC0A1281148049717CC948789F32F267ADC2582484E3DFA6988314B5F762798A53D543A014CAF8B297CFF8F2F937E8"
+        );
+    }
+
+    #[test]
+    fn sign_transaction_matches_rippled_ed25519() {
+        assert_eq!(
+            signed_blob(ED_SEED, ED_ADDRESS),
+            "120000220000000024000000016140000000000F424068400000000000000C7321ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A637440A7C427E6D84B1DB144466DF589D88C2F4CFC530743015EF5E5C31587FDA5334EB5A7E9C418DC17702A56860C28EEC2475098106330504543CEF0965D27EF570C8114D28B177E48D9A8D057E70F7E464B498367281B988314B5F762798A53D543A014CAF8B297CFF8F2F937E8"
+        );
     }
 
     #[test]
