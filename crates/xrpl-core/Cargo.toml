@@ -15,7 +15,7 @@ crate-type = ["rlib"]
 [features]
 default = ["std"]
 std = ["serde/std", "serde_json", "hex/std", "rand", "thiserror/std", "bs58/std"]
-wasm = ["wasm-bindgen", "js-sys", "getrandom", "std"]
+wasm = ["wasm-bindgen", "js-sys", "getrandom", "std", "getrandom_03"]
 
 [dependencies]
 serde = { workspace = true }
@@ -36,6 +36,9 @@ subtle = { workspace = true }
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 getrandom = { version = "0.2", features = ["js"], optional = true }
+# rand 0.9 draws on getrandom 0.3, which needs its wasm_js backend on wasm32
+# (plus the getrandom_backend cfg in .cargo/config.toml).
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"], optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

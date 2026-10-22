@@ -1,0 +1,5 @@
+# getrandom 0.3 (under rand 0.9) needs its JS backend chosen by cfg on wasm32;
+# see https://docs.rs/getrandom/0.3/#webassembly-support. Downstream wasm builds
+# set the same flag themselves.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
