@@ -1,5 +1,83 @@
 # Changelog
 
+## v0.5.0 (2026-10-22)
+
+Trust: fuzzing in CI, benchmarks, a minimum Rust version, and a parity report.
+
+### Fixed
+- **`Number` (`STNumber`, the decimal type of vaults and loans) now follows `rippled` 3.4.1
+  exactly**, checked value by value against `rippled`'s `simulate`:
+  - Bytes not in normal form decode to the text `rippled` shows: mantissa 13830756765796644,
+    exponent 1 reads `"13830756765796644e1"` (was `"138307567657966440"`), and exponents below
+    -32,768 read `0`. Found by the new round-trip fuzz target.
+  - Small decimals drop trailing zeros (`"0.0000000123"`), and `"999999999999999999"` no longer
+    gains an `e0`.
+  - Encoding refuses what `rippled` refuses instead of rounding it: more than 19 significant
+    digits, digits beyond 64 bits, forms such as `"00012"`, `".5"` and `"5."`, exponents out of
+    range, and JSON integers beyond 32 bits. 32-bit JSON integers are now accepted, as `rippled`
+    accepts them.
+
+- **Amounts follow `rippled`'s binary rules** (also checked against `simulate`):
+  - A negative XRP amount decodes as `"-100"`; it decoded without its sign. Negative zero is
+    refused. `decode_amount_xrp` refuses negative amounts (`Amount::Xrp` holds drops ≥ 0); the
+    new `decode_xrp_signed` and `encode_xrp_signed` read and write the sign.
+  - A token amount is decoded only in canonical form (mantissa 10^15 to 10^16 - 1, exponent -96
+    to 80, zero as `0x8000000000000000`), and never with XRP's currency or issuer. Found by the
+    round-trip fuzz target.
+  - XRP drops in JSON are read with `rippled`'s number syntax: `"-100"`, `"+100"`, `"1e2"` and
+    32-bit JSON integers are accepted; `"0100"` is refused.
+  - XRP amounts are limited to 2^61 - 1 drops (bit 61 marks an MPT amount); 2^61 to 2^62 - 1
+    were encoded as bytes `rippled` reads as an MPT.
+  - MPT amounts: a magnitude above `i64::MAX` is refused when decoding (found by the round-trip
+    fuzz target; `rippled` cannot write one as JSON); values are read with `rippled`'s number
+    syntax (`"1e3"`, `"-0"`; not `"0100"` or `"1.5"`); `mpt_issuance_id` must be 24 bytes (a
+    shorter or longer one produced malformed bytes).
+- **`halcyon-xrpl-core` builds without default features again** (`no_std` + `alloc`):
+  `crypto::sign_transaction` was re-exported without its `std` gate. CI now builds it.
+
+- **Payment paths follow `rippled`'s binary rules** (checked against `simulate`): an empty path
+  or PathSet and unknown path step bits are refused when decoding; an empty step (`{}`), which was
+  encoded as the PathSet's end marker and corrupted the rest of the transaction, is refused when
+  encoding. Found by the round-trip fuzz target.
+
+- **Objects and arrays follow `rippled`'s reader**: a duplicate field, an end-of-array marker
+  inside an object, an end-of-object marker inside an array, an array element that is not an
+  object, and bytes after a transaction's end-of-object marker are refused. Each decoded into
+  odd JSON (a duplicate silently replaced the first). Found by the round-trip fuzz target.
+- `Issue` follows `rippled`'s reader: a token issue with an all-zero issuer is refused, and bytes
+  marking an MPT issue without the 4-byte sequence are refused (they decoded as a token issue).
+- `Number`: at the top exponent, a mantissa above `kMaxRepUp` (9,223,372,036,854,775,810) is
+  refused, as in `rippled`; one at that limit is accepted when encoding.
+
+### Changed (breaking)
+- `PathStep` (in `transaction::models` and `xrpl_client::types`) has a new field,
+  `mpt_issuance_id`: `rippled` 3.4.1 path steps can convert into an MPT (type 64), and the codec
+  now reads and writes them.
+- The codec refuses input that `rippled` refuses instead of rounding or guessing: `Number` values
+  it cannot hold exactly, non-canonical amounts, empty paths and empty path steps (details
+  above). `decode_amount_xrp` refuses a negative amount.
+
+### Changed
+- **secp256k1 signing is about twice as fast**: it signs from the secret scalar instead of first
+  deriving the public key (which `k256`'s `SigningKey` does on every construction). Signatures
+  are unchanged, byte for byte (RFC 6979; checked against `rippled`'s `sign`).
+
+### Added
+- **`rust-version`**: `halcyon-xrpl-core` 1.85, the other crates 1.88, checked in CI with the
+  locked dependencies.
+- **Fuzzing in CI** (`.github/workflows/fuzz.yml`): eight targets, four of them new
+  (`fuzz_roundtrip`, `fuzz_models`, `fuzz_hashes`, `fuzz_utils`). They run a minute each on every
+  pull request and 15 minutes each weekly, from a corpus seeded with real XRPL data
+  (`fuzz/seed_corpus.py`).
+- **Benchmarks against xrpl-rust** on the same inputs (`benchmarks/`, results in
+  `docs/BENCHMARKS.md`).
+- **`docs/PARITY.md`**: every check against `rippled` 3.4.1, with its numbers and how to repeat
+  it. `docs/TESTING.md` rewritten to match the tests as they are.
+- `crates/xrpl-core/scripts/probe_number.py`: asks a `rippled` node how it reads and writes
+  `Number` values.
+- The XRPLF codec fixtures are now checked in both directions (bytes → JSON as well as
+  JSON → bytes).
+
 ## v0.4.0 (2026-10-22)
 
 Developer experience: a cookbook, the command line, a blocking client, typed streams.

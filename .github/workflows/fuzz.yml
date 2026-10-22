@@ -1,0 +1,55 @@
+name: Fuzz
+
+# Every fuzz target, from a corpus seeded with real XRPL data
+# (fuzz/seed_corpus.py): a minute each on every push and pull request, a
+# quarter of an hour each every Monday. A crash fails the job and uploads the
+# input that caused it; `cargo +nightly fuzz run <target> <file>` replays it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds per target
+        default: "600"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_decode
+          - fuzz_roundtrip
+          - fuzz_encode
+          - fuzz_models
+          - fuzz_hashes
+          - fuzz_utils
+          - fuzz_amount
+          - fuzz_address
+    env:
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '900' || inputs.seconds || '60' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - run: python3 fuzz/seed_corpus.py
+      - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=$FUZZ_SECONDS -rss_limit_mb=4096
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}

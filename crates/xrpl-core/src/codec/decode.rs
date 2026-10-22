@@ -118,19 +118,28 @@ fn decode_fields(
     let mut pos = 0;
 
     while pos < bytes.len() {
-        // Check for end markers
-        let current_byte = *bytes
-            .get(pos)
-            .ok_or_else(|| CoreError::CodecError("unexpected end of buffer".to_string()))?;
-        if is_inner && current_byte == 0xE1 {
-            pos += 1; // consume the marker
-            return Ok((obj, pos));
-        }
-
         // Decode field header
         let remaining = get_slice_from(bytes, pos, "buffer underflow in field header")?;
         let (field_id, header_len) = FieldId::decode(remaining)?;
         pos += header_len;
+
+        // The end markers, as rippled's STObject::set treats them.
+        match (field_id.type_code, field_id.field_code) {
+            (14, 1) if is_inner || pos == bytes.len() => return Ok((obj, pos)),
+            (14, 1) => {
+                // rippled stops reading here and ignores the rest, which
+                // would silently drop fields; refuse instead.
+                return Err(CoreError::CodecError(
+                    "bytes follow the transaction's end-of-object marker".to_string(),
+                ));
+            }
+            (15, 1) => {
+                return Err(CoreError::CodecError(
+                    "an end-of-array marker inside an object; rippled refuses it".to_string(),
+                ))
+            }
+            _ => {}
+        }
 
         // Look up field definition
         let field_def = lookup_field_def_by_id(field_id.type_code, field_id.field_code);
@@ -154,6 +163,11 @@ fn decode_fields(
         let (value, value_len) = decode_field_value(tc, remaining, &field_name, depth)?;
         pos += value_len;
 
+        if obj.contains_key(&field_name) {
+            return Err(CoreError::CodecError(format!(
+                "{field_name} appears twice; rippled refuses duplicate fields"
+            )));
+        }
         obj.insert(field_name, value);
     }
 
@@ -319,6 +333,13 @@ fn decode_amount_field(buf: &[u8]) -> Result<(Value, usize), CoreError> {
             .and_then(|b| b.split_first_chunk::<8>())
             .ok_or_else(|| CoreError::CodecError("buffer too short for MPT amount".to_string()))?;
         let value = u64::from_be_bytes(*value_bytes);
+        // rippled reads a larger magnitude but cannot write it as JSON
+        // (maxMPTokenAmount is i64::MAX), so no ledger holds one.
+        if i64::try_from(value).is_err() {
+            return Err(CoreError::InvalidAmount(format!(
+                "MPT amount {value} exceeds i64::MAX"
+            )));
+        }
         let sign = if first_byte & 0x40 == 0 && value != 0 {
             "-"
         } else {
@@ -339,8 +360,9 @@ fn decode_amount_field(buf: &[u8]) -> Result<(Value, usize), CoreError> {
         let arr: [u8; 8] = bytes
             .try_into()
             .map_err(|_| CoreError::CodecError("buffer too short for XRP amount".to_string()))?;
-        let drops = amount::decode_amount_xrp(&arr)?;
-        Ok((Value::String(drops.to_string()), 8))
+        let (negative, drops) = amount::decode_xrp_signed(&arr)?;
+        let sign = if negative { "-" } else { "" };
+        Ok((Value::String(format!("{sign}{drops}")), 8))
     } else {
         // IOU amount: 48 bytes
         let bytes = buf
@@ -408,20 +430,29 @@ fn decode_st_array(buf: &[u8], depth: usize) -> Result<(Value, usize), CoreError
     let mut pos = 0;
 
     while pos < buf.len() {
-        // Check for array end marker
-        let &current = buf.get(pos).ok_or_else(|| {
-            CoreError::CodecError("unexpected end of buffer in STArray".to_string())
-        })?;
-        if current == 0xF1 {
-            pos += 1;
-            return Ok((Value::Array(arr), pos));
-        }
-
         // Each array element is a wrapped object: field header + inner object fields + 0xE1
         // The field header names the wrapper (e.g., "Memo", "SignerEntry")
         let remaining = get_slice_from(buf, pos, "buffer underflow in STArray element")?;
         let (field_id, header_len) = FieldId::decode(remaining)?;
         pos += header_len;
+
+        // As rippled's STArray reads them: the array's end, a misplaced
+        // object end, and elements that are not objects.
+        match (field_id.type_code, field_id.field_code) {
+            (15, 1) => return Ok((Value::Array(arr), pos)),
+            (14, 1) => {
+                return Err(CoreError::CodecError(
+                    "an end-of-object marker inside an array; rippled refuses it".to_string(),
+                ))
+            }
+            _ => {}
+        }
+        if TypeCode::from_u16(field_id.type_code) != Some(TypeCode::StObject) {
+            return Err(CoreError::CodecError(format!(
+                "array element of type {} is not an object; rippled refuses it",
+                field_id.type_code
+            )));
+        }
 
         let field_def = lookup_field_def_by_id(field_id.type_code, field_id.field_code);
         let wrapper_name = match &field_def {
@@ -450,71 +481,83 @@ fn decode_st_array(buf: &[u8], depth: usize) -> Result<(Value, usize), CoreError
     ))
 }
 
+/// Decode a PathSet as `rippled` reads one (`STPathSet(SerialIter&)`): paths
+/// separated by 0xFF and ended by 0x00, each step a type byte (0x01 account,
+/// 0x10 currency, 0x40 MPT, 0x20 issuer) followed by those fields. An empty
+/// path and unknown type bits are refused, as `rippled` refuses them. Steps
+/// are written without `rippled`'s derived `type` field, as in the XRPL codec
+/// fixtures.
 fn decode_pathset(buf: &[u8]) -> Result<(Value, usize), CoreError> {
+    const ACCOUNT: u8 = 0x01;
+    const CURRENCY: u8 = 0x10;
+    const ISSUER: u8 = 0x20;
+    const MPT: u8 = 0x40;
     let mut paths: Vec<Value> = Vec::new();
     let mut current_path: Vec<Value> = Vec::new();
     let mut pos = 0;
 
-    while pos < buf.len() {
-        let &byte = buf.get(pos).ok_or_else(|| {
-            CoreError::CodecError("unexpected end of buffer in PathSet".to_string())
-        })?;
-
-        if byte == 0x00 {
-            // PathSet end marker
-            pos += 1;
-            // Push current path if non-empty
-            if !current_path.is_empty() {
-                paths.push(Value::Array(current_path));
+    while let Some(&type_byte) = buf.get(pos) {
+        pos += 1;
+        if type_byte == 0x00 || type_byte == 0xFF {
+            if current_path.is_empty() {
+                return Err(CoreError::CodecError(
+                    "PathSet has an empty path; rippled refuses it".to_string(),
+                ));
             }
-            return Ok((Value::Array(paths), pos));
-        }
-
-        if byte == 0xFF {
-            // Path separator
-            pos += 1;
-            paths.push(Value::Array(current_path));
-            current_path = Vec::new();
+            paths.push(Value::Array(std::mem::take(&mut current_path)));
+            if type_byte == 0x00 {
+                return Ok((Value::Array(paths), pos));
+            }
             continue;
         }
-
-        // Path step: type byte followed by data
-        let type_byte = byte;
-        pos += 1;
+        if type_byte & !(ACCOUNT | CURRENCY | ISSUER | MPT) != 0 {
+            return Err(CoreError::CodecError(format!(
+                "path step type 0x{type_byte:02X} has unknown bits; rippled refuses it"
+            )));
+        }
+        if type_byte & CURRENCY != 0 && type_byte & MPT != 0 {
+            return Err(CoreError::CodecError(
+                "path step has both a currency and an MPT".to_string(),
+            ));
+        }
+        // rippled reads it, but its JSON refuses an issuer beside an MPT.
+        if type_byte & MPT != 0 && type_byte & ISSUER != 0 {
+            return Err(CoreError::CodecError(
+                "path step has an MPT with an issuer".to_string(),
+            ));
+        }
 
         let mut step = Map::new();
-
-        // Bit 0x01: account (20 bytes)
-        if type_byte & 0x01 != 0 {
+        if type_byte & ACCOUNT != 0 {
             let bytes = get_slice(buf, pos..pos + 20, "buffer too short for path step account")?;
-            let arr = copy_20(bytes)?;
-            let account = AccountId::from_bytes(arr);
+            let account = AccountId::from_bytes(copy_20(bytes)?);
             step.insert("account".to_string(), Value::String(account.to_address()));
             pos += 20;
         }
-
-        // Bit 0x10: currency (20 bytes)
-        if type_byte & 0x10 != 0 {
+        if type_byte & CURRENCY != 0 {
             let bytes = get_slice(
                 buf,
                 pos..pos + 20,
                 "buffer too short for path step currency",
             )?;
-            let arr = copy_20(bytes)?;
-            let currency = Currency::from_bytes(arr);
+            let currency = Currency::from_bytes(copy_20(bytes)?);
             step.insert("currency".to_string(), Value::String(currency.to_string()));
             pos += 20;
         }
-
-        // Bit 0x20: issuer (20 bytes)
-        if type_byte & 0x20 != 0 {
+        if type_byte & MPT != 0 {
+            let bytes = get_slice(buf, pos..pos + 24, "buffer too short for path step MPT")?;
+            step.insert(
+                "mpt_issuance_id".to_string(),
+                Value::String(hex::encode_upper(bytes)),
+            );
+            pos += 24;
+        }
+        if type_byte & ISSUER != 0 {
             let bytes = get_slice(buf, pos..pos + 20, "buffer too short for path step issuer")?;
-            let arr = copy_20(bytes)?;
-            let issuer = AccountId::from_bytes(arr);
+            let issuer = AccountId::from_bytes(copy_20(bytes)?);
             step.insert("issuer".to_string(), Value::String(issuer.to_address()));
             pos += 20;
         }
-
         current_path.push(Value::Object(step));
     }
 
@@ -574,8 +617,9 @@ fn decode_issue(buf: &[u8]) -> Result<(Value, usize), CoreError> {
         return Ok((json!({"currency": "XRP"}), 20));
     }
 
-    // Try to detect MPT vs IOU:
-    if buf.len() >= 44 {
+    // Try to detect MPT vs IOU: rippled's STIssue reads an MPT whenever the
+    // second 20 bytes are NO_ACCOUNT (and then needs the 4-byte sequence).
+    if buf.len() >= 40 {
         // Check for NO_ACCOUNT pattern in bytes 20..40
         let no_account: [u8; 20] = {
             let mut a = [0u8; 20];
@@ -626,6 +670,12 @@ fn decode_issue(buf: &[u8]) -> Result<(Value, usize), CoreError> {
         .get(20..40)
         .ok_or_else(|| CoreError::CodecError("buffer too short for issuer".to_string()))?;
     let issuer_bytes = copy_20(issuer_slice)?;
+    if issuer_bytes == [0u8; 20] {
+        // rippled: "invalid issue: currency and account native mismatch".
+        return Err(CoreError::CodecError(
+            "a token Issue cannot have XRP's issuer (all zeros)".to_string(),
+        ));
+    }
     let issuer = AccountId::from_bytes(issuer_bytes);
 
     Ok((
@@ -695,81 +745,13 @@ fn decode_currency_type(buf: &[u8]) -> Result<(Value, usize), CoreError> {
     Ok((Value::String(currency.to_string()), 20))
 }
 
+/// Decode a Number (type 9, `STNumber`): see [`super::number`].
 fn decode_number(buf: &[u8]) -> Result<(Value, usize), CoreError> {
-    // Number type (STNumber): 12 bytes
-    // 8-byte signed i64 mantissa (BE) + 4-byte signed i32 exponent (BE)
-    if buf.len() < 12 {
-        return Err(CoreError::CodecError(
-            "buffer too short for Number type".to_string(),
-        ));
-    }
-
-    let mantissa_bytes: [u8; 8] = buf
-        .get(..8)
-        .ok_or_else(|| CoreError::CodecError("buffer too short for Number mantissa".to_string()))?
-        .try_into()
-        .map_err(|_| CoreError::CodecError("buffer too short for Number mantissa".to_string()))?;
-    let exponent_bytes: [u8; 4] = buf
-        .get(8..12)
-        .ok_or_else(|| CoreError::CodecError("buffer too short for Number exponent".to_string()))?
-        .try_into()
-        .map_err(|_| CoreError::CodecError("buffer too short for Number exponent".to_string()))?;
-
-    let mantissa = i64::from_be_bytes(mantissa_bytes);
-    let exponent = i32::from_be_bytes(exponent_bytes);
-
-    const ZERO_EXPONENT: i32 = -2_147_483_648_i32;
-    const MIN_MANTISSA: u64 = 1_000_000_000_000_000_000;
-
-    if mantissa == 0 && exponent == ZERO_EXPONENT {
-        return Ok((Value::String("0".to_string()), 12));
-    }
-
-    let is_negative = mantissa < 0;
-    let mut abs_m = mantissa.unsigned_abs();
-    let sign = if is_negative { "-" } else { "" };
-
-    // If mantissa < MIN_MANTISSA, it was shrunk for int64 serialization; restore it
-    let mut exp = exponent;
-    if abs_m != 0 && abs_m < MIN_MANTISSA {
-        abs_m = abs_m.saturating_mul(10);
-        exp = exp.saturating_sub(1);
-    }
-
-    // Use scientific notation for exponents outside [-28, -8] or when exponent != 0 and outside range
-    // Matches xrpl.js STNumber.toJSON() — rangeLog=18, so range is [-28, -8]
-    if exp != 0 && !(-28..=-8).contains(&exp) {
-        // Strip trailing zeros from mantissa (matches rippled behavior)
-        while abs_m != 0 && abs_m % 10 == 0 && exp < 32768 {
-            abs_m /= 10;
-            exp = exp.saturating_add(1);
-        }
-        return Ok((Value::String(format!("{sign}{abs_m}e{exp}")), 12));
-    }
-
-    // Decimal rendering for exponents in [-28, -8] range or exponent == 0
-    if exp == 0 {
-        return Ok((Value::String(format!("{sign}{abs_m}")), 12));
-    }
-
-    // Negative exponent within decimal range
-    let digits = abs_m.to_string();
-    let neg_exp = (-exp) as usize;
-
-    let result = if neg_exp >= digits.len() {
-        let leading_zeros = neg_exp - digits.len();
-        format!("{sign}0.{}{}", "0".repeat(leading_zeros), digits)
-    } else {
-        let (integer, decimal) = digits.split_at(digits.len() - neg_exp);
-        let decimal = decimal.trim_end_matches('0');
-        if decimal.is_empty() {
-            format!("{sign}{integer}")
-        } else {
-            format!("{sign}{integer}.{decimal}")
-        }
-    };
-
-    Ok((Value::String(result), 12))
+    let bytes: [u8; 12] = buf
+        .get(..12)
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| CoreError::CodecError("buffer too short for Number type".to_string()))?;
+    Ok((Value::String(super::number::decode(bytes)?), 12))
 }
 
 fn decode_raw_hex(buf: &[u8], len: usize) -> Result<(Value, usize), CoreError> {
@@ -794,6 +776,164 @@ mod tests {
     use super::*;
     use crate::codec::encode_transaction_json;
     use serde_json::json;
+
+    /// Objects and arrays as rippled 3.4.1 reads them (`simulate` of a
+    /// Payment with these bytes): whether it read the transaction.
+    #[test]
+    fn reads_structure_as_rippled_does() {
+        let (t, f, s, s2) = ("120000", "2200000000", "2400000001", "2400000002");
+        let rest = "614000000000000064\
+                    68400000000000000C\
+                    7300\
+                    8114B5F762798A53D543A014CAF8B297CFF8F2F937E8\
+                    8314F667B0CA50CC7709A220B0561B85E53A48461FA8";
+        let base = format!("{t}{f}{s}{rest}");
+        let (fee_and_before, after_fee) = base.split_at(base.find("7300").unwrap());
+        for (case, bytes, read) in [
+            ("base", base.clone(), true),
+            ("fields out of order", format!("{t}{s}{f}{rest}"), true),
+            ("a duplicate field", format!("{t}{f}{s}{s2}{rest}"), false),
+            ("end-of-object marker last", format!("{base}E1"), true),
+            (
+                "end-of-array marker in the object",
+                format!("{base}F1"),
+                false,
+            ),
+            ("a Memo", format!("{base}F9EA7D01AAE1F1"), true),
+            (
+                "a Memo holding a Fee",
+                format!("{base}F9EA684000000000000005E1F1"),
+                true,
+            ),
+            (
+                "a Memo with a duplicate field",
+                format!("{base}F9EA7D01AA7D01BBE1F1"),
+                false,
+            ),
+            (
+                "an end-of-object marker as an element",
+                format!("{base}F9E1F1"),
+                false,
+            ),
+            (
+                "an Amount as an element",
+                format!("{base}F961400000000000000005F1"),
+                false,
+            ),
+            // rippled stops at the marker and ignores the rest (then misses
+            // Account); the SDK refuses instead of dropping fields.
+            (
+                "end-of-object marker mid-way",
+                format!("{fee_and_before}E1{after_fee}"),
+                false,
+            ),
+        ] {
+            let got = decode_transaction_binary(&hex::decode(&bytes).unwrap());
+            assert_eq!(got.is_ok(), read, "{case}: {got:?}");
+        }
+        let with_marker = decode_transaction_binary(&hex::decode(format!("{base}E1")).unwrap());
+        let plain = decode_transaction_binary(&hex::decode(&base).unwrap());
+        assert_eq!(with_marker.unwrap(), plain.unwrap());
+    }
+
+    /// Issues as rippled 3.4.1 reads them (`simulate` of a VaultCreate whose
+    /// Asset held these bytes): the Asset it showed, or None where it refused.
+    #[test]
+    fn reads_issues_as_rippled_does() {
+        const ISSUER: &str = "F667B0CA50CC7709A220B0561B85E53A48461FA8";
+        const USD: &str = "0000000000000000000000005553440000000000";
+        const NO_ACCOUNT: &str = "0000000000000000000000000000000000000001";
+        let zeros = "0".repeat(40);
+        for (bytes, shown) in [
+            (zeros.clone(), Some(json!({"currency": "XRP"}))),
+            (
+                format!("{USD}{ISSUER}"),
+                Some(json!({"currency": "USD", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"})),
+            ),
+            (format!("{USD}{zeros}"), None),
+            (
+                format!("{ISSUER}{NO_ACCOUNT}00000005"),
+                Some(json!({"mpt_issuance_id": format!("05000000{ISSUER}")})),
+            ),
+            (format!("{ISSUER}{NO_ACCOUNT}"), None),
+            (
+                format!("{USD}{NO_ACCOUNT}00000005"),
+                Some(json!({"mpt_issuance_id": format!("05000000{USD}")})),
+            ),
+        ] {
+            let got = decode_issue(&hex::decode(&bytes).unwrap())
+                .ok()
+                .map(|(v, _)| v);
+            assert_eq!(got, shown, "{bytes}");
+        }
+    }
+
+    /// PathSets as rippled 3.4.1 reads them (`simulate` of a Payment whose
+    /// Paths held these bytes): the paths it showed (less its derived `type`
+    /// field), or None where it refused the blob.
+    #[test]
+    fn reads_paths_as_rippled_does() {
+        const ACCT: &str = "F667B0CA50CC7709A220B0561B85E53A48461FA8";
+        const ADDR: &str = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        const USD: &str = "0000000000000000000000005553440000000000";
+        const MPT: &str = "000000000000555344000000007D0748616C63796F6EE1F1";
+        let xrp = "0".repeat(40);
+        for (bytes, shown) in [
+            (format!("01{ACCT}00"), Some(json!([[{"account": ADDR}]]))),
+            (
+                format!("40{MPT}00"),
+                Some(json!([[{"mpt_issuance_id": MPT}]])),
+            ),
+            (format!("10{xrp}00"), Some(json!([[{"currency": "XRP"}]]))),
+            (
+                format!("30{USD}{ACCT}00"),
+                Some(json!([[{"currency": "USD", "issuer": ADDR}]])),
+            ),
+            (format!("FF01{ACCT}00"), None), // empty first path
+            (format!("01{ACCT}FF00"), None), // empty last path
+            ("00".to_string(), None),        // no path at all
+            (format!("01{ACCT}FFFF01{ACCT}00"), None),
+            (format!("02{ACCT}00"), None), // unknown type bit
+            ("0200".to_string(), None),
+            (format!("50{USD}{MPT}00"), None), // currency and MPT
+            ("8000".to_string(), None),
+            // rippled reads this one, but its JSON refuses an issuer beside an
+            // MPT, so the SDK refuses it outright.
+            (format!("60{MPT}{ACCT}00"), None),
+        ] {
+            let got = decode_pathset(&hex::decode(&bytes).unwrap())
+                .ok()
+                .map(|(v, _)| v);
+            assert_eq!(got, shown, "{bytes}");
+        }
+    }
+
+    /// MPT amounts as rippled 3.4.1 reads them (`simulate` of a Payment whose
+    /// Amount held these 9 bytes before the issuance ID): the value it
+    /// showed, or None where it could not.
+    #[test]
+    fn reads_mpt_amounts_as_rippled_does() {
+        const ID: &str = "000000000000555344000000007D0748616C63796F6EE1F1";
+        for (lead_and_value, shown) in [
+            ("600000000000000064", Some("100")),
+            ("200000000000000064", Some("-100")),
+            ("607FFFFFFFFFFFFFFF", Some("9223372036854775807")),
+            ("200000000000000000", Some("0")),
+            ("600000000000000000", Some("0")),
+            ("7F0000000000000005", Some("5")), // other lead-byte bits are ignored
+            ("610000000000000005", Some("5")),
+            ("608000000000000000", None),
+            ("60856B3DF729C00000", None), // what the fuzzer found
+        ] {
+            let bytes = hex::decode(format!("{lead_and_value}{ID}")).unwrap();
+            let got = decode_amount_field(&bytes).ok().map(|(v, n)| {
+                assert_eq!(n, 33);
+                assert_eq!(v["mpt_issuance_id"], ID);
+                v["value"].as_str().unwrap().to_string()
+            });
+            assert_eq!(got.as_deref(), shown, "{lead_and_value}");
+        }
+    }
 
     #[test]
     fn decodes_a_mainnet_delegate_set_as_rippled_does() {

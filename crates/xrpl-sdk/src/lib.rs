@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-sdk = "0.4"
+//! halcyon-xrpl-sdk = "0.5"
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! serde_json = "1"
 //! ```
@@ -469,6 +469,20 @@
 //!   every ID, hash and balance change must be what the network recorded, and
 //!   the typed queries for what they made (channels, NFT offers, oracle prices,
 //!   MPT holders through Clio) must parse the answers.
+//! - **Edge cases of the format** (`Number`, amounts, payment paths): each was
+//!   put to `rippled` 3.4.1 itself, and the codec reads, writes and refuses
+//!   exactly what `rippled` does.
+//! - **Robustness**: eight fuzz targets, seeded with all of the above, run in
+//!   CI on every change: nothing panics, and decode → encode → decode is stable.
+//!
+//! Every check, with its numbers and how to repeat it, is in the
+//! [parity report](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md).
+//! Speed against xrpl-rust, on the same inputs, is in the
+//! [benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md).
+//!
+//! ## Minimum supported Rust version
+//!
+//! Rust 1.88 (1.85 for `halcyon-xrpl-core` alone), checked in CI.
 //!
 //! ## Safety
 //!

@@ -4,12 +4,14 @@
 [![docs.rs](https://docs.rs/halcyon-xrpl-sdk/badge.svg)](https://docs.rs/halcyon-xrpl-sdk)
 [![CI](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/ci.yml)
 [![downloads](https://img.shields.io/crates/d/halcyon-xrpl-sdk.svg)](https://crates.io/crates/halcyon-xrpl-sdk)
+[![Fuzz](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/fuzz.yml/badge.svg)](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/fuzz.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85%20core%20%C2%B7%201.88-orange.svg)](#minimum-supported-rust-version)
 [![license](https://img.shields.io/badge/license-MIT%20%2B%20attribution-blue.svg)](LICENSE)
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
 [Documentation](https://docs.rs/halcyon-xrpl-sdk) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) ·
-[How it is checked](#how-it-is-checked)
+[How it is checked](#how-it-is-checked) · [Parity with rippled](docs/PARITY.md) · [Benchmarks](docs/BENCHMARKS.md)
 
 ## Crates
 
@@ -28,13 +30,19 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.4"
+halcyon-xrpl-sdk = "0.5"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.4"      # types + codec + crypto only
-halcyon-xrpl-client = "0.4"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.5"      # types + codec + crypto only
+halcyon-xrpl-client = "0.5"    # HTTP + WebSocket clients
 ```
+
+### Minimum supported Rust version
+
+`halcyon-xrpl-core` builds on Rust 1.85 or later; `halcyon-xrpl-client`, `halcyon-xrpl-sdk` and
+`halcyon-xrpl-cli` on 1.88 or later. CI checks both with the locked dependencies, and raising
+either is a minor-version change, noted in the [changelog](CHANGELOG.md).
 
 ## Quick Start
 
@@ -229,7 +237,7 @@ assert_eq!(json["TransactionType"], "Payment");
 ## How it is checked
 
 Everything that has to match the XRP Ledger is tested against the real thing, not against
-itself:
+itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and how to repeat it.
 
 | What | Checked against |
 |------|-----------------|
@@ -238,9 +246,21 @@ itself:
 | Ledger entry IDs | the `index` of real mainnet entries, xrpl.js's hash tests, and a live run that creates each entry type on Testnet |
 | Balance changes, NFTokenIDs, rates, time, hex, X-addresses | xrpl.js's own test fixtures and expected results |
 | Transaction models | 186 real transactions (51 types) round-trip to the same JSON, bytes and ID; an example of every other type, signed by rippled 3.4.1, encodes to its exact `tx_blob`: all 82 types |
+| Edge cases of the format: `Number`, amounts, paths, issues, object structure | 94 binary forms and 80 JSON values put to rippled 3.4.1's `simulate`: the SDK writes and shows each as rippled does, and refuses what rippled refuses instead of rounding or guessing |
 | Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
 | Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet: each must parse, and serializing it back must keep all 2,521 field paths |
 | End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
+| Robustness | 8 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |
+
+## Performance
+
+Measured against xrpl-rust 1.3.0 on the same real mainnet transactions, after checking that both
+give identical results ([docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method and every number):
+
+- encoding a transaction is 8 to 24 times faster, decoding 1.7 to 12 times faster;
+- deriving Ed25519 keys is 5 times faster, and signing a whole transaction 1.3 to 1.7 times faster;
+- a bare secp256k1 signature is 1.5 times slower (pure-Rust `k256`, against the C library
+  libsecp256k1), and decoding an address 1.2 times slower.
 
 ## License
 

@@ -40,6 +40,28 @@ jobs:
           components: rustfmt
       - run: cargo fmt --check
 
+  # The oldest Rust each crate supports (its `rust-version`), with the locked
+  # dependencies: halcyon-xrpl-core needs 1.85, the rest 1.88 (for reqwest's
+  # URL handling). A dependency update that raises either fails here.
+  msrv:
+    name: MSRV (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust: "1.85.0"
+            check: cargo check --locked -p halcyon-xrpl-core && cargo check --locked -p halcyon-xrpl-core --no-default-features
+          - rust: "1.88.0"
+            check: cargo check --locked --workspace --all-features
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - run: ${{ matrix.check }}
+
   wasm:
     name: WASM build
     runs-on: ubuntu-latest

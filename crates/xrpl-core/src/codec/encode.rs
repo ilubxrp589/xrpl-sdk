@@ -279,14 +279,42 @@ fn encode_hash(value: &Value, expected_len: usize) -> Result<Vec<u8>, CoreError>
     Ok(bytes)
 }
 
+/// XRP drops written as `rippled` reads them (`amountFromString`): its
+/// number syntax (`"100"`, `"-100"`, `"+100"`, `"1e2"`; not `"0100"` or
+/// `"1.5"`), whole drops only. Up to 2^61 - 1 drops are accepted, beyond
+/// `rippled`'s JSON limit of 10^17, because mainnet ledger entries hold such
+/// amounts and the codec must reproduce them.
+fn encode_xrp_string(s: &str) -> Result<Vec<u8>, CoreError> {
+    let (negative, mantissa, exponent) = super::number::parse(s)?;
+    let whole = || CoreError::InvalidAmount(format!("XRP amount {s:?}: XRP is whole drops"));
+    if exponent < 0 {
+        return Err(whole());
+    }
+    let drops = if mantissa == 0 {
+        0
+    } else {
+        u32::try_from(exponent)
+            .ok()
+            .and_then(|e| 10u64.checked_pow(e))
+            .and_then(|scale| mantissa.checked_mul(scale))
+            .ok_or_else(|| CoreError::InvalidAmount(format!("XRP amount {s:?} is too large")))?
+    };
+    Ok(amount::encode_xrp_signed(negative, drops)?.to_vec())
+}
+
 fn encode_amount_field(value: &Value) -> Result<Vec<u8>, CoreError> {
     match value {
-        Value::String(s) => {
-            let drops: u64 = s
-                .parse()
-                .map_err(|_| CoreError::InvalidAmount(format!("invalid XRP drops: {s}")))?;
-            Ok(amount::encode_amount_xrp(drops)?.to_vec())
-        }
+        Value::String(s) => encode_xrp_string(s),
+        // rippled's JSON integers are 32-bit (`amountFromJson`).
+        Value::Number(n) => match (n.as_i64(), n.as_u64()) {
+            (Some(i), _) if i32::try_from(i).is_ok() => {
+                Ok(amount::encode_xrp_signed(i < 0, i.unsigned_abs())?.to_vec())
+            }
+            (_, Some(u)) if u32::try_from(u).is_ok() => Ok(amount::encode_amount_xrp(u)?.to_vec()),
+            _ => Err(CoreError::InvalidAmount(format!(
+                "XRP amount {n}: rippled takes only 32-bit integers in JSON; write drops as a string"
+            ))),
+        },
         Value::Object(obj) => {
             // Check for MPT amount (has mpt_issuance_id)
             if obj.contains_key("mpt_issuance_id") {
@@ -338,28 +366,45 @@ fn encode_mpt_amount(obj: &serde_json::Map<String, Value>) -> Result<Vec<u8>, Co
         .and_then(|v| v.as_str())
         .ok_or_else(|| CoreError::InvalidAmount("MPT missing 'mpt_issuance_id'".to_string()))?;
 
-    let value: i64 = value_str
-        .parse()
-        .map_err(|_| CoreError::InvalidAmount(format!("invalid MPT value: {value_str}")))?;
+    // rippled's `amountFromString`: its number syntax, whole units, at most
+    // i64::MAX (maxMPTokenAmount). "1e3" is 1000; "-0" is 0.
+    let (negative, mantissa, exponent) = super::number::parse(value_str)?;
+    if exponent < 0 {
+        return Err(CoreError::InvalidAmount(format!(
+            "MPT amount {value_str:?}: MPT amounts are whole units"
+        )));
+    }
+    let magnitude = if mantissa == 0 {
+        0
+    } else {
+        u32::try_from(exponent)
+            .ok()
+            .and_then(|e| 10u64.checked_pow(e))
+            .and_then(|scale| mantissa.checked_mul(scale))
+            .filter(|m| i64::try_from(*m).is_ok())
+            .ok_or_else(|| {
+                CoreError::InvalidAmount(format!("MPT amount {value_str:?} exceeds i64::MAX"))
+            })?
+    };
 
     let id_bytes = hex::decode(issuance_id).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-
-    let mut result = Vec::with_capacity(41);
-
-    // Lead byte (STAmount::add): 0x20 MPT marker, plus 0x40 unless negative.
-    // Zero is non-negative, so it carries 0x60 too.
-    if value >= 0 {
-        result.push(0x60);
-    } else {
-        result.push(0x20);
+    if id_bytes.len() != 24 {
+        return Err(CoreError::InvalidAmount(format!(
+            "mpt_issuance_id must be 24 bytes (48 hex characters), got {}",
+            id_bytes.len()
+        )));
     }
 
-    // 8 bytes big-endian value (unsigned magnitude)
-    result.extend_from_slice(&(value.unsigned_abs()).to_be_bytes());
-
-    // 32 bytes issuance ID (or however many bytes it is — usually 32)
+    // STAmount::add: lead byte 0x20 (MPT), plus 0x40 unless negative (zero
+    // is never negative), the 8-byte magnitude, then the 24-byte issuance ID.
+    let mut result = Vec::with_capacity(33);
+    result.push(if negative && magnitude != 0 {
+        0x20
+    } else {
+        0x60
+    });
+    result.extend_from_slice(&magnitude.to_be_bytes());
     result.extend_from_slice(&id_bytes);
-
     Ok(result)
 }
 
@@ -467,56 +512,72 @@ fn encode_st_array(value: &Value, for_signing: bool) -> Result<Vec<u8>, CoreErro
     Ok(result)
 }
 
+/// Encode a PathSet as `rippled` writes one (`STPathSet::add`), from the
+/// steps' `account`, `currency`, `mpt_issuance_id` and `issuer` (a `type`
+/// field, which `rippled` derives, is ignored). An empty PathSet, an empty
+/// path and an empty step are refused: `rippled`'s JSON parser accepts an
+/// empty path, but writes bytes its binary reader then refuses.
 fn encode_pathset(value: &Value) -> Result<Vec<u8>, CoreError> {
     let paths = value
         .as_array()
         .ok_or_else(|| CoreError::CodecError("PathSet must be a JSON array".to_string()))?;
+    if paths.is_empty() {
+        return Err(CoreError::CodecError(
+            "an empty PathSet; leave the field out instead".to_string(),
+        ));
+    }
+    let string =
+        |obj: &serde_json::Map<String, Value>, key: &str| -> Result<Option<String>, CoreError> {
+            match obj.get(key) {
+                None => Ok(None),
+                Some(Value::String(s)) => Ok(Some(s.clone())),
+                Some(_) => Err(CoreError::CodecError(format!(
+                    "path step {key} must be a string"
+                ))),
+            }
+        };
 
     let mut result = Vec::new();
-
     for (i, path) in paths.iter().enumerate() {
         if i > 0 {
             result.push(0xFF); // path separator
         }
-
         let steps = path
             .as_array()
             .ok_or_else(|| CoreError::CodecError("Path must be a JSON array".to_string()))?;
-
+        if steps.is_empty() {
+            return Err(CoreError::CodecError(
+                "a path must have at least one step (rippled cannot read an empty path)"
+                    .to_string(),
+            ));
+        }
         for step in steps {
             let obj = step
                 .as_object()
                 .ok_or_else(|| CoreError::CodecError("PathStep must be an object".to_string()))?;
-
-            let has_account = obj.contains_key("account");
-            let has_currency = obj.contains_key("currency");
-            let has_issuer = obj.contains_key("issuer");
+            let account = string(obj, "account")?;
+            let currency = string(obj, "currency")?;
+            let mpt = string(obj, "mpt_issuance_id")?;
+            let issuer = string(obj, "issuer")?;
+            if currency.is_some() && mpt.is_some() {
+                return Err(CoreError::CodecError(
+                    "a path step cannot have both a currency and an mpt_issuance_id".to_string(),
+                ));
+            }
+            if mpt.is_some() && issuer.is_some() {
+                return Err(CoreError::CodecError(
+                    "a path step with an mpt_issuance_id cannot have an issuer".to_string(),
+                ));
+            }
 
             let mut type_byte: u8 = 0;
-            if has_account {
+            let mut fields = Vec::new();
+            if let Some(s) = &account {
                 type_byte |= 0x01;
+                fields.extend_from_slice(AccountId::from_address(s)?.as_bytes());
             }
-            if has_currency {
+            if let Some(s) = &currency {
                 type_byte |= 0x10;
-            }
-            if has_issuer {
-                type_byte |= 0x20;
-            }
-
-            result.push(type_byte);
-
-            if has_account {
-                let s = obj["account"]
-                    .as_str()
-                    .ok_or_else(|| CoreError::CodecError("account must be string".to_string()))?;
-                let account = AccountId::from_address(s)?;
-                result.extend_from_slice(account.as_bytes());
-            }
-
-            if has_currency {
-                let s = obj["currency"]
-                    .as_str()
-                    .ok_or_else(|| CoreError::CodecError("currency must be string".to_string()))?;
                 let currency = if s == "XRP" {
                     crate::types::Currency::xrp()
                 } else if s.len() == 3 {
@@ -524,16 +585,30 @@ fn encode_pathset(value: &Value) -> Result<Vec<u8>, CoreError> {
                 } else {
                     crate::types::Currency::from_hex(s)?
                 };
-                result.extend_from_slice(&currency.to_bytes());
+                fields.extend_from_slice(&currency.to_bytes());
             }
-
-            if has_issuer {
-                let s = obj["issuer"]
-                    .as_str()
-                    .ok_or_else(|| CoreError::CodecError("issuer must be string".to_string()))?;
-                let issuer = AccountId::from_address(s)?;
-                result.extend_from_slice(issuer.as_bytes());
+            if let Some(s) = &mpt {
+                type_byte |= 0x40;
+                let id = hex::decode(s).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
+                if id.len() != 24 {
+                    return Err(CoreError::CodecError(format!(
+                        "path step mpt_issuance_id must be 24 bytes, got {}",
+                        id.len()
+                    )));
+                }
+                fields.extend_from_slice(&id);
             }
+            if let Some(s) = &issuer {
+                type_byte |= 0x20;
+                fields.extend_from_slice(AccountId::from_address(s)?.as_bytes());
+            }
+            if type_byte == 0 {
+                return Err(CoreError::CodecError(
+                    "a path step needs an account, currency, mpt_issuance_id or issuer".to_string(),
+                ));
+            }
+            result.push(type_byte);
+            result.extend_from_slice(&fields);
         }
     }
 
@@ -721,87 +796,9 @@ fn encode_currency_type(value: &Value) -> Result<Vec<u8>, CoreError> {
     }
 }
 
-/// Encode a Number type (type 9) — STNumber.
-/// 12 bytes: 8-byte signed i64 mantissa (BE) + 4-byte signed i32 exponent (BE).
-/// Mantissa normalized to [10^18, 2^63-1]. Zero = mantissa 0, exponent -2147483648.
+/// Encode a Number (type 9, `STNumber`): see [`super::number`].
 fn encode_number(value: &Value) -> Result<Vec<u8>, CoreError> {
-    let s = value
-        .as_str()
-        .ok_or_else(|| CoreError::CodecError("Number must be a string".to_string()))?;
-
-    const MIN_MANTISSA: i128 = 1_000_000_000_000_000_000; // 10^18
-    const MAX_INT64: i128 = 9_223_372_036_854_775_807; // 2^63 - 1
-    const ZERO_EXPONENT: i32 = -2_147_483_648_i32;
-
-    // Parse the string
-    let (is_negative, base_str) = if let Some(stripped) = s.strip_prefix('-') {
-        (true, stripped)
-    } else {
-        (false, s)
-    };
-
-    // Handle scientific notation
-    let (base, sci_exp) = if let Some((b, e)) = base_str
-        .split_once('e')
-        .or_else(|| base_str.split_once('E'))
-    {
-        let exp: i32 = e
-            .parse()
-            .map_err(|_| CoreError::InvalidAmount(format!("invalid exponent: {e}")))?;
-        (b, exp)
-    } else {
-        (base_str, 0i32)
-    };
-
-    let (integer_part, decimal_part) = match base.split_once('.') {
-        Some((i, d)) => (i, d),
-        None => (base, ""),
-    };
-
-    let combined = format!("{integer_part}{decimal_part}");
-    let combined = combined.trim_start_matches('0');
-    if combined.is_empty() || s == "0" {
-        // Zero: mantissa = 0, exponent = DEFAULT_VALUE_EXPONENT
-        let mut buf = vec![0u8; 8];
-        buf.extend_from_slice(&ZERO_EXPONENT.to_be_bytes());
-        return Ok(buf);
-    }
-
-    let mut mantissa: i128 = combined
-        .parse()
-        .map_err(|e: std::num::ParseIntError| CoreError::InvalidAmount(e.to_string()))?;
-    let mut exponent: i32 = -(decimal_part.len() as i32) + sci_exp;
-
-    if is_negative {
-        mantissa = -mantissa;
-    }
-
-    // Strip trailing zeros from mantissa
-    while mantissa != 0 && mantissa % 10 == 0 {
-        mantissa /= 10;
-        exponent += 1;
-    }
-
-    // Normalize: mantissa into [MIN_MANTISSA, MAX_INT64]
-    let abs_m = mantissa.unsigned_abs();
-    let mut m = abs_m;
-    let mut e = exponent;
-
-    while (m as i128) < MIN_MANTISSA && e > -32768 {
-        m *= 10;
-        e -= 1;
-    }
-    while m as i128 > MAX_INT64 && e < 32768 {
-        m /= 10;
-        e += 1;
-    }
-
-    let signed_m: i64 = if is_negative { -(m as i64) } else { m as i64 };
-
-    let mut buf = Vec::with_capacity(12);
-    buf.extend_from_slice(&signed_m.to_be_bytes());
-    buf.extend_from_slice(&e.to_be_bytes());
-    Ok(buf)
+    super::number::encode(value).map(|bytes| bytes.to_vec())
 }
 
 /// Encode a raw hex value of fixed size.
@@ -887,6 +884,99 @@ pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// XRP as rippled 3.4.1 writes it (`simulate` of a Payment with
+    /// `binary: true`): the Amount bytes for each JSON value, or None where
+    /// rippled refused the value.
+    #[test]
+    fn writes_xrp_as_rippled_does() {
+        for (value, bytes) in [
+            (json!("100"), Some("4000000000000064")),
+            (json!("-100"), Some("0000000000000064")),
+            (json!("+100"), Some("4000000000000064")),
+            (json!("1e2"), Some("4000000000000064")),
+            (json!(100), Some("4000000000000064")),
+            (json!("0"), Some("4000000000000000")),
+            (json!("-0"), Some("4000000000000000")),
+            (json!("100000000000000000"), Some("416345785D8A0000")),
+            (json!("1.5"), None),
+            (json!("00100"), None),
+            (json!(" 100"), None),
+        ] {
+            let got = encode_amount_field(&value).ok().map(hex::encode_upper);
+            assert_eq!(got.as_deref(), bytes, "{value}");
+        }
+        // rippled's JSON refuses more than 10^17 drops; the codec writes them,
+        // because mainnet ledger entries hold such amounts.
+        assert_eq!(
+            hex::encode_upper(encode_amount_field(&json!("100000000000000001")).unwrap()),
+            "416345785D8A0001"
+        );
+        assert!(encode_amount_field(&json!(4_294_967_296u64)).is_err());
+    }
+
+    /// PathSets as rippled 3.4.1 writes them (`simulate` with `binary: true`
+    /// of a Payment with these Paths): the bytes, or None where the SDK
+    /// refuses the value.
+    #[test]
+    fn writes_paths_as_rippled_does() {
+        const ACCT: &str = "F667B0CA50CC7709A220B0561B85E53A48461FA8";
+        const ADDR: &str = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        const USD: &str = "0000000000000000000000005553440000000000";
+        const MPT: &str = "000000000000555344000000007D0748616C63796F6EE1F1";
+        let xrp = "0".repeat(40);
+        for (paths, bytes) in [
+            (json!([[{"account": ADDR}]]), Some(format!("01{ACCT}00"))),
+            (
+                json!([[{"account": ADDR, "type": 48}]]),
+                Some(format!("01{ACCT}00")),
+            ),
+            (
+                json!([[{"mpt_issuance_id": MPT}]]),
+                Some(format!("40{MPT}00")),
+            ),
+            (json!([[{"currency": "XRP"}]]), Some(format!("10{xrp}00"))),
+            (
+                json!([[{"account": ADDR}], [{"currency": "USD", "issuer": ADDR}]]),
+                Some(format!("01{ACCT}FF30{USD}{ACCT}00")),
+            ),
+            // rippled refuses these too.
+            (json!([]), None),
+            (json!([[{}]]), None),
+            (json!([[{"mpt_issuance_id": MPT, "issuer": ADDR}]]), None),
+            (json!([[{"currency": "USD", "mpt_issuance_id": MPT}]]), None),
+            // rippled writes these (as 00, and as ...FF00), but cannot read
+            // what it wrote; the SDK refuses them up front.
+            (json!([[]]), None),
+            (json!([[{"account": ADDR}], []]), None),
+        ] {
+            let got = encode_pathset(&paths).ok().map(hex::encode_upper);
+            assert_eq!(got, bytes, "{paths}");
+        }
+    }
+
+    /// MPT amounts as rippled 3.4.1 writes them (as above): the 9 bytes
+    /// before the issuance ID, or None where rippled refused the value.
+    #[test]
+    fn writes_mpt_as_rippled_does() {
+        const ID: &str = "000000000000555344000000007D0748616C63796F6EE1F1";
+        for (value, bytes) in [
+            ("9223372036854775807", Some("607FFFFFFFFFFFFFFF")),
+            ("-5", Some("200000000000000005")),
+            ("1e3", Some("6000000000000003E8")),
+            ("-0", Some("600000000000000000")),
+            ("9223372036854775808", None),
+            ("1.5", None),
+            ("0100", None),
+        ] {
+            let got = encode_amount_field(&json!({"mpt_issuance_id": ID, "value": value}))
+                .ok()
+                .map(hex::encode_upper);
+            let want = bytes.map(|b| format!("{b}{ID}"));
+            assert_eq!(got, want, "{value}");
+        }
+        assert!(encode_amount_field(&json!({"mpt_issuance_id": "00", "value": "1"})).is_err());
+    }
 
     /// UInt64 in every form rippled's STParsedJSON accepts (found by the live
     /// testnet test: OracleSet's AssetPrice as a number, MaximumAmount in base 10).

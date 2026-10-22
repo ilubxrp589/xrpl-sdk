@@ -1,4 +1,5 @@
 use crate::types::{AccountId, Amount, Currency, IouAmount};
+use crate::types::{IOU_EXPONENT_MAX, IOU_EXPONENT_MIN, IOU_MANTISSA_MAX, IOU_MANTISSA_MIN};
 use crate::CoreError;
 
 /// Maximum valid XRP supply in drops: 100 billion XRP * 10^6 drops per XRP.
@@ -6,37 +7,67 @@ use crate::CoreError;
 pub const MAX_XRP_DROPS: u64 = 100_000_000_000_000_000;
 
 /// Encode XRP amount to 8-byte wire format.
-/// Bit 63 = 0 (XRP), Bit 62 = 1 (positive), Bits 0-61 = drops.
+/// Bit 63 = 0 (XRP), Bit 62 = 1 (positive), Bit 61 = 0 (not MPT), Bits 0-60 = drops.
 ///
-/// The wire field holds 62 bits, and serialization must accept the full
+/// The wire field holds 61 bits, and serialization must accept the full
 /// range: mainnet ledger objects exist whose XRP amounts exceed the
 /// nominal supply (e.g. an Offer asking 10× total supply). Supply-range
 /// VALIDATION is a transaction-preflight concern, not a codec concern.
 pub fn encode_amount_xrp(drops: u64) -> Result<[u8; 8], CoreError> {
-    if drops > 0x3FFF_FFFF_FFFF_FFFF {
-        return Err(CoreError::InvalidAmount(format!(
-            "XRP amount {drops} drops exceeds the 62-bit wire field"
-        )));
-    }
-    // Set bit 62 (positive flag). Bit 63 stays 0 (XRP marker).
-    let value = 0x4000_0000_0000_0000u64 | drops;
-    Ok(value.to_be_bytes())
+    encode_xrp_signed(false, drops)
 }
 
-/// Decode 8-byte wire format to XRP drops.
-pub fn decode_amount_xrp(bytes: &[u8; 8]) -> Result<u64, CoreError> {
-    let value = u64::from_be_bytes(*bytes);
+/// Encode XRP with a sign, as `rippled` writes it: a negative amount has
+/// bit 62 clear. Zero is always written positive.
+pub fn encode_xrp_signed(negative: bool, drops: u64) -> Result<[u8; 8], CoreError> {
+    // Bit 61 would mark the amount as an MPT.
+    if drops > 0x1FFF_FFFF_FFFF_FFFF {
+        return Err(CoreError::InvalidAmount(format!(
+            "XRP amount {drops} drops exceeds the 61-bit wire field"
+        )));
+    }
+    let positive = if negative && drops != 0 {
+        0
+    } else {
+        0x4000_0000_0000_0000u64
+    };
+    Ok((positive | drops).to_be_bytes())
+}
 
-    // Bit 63 must be 0 for XRP
+/// Decode 8-byte wire format to XRP drops, refusing a negative amount
+/// (which [`Amount::Xrp`] cannot hold; [`decode_xrp_signed`] reads one).
+pub fn decode_amount_xrp(bytes: &[u8; 8]) -> Result<u64, CoreError> {
+    match decode_xrp_signed(bytes)? {
+        (false, drops) => Ok(drops),
+        (true, drops) => Err(CoreError::InvalidAmount(format!(
+            "-{drops} drops: a negative XRP amount"
+        ))),
+    }
+}
+
+/// Decode 8-byte XRP wire format as `rippled` reads it
+/// (`STAmount(SerialIter&)`): whether it is negative (bit 62 clear), and the
+/// drops. Negative zero is refused, as `rippled` refuses it.
+pub fn decode_xrp_signed(bytes: &[u8; 8]) -> Result<(bool, u64), CoreError> {
+    let value = u64::from_be_bytes(*bytes);
     if value & 0x8000_0000_0000_0000 != 0 {
         return Err(CoreError::InvalidAmount(
             "bit 63 set — this is an IOU, not XRP".to_string(),
         ));
     }
-
-    // Extract drops (bits 0-61, mask out bit 62 positive flag)
-    let drops = value & 0x3FFF_FFFF_FFFF_FFFF;
-    Ok(drops)
+    if value & 0x2000_0000_0000_0000 != 0 {
+        return Err(CoreError::InvalidAmount(
+            "bit 61 set — this is an MPT amount, not XRP".to_string(),
+        ));
+    }
+    let drops = value & 0x1FFF_FFFF_FFFF_FFFF;
+    let negative = value & 0x4000_0000_0000_0000 == 0;
+    if negative && drops == 0 {
+        return Err(CoreError::InvalidAmount(
+            "negative zero XRP is not canonical; rippled refuses it".to_string(),
+        ));
+    }
+    Ok((negative, drops))
 }
 
 /// Encode IOU mantissa/exponent to 8-byte wire format.
@@ -68,6 +99,10 @@ pub fn encode_iou_value(iou: &IouAmount) -> [u8; 8] {
 }
 
 /// Decode 8-byte IOU value to IouAmount.
+///
+/// Only `rippled`'s canonical form is accepted, as `rippled` accepts only it
+/// (`STAmount(SerialIter&)`): a mantissa of 10^15 to 10^16 - 1 with an
+/// exponent of -96 to 80, or zero written as exactly `0x8000000000000000`.
 pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
     let value = u64::from_be_bytes(*bytes);
 
@@ -78,19 +113,29 @@ pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
         ));
     }
 
-    // Check for zero encoding
-    if value == 0x8000_0000_0000_0000 {
-        return Ok(IouAmount::zero());
+    let mantissa = value & 0x003F_FFFF_FFFF_FFFF;
+    if mantissa == 0 {
+        if value == 0x8000_0000_0000_0000 {
+            return Ok(IouAmount::zero());
+        }
+        return Err(CoreError::InvalidAmount(format!(
+            "token amount 0x{value:016X}: zero must be 0x8000000000000000; rippled refuses other zeros"
+        )));
     }
 
     let is_negative = value & 0x4000_0000_0000_0000 == 0;
-    let biased_exp = ((value >> 54) & 0xFF) as i16;
-    let exponent = (biased_exp - 97) as i8;
-    let mantissa = value & 0x003F_FFFF_FFFF_FFFF;
+    let exponent = ((value >> 54) & 0xFF) as i16 - 97;
+    if !(IOU_MANTISSA_MIN..IOU_MANTISSA_MAX).contains(&mantissa)
+        || !(i16::from(IOU_EXPONENT_MIN)..=i16::from(IOU_EXPONENT_MAX)).contains(&exponent)
+    {
+        return Err(CoreError::InvalidAmount(format!(
+            "token amount {mantissa}e{exponent} is not in canonical form; rippled refuses it"
+        )));
+    }
 
     Ok(IouAmount {
         mantissa,
-        exponent,
+        exponent: exponent as i8,
         is_negative,
     })
 }
@@ -118,6 +163,13 @@ pub fn decode_amount_iou(bytes: &[u8; 48]) -> Result<(IouAmount, Currency, Accou
     let mut issuer_bytes = [0u8; 20];
     issuer_bytes.copy_from_slice(&bytes[28..48]);
     let issuer = AccountId::from_bytes(issuer_bytes);
+
+    // rippled: "invalid native currency" / "invalid native account".
+    if currency_bytes == [0u8; 20] || issuer_bytes == [0u8; 20] {
+        return Err(CoreError::InvalidAmount(
+            "a token amount cannot have XRP's currency or issuer (all zeros)".to_string(),
+        ));
+    }
 
     Ok((iou, currency, issuer))
 }
@@ -344,6 +396,63 @@ mod tests {
             encode_amount_xrp(0x4000_0000_0000_0000).is_err(),
             "63rd bit must reject"
         );
+        assert!(
+            encode_amount_xrp(0x2000_0000_0000_0000).is_err(),
+            "bit 61 marks an MPT amount"
+        );
+    }
+
+    // Each byte form was put to rippled 3.4.1 (`simulate` of a Payment with
+    // this Amount): the Amount it showed, or None where it refused the blob.
+    #[test]
+    fn reads_xrp_as_rippled_does() {
+        for (hex_value, shown) in [
+            ("4000000000000064", Some("100")),
+            ("0000000000000064", Some("-100")),
+            ("0000000000000001", Some("-1")),
+            ("4000000000000000", Some("0")),
+            ("0000000000000000", None),
+        ] {
+            let bytes: [u8; 8] = hex::decode(hex_value).unwrap().try_into().unwrap();
+            let got = decode_xrp_signed(&bytes)
+                .ok()
+                .map(|(neg, d)| format!("{}{d}", if neg { "-" } else { "" }));
+            assert_eq!(got.as_deref(), shown, "{hex_value}");
+            if let Ok((neg, d)) = decode_xrp_signed(&bytes) {
+                assert_eq!(encode_xrp_signed(neg, d).unwrap(), bytes, "{hex_value}");
+            }
+        }
+        assert!(decode_amount_xrp(&0x0000_0000_0000_0064u64.to_be_bytes()).is_err());
+    }
+
+    // As above, for 48-byte token amounts (USD, issued by the genesis account).
+    #[test]
+    fn reads_token_amounts_as_rippled_does() {
+        const USD: &str = "0000000000000000000000005553440000000000";
+        const ISSUER: &str = "B5F762798A53D543A014CAF8B297CFF8F2F937E8";
+        const ZEROS: &str = "0000000000000000000000000000000000000000";
+        for (value, currency, issuer, shown) in [
+            ("D4838D7EA4C68000", USD, ISSUER, Some("1")),
+            ("94838D7EA4C68000", USD, ISSUER, Some("-1")),
+            ("D5038D7EA4C68000", USD, ISSUER, Some("100")),
+            ("8000000000000000", USD, ISSUER, Some("0")),
+            ("EC6386F26FC0FFFF", USD, ISSUER, Some("9999999999999999e80")),
+            ("EC6386F26FC10000", USD, ISSUER, None), // mantissa 10^16
+            ("8000004000000000", USD, ISSUER, None), // mantissa 2^38: what the fuzzer found
+            ("940000000000000A", USD, ISSUER, None), // mantissa 10
+            ("C000000000000000", USD, ISSUER, None), // a zero with the sign bit
+            ("8040000000000000", USD, ISSUER, None), // a zero with an exponent
+            ("D4838D7EA4C68000", ZEROS, ISSUER, None), // XRP's currency
+            ("D4838D7EA4C68000", USD, ZEROS, None),  // XRP's issuer
+            ("8000000000000000", ZEROS, ISSUER, None),
+        ] {
+            let bytes: [u8; 48] = hex::decode(format!("{value}{currency}{issuer}"))
+                .unwrap()
+                .try_into()
+                .unwrap();
+            let got = decode_amount_iou(&bytes).ok().map(|(v, ..)| v.to_decimal());
+            assert_eq!(got.as_deref(), shown, "{value} {currency} {issuer}");
+        }
     }
 
     #[test]

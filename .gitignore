@@ -2,6 +2,7 @@ target/
 pkg/
 fuzz/target/
 fuzz/corpus/
+fuzz/artifacts/
 *.mp4
 .env
 .env.*

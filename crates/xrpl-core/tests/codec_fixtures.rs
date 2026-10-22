@@ -1,116 +1,76 @@
+//! The binary codec against XRPLF's shared codec fixtures
+//! (tests/vectors/codec-fixtures.json, the vectors `ripple-binary-codec` in
+//! xrpl.js tests against): 34 transactions and 261 ledger entries, each a JSON
+//! object with the bytes it must encode to. Both directions must hold: the JSON
+//! encodes to exactly those bytes, and the bytes decode to exactly that JSON.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use xrpl_core::codec::encode_transaction_json;
+use serde_json::Value;
+use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
+
+/// Checks one section of the fixtures both ways; returns the failures.
+fn check(section: &str) -> (usize, Vec<String>) {
+    let fixtures: Value =
+        serde_json::from_str(include_str!("../../../tests/vectors/codec-fixtures.json")).unwrap();
+    let entries = fixtures[section].as_array().unwrap();
+    let mut failures = Vec::new();
+    for (i, entry) in entries.iter().enumerate() {
+        let binary = entry["binary"].as_str().unwrap().to_uppercase();
+        let json = &entry["json"];
+        let kind = json["TransactionType"]
+            .as_str()
+            .or(json["LedgerEntryType"].as_str())
+            .unwrap_or("?");
+        match encode_transaction_json(json, false) {
+            Ok(bytes) if hex::encode_upper(&bytes) == binary => {}
+            Ok(bytes) => {
+                let expected = hex::decode(&binary).unwrap();
+                let at = bytes
+                    .iter()
+                    .zip(&expected)
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(bytes.len().min(expected.len()));
+                failures.push(format!(
+                    "{section}[{i}] {kind}: encodes differently from byte {at}"
+                ));
+            }
+            Err(e) => failures.push(format!("{section}[{i}] {kind}: does not encode: {e}")),
+        }
+        match decode_transaction_binary(&hex::decode(&binary).unwrap()) {
+            Ok(decoded) if &decoded == json => {}
+            Ok(decoded) => {
+                let differ: Vec<&String> = json
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .filter(|(k, v)| decoded.get(k.as_str()) != Some(*v))
+                    .map(|(k, _)| k)
+                    .collect();
+                failures.push(format!(
+                    "{section}[{i}] {kind}: decodes differently: {differ:?}"
+                ));
+            }
+            Err(e) => failures.push(format!("{section}[{i}] {kind}: does not decode: {e}")),
+        }
+    }
+    eprintln!(
+        "{section}: {} entries, {} failures",
+        entries.len(),
+        failures.len()
+    );
+    (entries.len(), failures)
+}
 
 #[test]
 fn codec_transaction_vectors() {
-    let fixtures: serde_json::Value =
-        serde_json::from_str(include_str!("../../../tests/vectors/codec-fixtures.json")).unwrap();
-
-    let transactions = fixtures["transactions"].as_array().unwrap();
-    let mut passed = 0;
-    let mut failed = 0;
-
-    for (i, entry) in transactions.iter().enumerate() {
-        let expected_hex = entry["binary"].as_str().unwrap();
-        let json = &entry["json"];
-        let tx_type = json["TransactionType"].as_str().unwrap_or("?");
-
-        match encode_transaction_json(json, false) {
-            Ok(encoded) => {
-                let actual_hex = hex::encode_upper(&encoded);
-                if actual_hex == expected_hex.to_uppercase() {
-                    passed += 1;
-                } else {
-                    failed += 1;
-                    // Find first byte difference
-                    let expected_bytes = hex::decode(expected_hex).unwrap();
-                    let diff_pos = encoded
-                        .iter()
-                        .zip(expected_bytes.iter())
-                        .position(|(a, b)| a != b)
-                        .unwrap_or(encoded.len().min(expected_bytes.len()));
-
-                    eprintln!(
-                        "MISMATCH tx[{i}] {tx_type}: first diff at byte {diff_pos}, \
-                         our len={}, expected len={}",
-                        encoded.len(),
-                        expected_bytes.len()
-                    );
-                    eprintln!("  got:    {}...", &actual_hex[..80.min(actual_hex.len())]);
-                    eprintln!(
-                        "  expect: {}...",
-                        &expected_hex[..80.min(expected_hex.len())]
-                    );
-                }
-            }
-            Err(e) => {
-                failed += 1;
-                eprintln!("ERROR tx[{i}] {tx_type}: {e}");
-            }
-        }
-    }
-
-    eprintln!(
-        "\nCodec fixture results: {passed} passed, {failed} failed out of {} total",
-        transactions.len()
-    );
-    assert_eq!(failed, 0, "{failed} transaction(s) failed codec test");
+    let (n, failures) = check("transactions");
+    assert_eq!(n, 34);
+    assert!(failures.is_empty(), "{failures:#?}");
 }
 
 #[test]
 fn codec_account_state_vectors() {
-    let fixtures: serde_json::Value =
-        serde_json::from_str(include_str!("../../../tests/vectors/codec-fixtures.json")).unwrap();
-
-    let entries = fixtures["accountState"].as_array().unwrap();
-    let mut passed = 0;
-    let mut failed = 0;
-    let mut skipped = 0;
-
-    for (i, entry) in entries.iter().enumerate() {
-        let expected_hex = entry["binary"].as_str().unwrap();
-        let json = &entry["json"];
-
-        match encode_transaction_json(json, false) {
-            Ok(encoded) => {
-                let actual_hex = hex::encode_upper(&encoded);
-                if actual_hex == expected_hex.to_uppercase() {
-                    passed += 1;
-                } else {
-                    failed += 1;
-                    let entry_type = json["LedgerEntryType"].as_str().unwrap_or("?");
-                    let expected_bytes = hex::decode(expected_hex).unwrap();
-                    let diff_pos = encoded
-                        .iter()
-                        .zip(expected_bytes.iter())
-                        .position(|(a, b)| a != b)
-                        .unwrap_or(encoded.len().min(expected_bytes.len()));
-                    eprintln!(
-                        "MISMATCH state[{i}] {entry_type}: first diff at byte {diff_pos}, \
-                         our len={}, expected len={}",
-                        encoded.len(),
-                        expected_bytes.len()
-                    );
-                }
-            }
-            Err(e) => {
-                skipped += 1;
-                let entry_type = json["LedgerEntryType"].as_str().unwrap_or("?");
-                eprintln!("SKIP state[{i}] {entry_type}: {e}");
-            }
-        }
-    }
-
-    eprintln!(
-        "\nAccount state results: {passed} passed, {failed} failed, {skipped} skipped out of {} total",
-        entries.len()
-    );
-    // Account state may have some exotic types we don't handle yet — allow skips but no mismatches
-    assert_eq!(
-        failed, 0,
-        "{failed} account state entries had mismatched encoding"
-    );
+    let (n, failures) = check("accountState");
+    assert_eq!(n, 261);
+    assert!(failures.is_empty(), "{failures:#?}");
 }
-
-// Debug test removed — codec_transaction_vectors covers all fixtures

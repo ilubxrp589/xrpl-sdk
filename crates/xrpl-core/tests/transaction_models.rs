@@ -1,6 +1,6 @@
-//! The typed transaction models against real transactions: 187 that
+//! The typed transaction models against real transactions: 186 that
 //! `rippled` applied on mainnet and Testnet (tests/fixtures/transactions.jsonl,
-//! 50 transaction types). Each must parse strictly into its own type (no
+//! 51 transaction types). Each must parse strictly into its own type (no
 //! field dropped), serialize back to exactly the same JSON, encode to the
 //! same bytes, and hash to the ID the ledger gave it.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]

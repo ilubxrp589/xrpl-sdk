@@ -15,7 +15,7 @@ pub mod signing;
 
 pub use crate::address::KeyType;
 #[cfg(feature = "std")]
-#[cfg(feature = "std")]
 pub use channel::{sign_payment_channel_claim, verify_payment_channel_claim};
+#[cfg(feature = "std")]
 pub use signing::sign_transaction;
 pub use signing::{sha512_half, Keypair, Seed};

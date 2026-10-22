@@ -11,6 +11,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 xrpl-core = { package = "halcyon-xrpl-core", path = "../crates/xrpl-core" }
 serde_json = "1"
+hex = "0.4"
 
 [[bin]]
 name = "fuzz_decode"
@@ -33,5 +34,29 @@ doc = false
 [[bin]]
 name = "fuzz_amount"
 path = "fuzz_targets/fuzz_amount.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_roundtrip"
+path = "fuzz_targets/fuzz_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_models"
+path = "fuzz_targets/fuzz_models.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_hashes"
+path = "fuzz_targets/fuzz_hashes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_utils"
+path = "fuzz_targets/fuzz_utils.rs"
 test = false
 doc = false
