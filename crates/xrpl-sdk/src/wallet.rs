@@ -77,6 +77,26 @@ impl Wallet {
         self.seed.as_ref().map(Seed::to_base58)
     }
 
+    /// Sign a `Batch` as one of its participants (an account with an inner
+    /// transaction that is not the batch's own account): the `BatchSigner`
+    /// to add with `transaction::batch::add_batch_signers`.
+    pub fn sign_batch(
+        &self,
+        batch: &serde_json::Value,
+    ) -> Result<xrpl_core::transaction::models::BatchSigner, CoreError> {
+        xrpl_core::transaction::batch::sign_batch(batch, &self.keypair)
+    }
+
+    /// Sign a `Batch` for `batch_signer`, an account whose signer list this
+    /// wallet is on: one of the `Signers` of its multi-signed `BatchSigner`.
+    pub fn sign_batch_for(
+        &self,
+        batch: &serde_json::Value,
+        batch_signer: &str,
+    ) -> Result<xrpl_core::transaction::models::Signer, CoreError> {
+        xrpl_core::transaction::batch::sign_batch_for(batch, batch_signer, &self.keypair)
+    }
+
     /// Sign a payment channel claim for `amount_drops` (the channel's total
     /// paid out, not an increment) with this wallet's key.
     pub fn sign_payment_channel_claim(

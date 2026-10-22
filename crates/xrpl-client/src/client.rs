@@ -299,11 +299,80 @@ pub trait Client {
         if let Some(info) = acct_info {
             obj.insert("Sequence".into(), json!(info.account_data.sequence));
         }
-        if let Some(fee) = fee_result {
+        if let Some(fee) = &fee_result {
             obj.insert("Fee".into(), json!(fee.drops.open_ledger_fee));
         }
         if let Some(idx) = ledger_idx {
             obj.insert("LastLedgerSequence".into(), json!(idx + 4));
+        }
+        if tx.get("TransactionType").and_then(Value::as_str) == Some("Batch") {
+            let open_ledger_fee = fee_result.and_then(|f| f.drops.open_ledger_fee.parse().ok());
+            self.autofill_batch(tx, &account, open_ledger_fee).await?;
+        }
+        Ok(())
+    }
+
+    /// The inner-transaction part of [`Client::autofill`] for a `Batch`: mark
+    /// each inner transaction (`tfInnerBatchTxn`, `Fee` "0", empty
+    /// `SigningPubKey`), number the ones without a `Sequence` or
+    /// `TicketSequence` (the outer account's continue after the outer
+    /// `Sequence`; other accounts' from their next sequence), and when the fee
+    /// was missing, charge the batch for all of it: the open-ledger fee ×
+    /// (2 + inner transactions + other accounts that must sign).
+    async fn autofill_batch(
+        &self,
+        tx: &mut Value,
+        outer: &str,
+        open_ledger_fee: Option<u64>,
+    ) -> Result<(), ClientError> {
+        let bad = |m: &str| ClientError::UnexpectedResponse(format!("Batch: {m}"));
+        let outer_seq = tx
+            .get("Sequence")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| bad("no Sequence"))? as u32;
+        let raw = tx
+            .get_mut("RawTransactions")
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| bad("no RawTransactions"))?;
+        let mut next: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+        next.insert(outer.to_string(), outer_seq.saturating_add(1));
+        let mut others = std::collections::BTreeSet::new();
+        for wrapped in raw.iter_mut() {
+            let inner = wrapped
+                .get_mut("RawTransaction")
+                .ok_or_else(|| bad("expected {\"RawTransaction\": …}"))?;
+            *inner = xrpl_core::transaction::batch::inner_transaction(inner)?;
+            let account = inner
+                .get("Account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| bad("an inner transaction has no Account"))?
+                .to_string();
+            if account != outer {
+                others.insert(account.clone());
+            }
+            if inner.get("Sequence").is_some() || inner.get("TicketSequence").is_some() {
+                continue;
+            }
+            let seq = match next.get(&account) {
+                Some(s) => *s,
+                None => {
+                    self.account_info(&account, &LedgerIndex::Current)
+                        .await?
+                        .account_data
+                        .sequence
+                }
+            };
+            next.insert(account, seq.saturating_add(1));
+            if let Some(obj) = inner.as_object_mut() {
+                obj.insert("Sequence".into(), json!(seq));
+            }
+        }
+        if let Some(fee) = open_ledger_fee {
+            let inner_count = raw.len();
+            let total = xrpl_core::transaction::batch::batch_fee(fee, inner_count, others.len());
+            if let Some(obj) = tx.as_object_mut() {
+                obj.insert("Fee".into(), json!(total.to_string()));
+            }
         }
         Ok(())
     }
@@ -670,6 +739,38 @@ mod tests {
             mock.submit("00").await,
             Err(ClientError::TransactionFailed { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn autofill_numbers_and_prices_a_batch() {
+        let mock = Mock::default()
+            .reply("account_info", json!({"account_data": {"Account": "rA", "Balance": "1", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}))
+            .reply("fee", json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "12"}}))
+            .reply("ledger_current", json!({"ledger_current_index": 100}))
+            .reply("account_info", json!({"account_data": {"Account": "rB", "Balance": "1", "Flags": 0, "OwnerCount": 0, "Sequence": 9}}));
+        let pay = |from: &str| json!({"RawTransaction": {"TransactionType": "Payment", "Account": from, "Destination": "rC", "Amount": "1"}});
+        let mut tx = json!({"TransactionType": "Batch", "Account": "rA", "Flags": 0x0001_0000, "RawTransactions": [pay("rA"), pay("rB"), pay("rA")]});
+        mock.autofill(&mut tx).await.unwrap();
+        assert_eq!(tx["Sequence"], 5);
+        let inner: Vec<&Value> = tx["RawTransactions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| &w["RawTransaction"])
+            .collect();
+        assert_eq!(
+            (
+                inner[0]["Sequence"].clone(),
+                inner[1]["Sequence"].clone(),
+                inner[2]["Sequence"].clone()
+            ),
+            (json!(6), json!(9), json!(7))
+        );
+        assert!(inner
+            .iter()
+            .all(|t| t["Fee"] == "0" && t["SigningPubKey"] == "" && t["Flags"] == 0x4000_0000));
+        // 12 × (2 + 3 inner + 1 other signer)
+        assert_eq!(tx["Fee"], "72");
     }
 
     #[tokio::test]
