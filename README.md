@@ -108,13 +108,18 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `xrpl-core`
 
-- Binary codec: `encode_transaction_json` / `decode_transaction_binary` (33/34 XRPL codec fixtures pass)
-- Ed25519 + Secp256k1 key derivation & signing
+- Binary codec: `encode_transaction_json` / `decode_transaction_binary`. Its field registry is rippled 3.4.1's
+  `server_definitions` (82 transaction types, 357 fields); all 34 transaction and 261 ledger-object
+  XRPL codec fixtures round-trip byte for byte
+- Ed25519 + Secp256k1 key derivation & signing, checked byte for byte against rippled's `sign` / `sign_for`
+  and xrpl.js's keypair fixtures
+- X-addresses (XLS-5d): encode/decode, and accepted by the codec in `Account` / `Destination`
 - All XRPL primitive types with serde support
-- Typed transaction builders for 24 transaction types
+- Typed transaction builders for 28 transaction types
 - Reserve calculation utilities
 - DEX price/spread/liquidity utilities
 - `no_std` compatible (types + crypto, no codec)
+- No `unsafe`, and no `unwrap` / `expect` / unchecked indexing in library code (workspace lints)
 
 ### `xrpl-client`
 
@@ -136,11 +141,11 @@ assert_eq!(json["TransactionType"], "Payment");
 
 | Feature | xrpl-sdk (this) | sephynox/xrpl-rust | gmosx/xrpl-sdk-rust |
 |---------|-----------------|-------------------|-------------------|
-| Binary codec | Full (33/34 fixtures) | Full | Partial |
+| Binary codec | Full (34/34 tx + 261/261 ledger-object fixtures) | Full | Partial |
 | Ed25519 + Secp256k1 | Both | Both | Ed25519 only |
 | HTTP client | Yes | Yes | Yes |
 | WebSocket + auto-reconnect | Yes | No | Partial |
-| Typed transaction builders | 24 types | All types | Some types |
+| Typed transaction builders | 28 types | All types | Some types |
 | Autofill | Yes | Yes | No |
 | submit_and_wait | Yes | No | No |
 | Multi-signing | Yes | Yes | No |
