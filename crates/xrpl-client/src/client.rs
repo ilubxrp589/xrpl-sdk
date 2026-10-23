@@ -50,6 +50,211 @@ fn check_x_address_networks(tx: &Value, network_id: u32) -> Result<(), ClientErr
 }
 
 /// `fee`, or [`ClientError::FeeTooHigh`] above `max`.
+/// [`Client::autofill_batch`] with the prices already known.
+async fn fill_batch<C: Client + ?Sized>(
+    client: &C,
+    tx: &mut Value,
+    outer: &str,
+    prices: Option<Prices>,
+    outer_signers: u32,
+) -> Result<(), ClientError> {
+    let bad = |m: &str| ClientError::UnexpectedResponse(format!("Batch: {m}"));
+    let outer_seq = tx
+        .get("Sequence")
+        .and_then(Value::as_u64)
+        .and_then(|s| u32::try_from(s).ok())
+        .ok_or_else(|| bad("no Sequence that fits 32 bits"))?;
+    let raw = tx
+        .get_mut("RawTransactions")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| bad("no RawTransactions"))?;
+    let mut next: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    next.insert(outer.to_string(), outer_seq.saturating_add(1));
+    for wrapped in raw.iter_mut() {
+        let inner = wrapped
+            .get_mut("RawTransaction")
+            .ok_or_else(|| bad("expected {\"RawTransaction\": …}"))?;
+        *inner = xrpl_core::transaction::batch::inner_transaction(inner)?;
+        let account = inner
+            .get("Account")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("an inner transaction has no Account"))?
+            .to_string();
+        if inner.get("Sequence").is_some() || inner.get("TicketSequence").is_some() {
+            continue;
+        }
+        let seq = match next.get(&account) {
+            Some(s) => *s,
+            None => {
+                client
+                    .account_info(&account, &LedgerIndex::Current)
+                    .await?
+                    .account_data
+                    .sequence
+            }
+        };
+        next.insert(account, seq.saturating_add(1));
+        if let Some(obj) = inner.as_object_mut() {
+            obj.insert("Sequence".into(), json!(seq));
+        }
+    }
+    if let Some(prices) = prices {
+        let mut cost = xrpl_core::transaction::cost::transaction_cost(
+            tx,
+            usize::try_from(outer_signers).unwrap_or(usize::MAX),
+        )?;
+        if tx.get("BatchSigners").is_none() {
+            let accounts = xrpl_core::transaction::batch::required_batch_signers(tx)?.len();
+            cost.base_fees = cost
+                .base_fees
+                .saturating_add(u64::try_from(accounts).unwrap_or(u64::MAX));
+        }
+        let total = capped_fee(prices.of(cost), client.max_fee_drops())?;
+        if let Some(obj) = tx.as_object_mut() {
+            obj.insert("Fee".into(), json!(total.to_string()));
+        }
+    }
+    Ok(())
+}
+
+/// What autofill charges now, in drops: one base fee at the open-ledger fee,
+/// one owner reserve scaled the same way, and the extra base fees a
+/// `LoanSet`'s counterparty will add.
+#[derive(Debug, Clone, Copy)]
+struct Prices {
+    base_fee: u64,
+    owner_reserve: u64,
+    extra_base_fees: u64,
+}
+
+impl Prices {
+    /// From the `fee` answer, the owner reserve (drops, when it is needed)
+    /// and the counterparty's signatures.
+    fn new(
+        fee: &FeeResult,
+        reserve: Option<u64>,
+        extra_base_fees: u64,
+    ) -> Result<Self, ClientError> {
+        let open = parse_drops("open_ledger_fee", &fee.drops.open_ledger_fee)?;
+        let base = match reserve {
+            Some(_) => Some(parse_drops("base_fee", &fee.drops.base_fee)?),
+            None => None,
+        };
+        Self::from_parts(open, base, reserve, extra_base_fees)
+    }
+
+    /// The open ledger's fee for a reference transaction prices one base
+    /// fee; an owner reserve is scaled by the same ratio to the unescalated
+    /// `base` fee, rounded up.
+    fn from_parts(
+        open: u64,
+        base: Option<u64>,
+        reserve: Option<u64>,
+        extra_base_fees: u64,
+    ) -> Result<Self, ClientError> {
+        let owner_reserve = match (reserve, base) {
+            (Some(_), Some(0)) => {
+                return Err(ClientError::UnexpectedResponse(
+                    "base_fee is 0, so the open-ledger fee cannot be scaled".into(),
+                ))
+            }
+            (Some(reserve), Some(base)) => {
+                let scaled = (u128::from(reserve) * u128::from(open)).div_ceil(u128::from(base));
+                u64::try_from(scaled).unwrap_or(u64::MAX)
+            }
+            _ => 0,
+        };
+        Ok(Self {
+            base_fee: open,
+            owner_reserve,
+            extra_base_fees,
+        })
+    }
+
+    /// The fee for a transaction of this cost.
+    fn of(&self, mut cost: xrpl_core::transaction::cost::TransactionCost) -> u64 {
+        cost.base_fees = cost.base_fees.saturating_add(self.extra_base_fees);
+        cost.drops(self.base_fee, self.owner_reserve)
+    }
+}
+
+/// `value` (a field of the `fee` answer) as a whole number of drops.
+fn parse_drops(name: &str, value: &str) -> Result<u64, ClientError> {
+    value.parse::<u64>().map_err(|_| {
+        ClientError::UnexpectedResponse(format!("{name} {value:?} is not a whole number of drops"))
+    })
+}
+
+/// The owner reserve of the server's validated ledger, in drops
+/// (`server_state`'s `validated_ledger.reserve_inc`).
+async fn owner_reserve_drops<C: Client + ?Sized>(client: &C) -> Result<u64, ClientError> {
+    client
+        .request(&ServerStateRequest {})
+        .await?
+        .state
+        .validated_ledger
+        .and_then(|l| l.reserve_inc)
+        .ok_or_else(|| {
+            ClientError::UnexpectedResponse(
+                "server_state has no validated ledger, so the owner reserve this \
+                 transaction costs is unknown: set its Fee yourself"
+                    .into(),
+            )
+        })
+}
+
+/// How many signatures a `LoanSet`'s counterparty will add: the size of its
+/// signer list, or one. The counterparty is `Counterparty`, or else the owner
+/// of the `LoanBrokerID` broker (as xrpl.js reads it).
+async fn loan_counterparty_signers<C: Client + ?Sized>(
+    client: &C,
+    tx: &Value,
+) -> Result<u64, ClientError> {
+    let invalid = |m: &str| {
+        ClientError::Core(xrpl_core::CoreError::ValidationError(format!(
+            "LoanSet: {m}"
+        )))
+    };
+    let counterparty = match tx.get("Counterparty").and_then(Value::as_str) {
+        Some(account) => account.to_string(),
+        None => {
+            let broker = tx
+                .get("LoanBrokerID")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid("it needs a Counterparty or a LoanBrokerID"))?;
+            let entry = client
+                .raw_request(
+                    "ledger_entry",
+                    json!({"index": broker, "ledger_index": "validated"}),
+                )
+                .await?;
+            entry
+                .get("node")
+                .and_then(|n| n.get("Owner"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    ClientError::UnexpectedResponse("the loan broker entry has no Owner".into())
+                })?
+                .to_string()
+        }
+    };
+    let info = client
+        .raw_request(
+            "account_info",
+            json!({"account": counterparty, "ledger_index": "validated", "signer_lists": true}),
+        )
+        .await?;
+    // API version 2 puts signer_lists beside account_data; version 1 inside it.
+    let entries = info
+        .get("signer_lists")
+        .or_else(|| info.get("account_data").and_then(|a| a.get("signer_lists")))
+        .and_then(|lists| lists.get(0))
+        .and_then(|list| list.get("SignerEntries"))
+        .and_then(Value::as_array)
+        .map_or(1, Vec::len);
+    Ok(u64::try_from(entries).unwrap_or(u64::MAX))
+}
+
 fn capped_fee(fee: u64, max: u64) -> Result<u64, ClientError> {
     if fee > max {
         return Err(ClientError::FeeTooHigh {
@@ -329,7 +534,13 @@ pub trait Client {
     ///
     /// - `Sequence`: the account's next sequence, or 0 when the transaction
     ///   uses a `TicketSequence`;
-    /// - `Fee`: the open ledger's fee for it, refused with
+    /// - `Fee`: what the open ledger charges for it now: its base cost as
+    ///   `rippled` prices its type
+    ///   ([`transaction_cost`](xrpl_core::transaction::cost::transaction_cost):
+    ///   one owner reserve for `AccountDelete` and `AMMCreate`, more for an
+    ///   `EscrowFinish` with a fulfillment, …) at the open-ledger fee. A
+    ///   `LoanSet` is priced for its counterparty's signatures too (the size
+    ///   of its signer list, or one). The fee is refused with
     ///   [`ClientError::FeeTooHigh`] above [`Client::max_fee_drops`] (a
     ///   busy network, or a server that names any fee it likes, cannot make
     ///   it spend more);
@@ -363,7 +574,19 @@ pub trait Client {
         let need_fee = missing(tx, "Fee");
         let need_lls = missing(tx, "LastLedgerSequence");
         let need_network = missing(tx, "NetworkID");
-        let is_batch = tx.get("TransactionType").and_then(Value::as_str) == Some("Batch");
+        let kind = tx.get("TransactionType").and_then(Value::as_str);
+        let is_batch = kind == Some("Batch");
+        // What rippled charges for this type, to know what to look up.
+        let cost = if need_fee {
+            Some(xrpl_core::transaction::cost::transaction_cost(
+                tx,
+                usize::try_from(signers).unwrap_or(usize::MAX),
+            )?)
+        } else {
+            None
+        };
+        let counterparty_signs =
+            need_fee && kind == Some("LoanSet") && tx.get("CounterpartySignature").is_none();
 
         let seq_fut = async {
             if need_seq && !uses_ticket {
@@ -375,11 +598,26 @@ pub trait Client {
             }
         };
         let fee_fut = async {
-            if need_fee {
-                self.fee().await.map(Some)
-            } else {
-                Ok(None)
+            if !need_fee {
+                return Ok(None);
             }
+            let reserve = async {
+                if cost.is_some_and(|c| c.owner_reserves > 0) {
+                    owner_reserve_drops(self).await.map(Some)
+                } else {
+                    Ok(None)
+                }
+            };
+            let counterparty = async {
+                if counterparty_signs {
+                    loan_counterparty_signers(self, tx).await
+                } else {
+                    Ok(0)
+                }
+            };
+            let (fee, reserve, counterparty) =
+                futures::future::try_join3(self.fee(), reserve, counterparty).await?;
+            Ok(Some((fee, reserve, counterparty)))
         };
         let lls_fut = async {
             if need_lls {
@@ -400,22 +638,12 @@ pub trait Client {
         if let Some(id) = network_id {
             check_x_address_networks(tx, id)?;
         }
-        let open_ledger_fee = fee_result
-            .map(|f| {
-                f.drops.open_ledger_fee.parse::<u64>().map_err(|_| {
-                    ClientError::UnexpectedResponse(format!(
-                        "open_ledger_fee {:?} is not a whole number of drops",
-                        f.drops.open_ledger_fee
-                    ))
-                })
-            })
+        let prices = fee_result
+            .map(|(fee, reserve, counterparty)| Prices::new(&fee, reserve, counterparty))
             .transpose()?;
         // Refuse a fee above the cap before changing anything.
-        let fee = match open_ledger_fee {
-            Some(fee) if !is_batch => Some(capped_fee(
-                fee.saturating_mul(u64::from(signers) + 1),
-                self.max_fee_drops(),
-            )?),
+        let fee = match (prices, cost) {
+            (Some(p), Some(c)) if !is_batch => Some(capped_fee(p.of(c), self.max_fee_drops())?),
             _ => None,
         };
 
@@ -441,9 +669,7 @@ pub trait Client {
             obj.insert("SigningPubKey".into(), json!(""));
         }
         if is_batch {
-            return self
-                .autofill_batch(tx, &account, open_ledger_fee, signers)
-                .await;
+            return fill_batch(self, tx, &account, prices, signers).await;
         }
         if let Some(fee) = fee {
             obj.insert("Fee".into(), json!(fee.to_string()));
@@ -456,11 +682,12 @@ pub trait Client {
     /// `SigningPubKey`), number the ones without a `Sequence` or
     /// `TicketSequence` (the outer account's continue after the outer
     /// `Sequence`; other accounts' from their next sequence), and when the fee
-    /// was missing, charge the batch for all of it: the open-ledger fee ×
-    /// (2 + inner transactions + accounts that must sign the batch + the
-    /// outer transaction's own signers), refused above the fee cap. (A
-    /// BatchSigner that signs through its signer list needs one unit per
-    /// signer: set the `Fee` yourself for those.)
+    /// was missing, charge the batch for all of it as `rippled` prices a
+    /// batch (two base fees, the outer transaction's own signers, each inner
+    /// transaction's own cost, and one per account that must sign the
+    /// batch), refused above the fee cap. (A BatchSigner that signs through
+    /// its signer list needs one base fee per signer: set the `Fee` yourself
+    /// for those.)
     async fn autofill_batch(
         &self,
         tx: &mut Value,
@@ -468,56 +695,27 @@ pub trait Client {
         open_ledger_fee: Option<u64>,
         outer_signers: u32,
     ) -> Result<(), ClientError> {
-        let bad = |m: &str| ClientError::UnexpectedResponse(format!("Batch: {m}"));
-        let outer_seq = tx
-            .get("Sequence")
-            .and_then(Value::as_u64)
-            .and_then(|s| u32::try_from(s).ok())
-            .ok_or_else(|| bad("no Sequence that fits 32 bits"))?;
-        let raw = tx
-            .get_mut("RawTransactions")
-            .and_then(Value::as_array_mut)
-            .ok_or_else(|| bad("no RawTransactions"))?;
-        let mut next: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
-        next.insert(outer.to_string(), outer_seq.saturating_add(1));
-        for wrapped in raw.iter_mut() {
-            let inner = wrapped
-                .get_mut("RawTransaction")
-                .ok_or_else(|| bad("expected {\"RawTransaction\": …}"))?;
-            *inner = xrpl_core::transaction::batch::inner_transaction(inner)?;
-            let account = inner
-                .get("Account")
-                .and_then(Value::as_str)
-                .ok_or_else(|| bad("an inner transaction has no Account"))?
-                .to_string();
-            if inner.get("Sequence").is_some() || inner.get("TicketSequence").is_some() {
-                continue;
+        let prices = match open_ledger_fee {
+            Some(open) => {
+                // An inner transaction that costs an owner reserve needs it,
+                // scaled as the open-ledger fee is.
+                let reserves =
+                    xrpl_core::transaction::cost::transaction_cost(tx, 0)?.owner_reserves;
+                let (base, reserve) = if reserves > 0 {
+                    let (fee, reserve) =
+                        futures::future::try_join(self.fee(), owner_reserve_drops(self)).await?;
+                    (
+                        Some(parse_drops("base_fee", &fee.drops.base_fee)?),
+                        Some(reserve),
+                    )
+                } else {
+                    (None, None)
+                };
+                Some(Prices::from_parts(open, base, reserve, 0)?)
             }
-            let seq = match next.get(&account) {
-                Some(s) => *s,
-                None => {
-                    self.account_info(&account, &LedgerIndex::Current)
-                        .await?
-                        .account_data
-                        .sequence
-                }
-            };
-            next.insert(account, seq.saturating_add(1));
-            if let Some(obj) = inner.as_object_mut() {
-                obj.insert("Sequence".into(), json!(seq));
-            }
-        }
-        if let Some(fee) = open_ledger_fee {
-            let inner_count = raw.len();
-            let signatures = xrpl_core::transaction::batch::required_batch_signers(tx)?.len()
-                + outer_signers as usize;
-            let total = xrpl_core::transaction::batch::batch_fee(fee, inner_count, signatures);
-            let total = capped_fee(total, self.max_fee_drops())?;
-            if let Some(obj) = tx.as_object_mut() {
-                obj.insert("Fee".into(), json!(total.to_string()));
-            }
-        }
-        Ok(())
+            None => None,
+        };
+        fill_batch(self, tx, outer, prices, outer_signers).await
     }
 
     /// Submit a signed blob and wait for its final outcome: the result of the
@@ -909,6 +1107,15 @@ mod tests {
         }
         fn calls(&self) -> Vec<(String, Value)> {
             self.calls.lock().unwrap().clone()
+        }
+        /// Replace the queued `server_state` answers with one whose owner
+        /// reserve is `drops`.
+        fn with_reserve(self, drops: u64) -> Self {
+            self.replies.lock().unwrap().remove("server_state");
+            self.reply(
+                "server_state",
+                json!({"state": {"validated_ledger": {"reserve_inc": drops}}}),
+            )
         }
     }
 
@@ -1363,6 +1570,104 @@ mod tests {
             Ok(())
         ));
         assert!(fee("lots").autofill(&mut t).await.is_err());
+    }
+
+    /// The fee follows rippled 3.4.1's price for each type: one owner
+    /// reserve for AccountDelete (scaled when the open ledger escalates),
+    /// more base fees for an EscrowFinish with a fulfillment and for a
+    /// Confidential MPT transaction. (AccountDelete was priced at one base
+    /// fee, which rippled refuses: telCAN_NOT_QUEUE, which submit_and_wait
+    /// took as dropped and resubmitted until the transaction expired.)
+    #[tokio::test]
+    async fn autofill_prices_each_type_as_rippled_does() {
+        let mock = |open: &str| {
+            Mock::default()
+                .reply("fee", json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": open}}))
+                .reply("server_state", json!({"state": {"validated_ledger": {"base_fee": 10, "reserve_base": 1_000_000, "reserve_inc": 200_000, "seq": 9}}}))
+        };
+        let tx = |kind: &str| json!({"TransactionType": kind, "Account": "rA", "Sequence": 5, "LastLedgerSequence": 9, "NetworkID": 1});
+        let fee_of = |m: Mock, mut t: Value, signers: u32| async move {
+            m.autofill_for_multisigning(&mut t, signers).await.unwrap();
+            (
+                t["Fee"].as_str().unwrap().to_string(),
+                m.calls()
+                    .into_iter()
+                    .map(|(method, _)| method)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        // One owner reserve, whoever signs.
+        let (fee, calls) = fee_of(mock("10"), tx("AccountDelete"), 0).await;
+        assert_eq!(fee, "200000");
+        assert!(calls.contains(&"server_state".to_string()));
+        assert_eq!(fee_of(mock("10"), tx("AMMCreate"), 3).await.0, "200000");
+        // An escalated open ledger (2.5 times the base fee) scales the reserve.
+        assert_eq!(fee_of(mock("25"), tx("AccountDelete"), 0).await.0, "500000");
+        // 100 bytes of fulfillment: 1 + 32 + 6 base fees.
+        let mut escrow = tx("EscrowFinish");
+        escrow["Fulfillment"] = json!("A0".repeat(100));
+        let (fee, calls) = fee_of(mock("12"), escrow, 0).await;
+        assert_eq!(fee, (12 * 39).to_string());
+        assert!(
+            !calls.contains(&"server_state".to_string()),
+            "no reserve needed"
+        );
+        assert_eq!(
+            fee_of(mock("12"), tx("ConfidentialMPTSend"), 1).await.0,
+            (12 * 11).to_string()
+        );
+        // An owner reserve above the cap is refused like any fee.
+        let mut t = tx("AccountDelete");
+        assert!(matches!(
+            mock("10").with_reserve(5_000_000).autofill(&mut t).await,
+            Err(ClientError::FeeTooHigh {
+                fee_drops: 5_000_000,
+                ..
+            })
+        ));
+    }
+
+    /// A LoanSet is priced for its counterparty's signatures: the size of
+    /// the counterparty's signer list (here the loan broker's owner's), or
+    /// one when it has none.
+    #[tokio::test]
+    async fn autofill_prices_a_loan_set_for_its_counterparty() {
+        let fee = json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "10"}});
+        let tx = json!({"TransactionType": "LoanSet", "Account": "rBorrower", "LoanBrokerID": "AB", "Sequence": 5, "LastLedgerSequence": 9, "NetworkID": 1});
+        let mock = Mock::default()
+            .reply("fee", fee.clone())
+            .reply("ledger_entry", json!({"node": {"LedgerEntryType": "LoanBroker", "Owner": "rBroker"}}))
+            .reply("account_info", json!({"account_data": {"Account": "rBroker", "signer_lists": [{"SignerEntries": [{}, {}, {}]}]}}));
+        let mut t = tx.clone();
+        mock.autofill(&mut t).await.unwrap();
+        assert_eq!(t["Fee"], "40");
+        let calls = mock.calls();
+        let info = calls.iter().find(|(m, _)| m == "account_info").unwrap();
+        assert_eq!(info.1["account"], "rBroker");
+        // Named counterparty without a signer list (API version 2 shape): one signature.
+        let mock = Mock::default().reply("fee", fee).reply(
+            "account_info",
+            json!({"account_data": {"Account": "rLender"}, "signer_lists": []}),
+        );
+        let mut t = tx;
+        t["Counterparty"] = json!("rLender");
+        mock.autofill(&mut t).await.unwrap();
+        assert_eq!(t["Fee"], "20");
+    }
+
+    /// A batch's inner transactions are priced by their own type.
+    #[tokio::test]
+    async fn autofill_prices_a_batch_by_its_inner_types() {
+        let ra = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+        let mock = Mock::default()
+            .reply("fee", json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "10"}}))
+            .reply("server_state", json!({"state": {"validated_ledger": {"reserve_inc": 200_000}}}));
+        let inner = |kind: &str, seq: u32| json!({"RawTransaction": {"TransactionType": kind, "Account": ra, "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "1", "Sequence": seq}});
+        let mut tx = json!({"TransactionType": "Batch", "Account": ra, "Flags": 0x0001_0000, "Sequence": 5, "LastLedgerSequence": 9, "NetworkID": 1,
+            "RawTransactions": [inner("Payment", 6), inner("AccountDelete", 7)]});
+        mock.autofill(&mut tx).await.unwrap();
+        // 10 × (2 + 1 Payment) + one owner reserve.
+        assert_eq!(tx["Fee"], "200030");
     }
 
     /// A Ticket transaction's Sequence is 0; a network above 1024 gets its ID.

@@ -192,6 +192,15 @@ refused without the sequence).
   shows.
 - **NFT and MPT IDs.** `NFTokenID` matches `rippled`'s on a mainnet mint and
   on Testnet; `MPTokenIssuanceID` on Testnet.
+- **Transaction cost.** `transaction::cost` follows `rippled` 3.4.1's
+  `calculateBaseFee` for every type that overrides it (owner reserve for
+  `AccountDelete`, `AMMCreate` and `LedgerStateFix`; 32 + *n*/16 extra base
+  fees for an `EscrowFinish` fulfillment of *n* bytes; 9 extra for
+  Confidential MPT; counterparty signatures for `LoanSet`; every part of a
+  `Batch`). `rippled`'s `simulate` on mainnet refuses one drop less than the
+  computed cost and accepts the cost itself, for `AccountDelete` (200,000
+  drops) and a 100-byte fulfillment (390 drops)
+  (`crates/xrpl-core/scripts/probe_cost.py`).
 
 ## 4. Typed ledger entries and responses
 

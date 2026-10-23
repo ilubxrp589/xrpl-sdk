@@ -15,6 +15,8 @@ pub mod batch;
 pub mod builders;
 mod common;
 #[cfg(feature = "std")]
+pub mod cost;
+#[cfg(feature = "std")]
 pub mod models;
 mod types;
 

@@ -393,8 +393,9 @@ fn verify(public_key_hex: &str, data: &[u8], signature_hex: &str) -> Result<bool
 /// `batch_signatures` counts every BatchSigner signature (each signer of a
 /// multi-signed `BatchSigner`) **and** each of the outer transaction's own
 /// `Signers` when it is multi-signed. Inner transactions that cost more on
-/// their own (AccountDelete, AMMCreate) add their extra. Saturates instead of
-/// overflowing.
+/// their own (AccountDelete, AMMCreate, EscrowFinish with a fulfillment, …)
+/// add their extra: [`cost::transaction_cost`](super::cost::transaction_cost)
+/// prices a batch with every rule. Saturates instead of overflowing.
 pub fn batch_fee(base_fee_drops: u64, inner_transactions: usize, batch_signatures: usize) -> u64 {
     let units = 2u64
         .saturating_add(u64::try_from(inner_transactions).unwrap_or(u64::MAX))

@@ -2,7 +2,25 @@
 
 ## Unreleased
 
+### Fixed
+- **`autofill` prices each transaction type as `rippled` does.** It charged
+  every type one base fee (the open-ledger fee), so an `AccountDelete` or
+  `AMMCreate`, which cost one owner reserve (0.2 XRP on mainnet), was
+  refused (`telCAN_NOT_QUEUE`), and `submit_and_wait` resubmitted it until
+  it expired; an `EscrowFinish` with a fulfillment and the Confidential MPT
+  types were refused the same way. Now the fee is the type's base cost at the
+  open-ledger fee: one owner reserve (scaled when the open ledger escalates)
+  for `AccountDelete`, `AMMCreate` and `LedgerStateFix`, 32 + *n*/16 extra
+  base fees for an *n*-byte fulfillment, 9 extra for Confidential MPT, and for
+  a `LoanSet` one per signature its counterparty will add (its signer list's
+  size, or one). A `Batch` is priced from each inner transaction's own cost.
+  The boundaries are checked with `rippled`'s `simulate`
+  (`scripts/probe_cost.py`). The fee cap still applies.
+
 ### Added
+- `transaction::cost::transaction_cost`: a transaction's base cost (base
+  fees and owner reserves) as `rippled` 3.4.1's `calculateBaseFee` computes
+  it, for pricing a transaction offline.
 - **Open a wallet from the backup another wallet gave you.**
   - `Wallet::from_mnemonic(phrase)`: a BIP-39 recovery phrase (12 to 24
     words, as Ledger devices and multi-coin wallets show) at
