@@ -67,8 +67,10 @@ fn require_signed(tx: &Value) -> Result<(), CoreError> {
         .get("TransactionType")
         .and_then(Value::as_str)
         .is_some_and(|t| PSEUDO_TRANSACTIONS.contains(&t));
-    let inner_batch =
-        tx.get("Flags").and_then(Value::as_u64).unwrap_or(0) & TF_INNER_BATCH_TXN != 0;
+    let inner_batch = tx
+        .get("Flags")
+        .and_then(crate::codec::encode::read_uint32)
+        .is_some_and(|f| u64::from(f) & TF_INNER_BATCH_TXN != 0);
     if has("TxnSignature") || has("Signers") || pseudo || inner_batch {
         Ok(())
     } else {

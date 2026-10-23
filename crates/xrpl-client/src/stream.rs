@@ -108,7 +108,17 @@ impl WsEvent {
         }
         Some(match kind.as_str() {
             "ledgerClosed" => typed(&message, WsEvent::Ledger),
-            "transaction" => typed(&message, |t| WsEvent::Transaction(Box::new(t))),
+            "transaction" => typed(&message, |t: TransactionEvent| {
+                if let Tx::Unparsed {
+                    transaction_type,
+                    error,
+                    ..
+                } = &t.transaction
+                {
+                    tracing::warn!(%transaction_type, %error, "a streamed transaction did not parse as its type");
+                }
+                WsEvent::Transaction(Box::new(t))
+            }),
             "validationReceived" => typed(&message, WsEvent::Validation),
             "serverStatus" => typed(&message, WsEvent::Server),
             "consensusPhase" => typed(&message, WsEvent::Consensus),

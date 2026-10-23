@@ -106,6 +106,17 @@ impl Wallet {
         xrpl_core::transaction::batch::sign_batch(batch, &self.keypair)
     }
 
+    /// Sign a `Batch` for `account`, an account whose regular key this
+    /// wallet holds: the `BatchSigner` to add with
+    /// `transaction::batch::add_batch_signers`.
+    pub fn sign_batch_as(
+        &self,
+        batch: &serde_json::Value,
+        account: &str,
+    ) -> Result<xrpl_core::transaction::models::BatchSigner, CoreError> {
+        xrpl_core::transaction::batch::sign_batch_as(batch, account, &self.keypair)
+    }
+
     /// Sign a `Batch` for `batch_signer`, an account whose signer list this
     /// wallet is on: one of the `Signers` of its multi-signed `BatchSigner`.
     pub fn sign_batch_for(

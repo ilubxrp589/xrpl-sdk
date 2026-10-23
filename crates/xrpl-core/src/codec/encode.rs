@@ -234,6 +234,13 @@ fn unsigned_json(value: &Value) -> Option<u64> {
     }
 }
 
+/// A UInt32 field's value (`Flags`, `Sequence`, …) read exactly as the
+/// encoder reads it: a JSON integer or a decimal string that fits 32 bits.
+/// For code that needs the number of a field it will also encode.
+pub(crate) fn read_uint32(value: &Value) -> Option<u32> {
+    unsigned_json(value).and_then(|n| u32::try_from(n).ok())
+}
+
 fn out_of_range(field_name: &str, type_name: &str, value: &Value) -> CoreError {
     CoreError::CodecError(format!(
         "{type_name} field '{field_name}' must be an integer that fits {type_name}, got: {value}"
