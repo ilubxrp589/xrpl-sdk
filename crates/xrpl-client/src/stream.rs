@@ -21,6 +21,20 @@ use serde_json::Value;
 use xrpl_core::transaction::{models::Tx, TransactionMetadata};
 
 /// One message from a subscription, or a connection event.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let ledger = WsEvent::from_message(json!({"type": "ledgerClosed", "ledger_index": 7}));
+/// assert!(matches!(ledger, Some(WsEvent::Ledger(l)) if l.ledger_index == 7));
+/// // A type this crate does not know is kept as JSON.
+/// let new = WsEvent::from_message(json!({"type": "somethingNew"}));
+/// assert!(matches!(new, Some(WsEvent::Other(_))));
+/// // One it knows that does not parse is reported, not dropped.
+/// let bad = WsEvent::from_message(json!({"type": "ledgerClosed"}));
+/// assert!(matches!(bad, Some(WsEvent::Unparsed { kind, .. }) if kind == "ledgerClosed"));
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum WsEvent {
@@ -78,6 +92,16 @@ pub enum WsEvent {
 impl WsEvent {
     /// Whether this is about the connection, not a stream: every
     /// subscription receives these.
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// assert!(WsEvent::Reconnected.is_connection_event());
+    /// assert!(WsEvent::Missed(3).is_connection_event());
+    /// let ledger = WsEvent::from_message(json!({"type": "ledgerClosed", "ledger_index": 7}));
+    /// assert!(ledger.is_some_and(|e| !e.is_connection_event()));
+    /// ```
     pub fn is_connection_event(&self) -> bool {
         matches!(
             self,
@@ -90,6 +114,16 @@ impl WsEvent {
 
     /// The event a stream message (an object with a `type`) carries; `None`
     /// for anything else (such as a reply to a request).
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let phase = WsEvent::from_message(json!({"type": "consensusPhase", "consensus": "accepted"}));
+    /// assert!(matches!(phase, Some(WsEvent::Consensus(c)) if c.consensus == "accepted"));
+    /// // A reply to a request is not a stream message.
+    /// assert!(WsEvent::from_message(json!({"id": 1, "status": "success", "result": {}})).is_none());
+    /// ```
     pub fn from_message(message: Value) -> Option<WsEvent> {
         let kind = message.get("type").and_then(Value::as_str)?.to_owned();
         fn typed<T: serde::de::DeserializeOwned>(
@@ -135,6 +169,19 @@ impl WsEvent {
 }
 
 /// `ledgerClosed`: a ledger was closed and validated.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "ledgerClosed", "ledger_index": 107856091, "ledger_time": 846100681,
+///     "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+///     "txn_count": 377, "fee_base": 10, "reserve_base": 1000000, "reserve_inc": 200000,
+///     "validated_ledgers": "107436647-107856091", "network_id": 0});
+/// let Some(WsEvent::Ledger(ledger)) = WsEvent::from_message(message) else { panic!() };
+/// assert_eq!((ledger.ledger_index, ledger.txn_count), (107856091, Some(377)));
+/// assert_eq!(ledger.reserve_base, Some(1_000_000)); // 1 XRP to hold an account
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LedgerEvent {
@@ -168,6 +215,23 @@ pub struct LedgerEvent {
 
 /// `transaction`: a transaction, typed, with its result. A proposed one
 /// (`validated: false`) is only a preliminary result.
+///
+/// ```
+/// use xrpl_client::stream::WsEvent;
+///
+/// # let message = serde_json::json!({"type": "transaction", "validated": true, "ledger_index": 5,
+/// #     "engine_result": "tesSUCCESS", "engine_result_code": 0, "engine_result_message": "The transaction was applied.",
+/// #     "tx_json": {"TransactionType": "Payment", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+/// #         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "DeliverMax": "1000000", "Fee": "12",
+/// #         "Sequence": 1, "SigningPubKey": "", "Flags": 0},
+/// #     "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": [],
+/// #         "delivered_amount": "1000000"}});
+/// // A validated Payment of 1 XRP from rLUEXYuL… to rPT1Sjq2…, as a stream sends it.
+/// let Some(WsEvent::Transaction(tx)) = WsEvent::from_message(message) else { panic!() };
+/// assert!(tx.validated);
+/// assert_eq!(tx.engine_result, "tesSUCCESS");
+/// assert_eq!(tx.ledger_index, Some(5));
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct TransactionEvent {
@@ -221,6 +285,23 @@ impl TransactionEvent {
     /// What the transaction delivered (`delivered_amount`), once validated:
     /// check this, not a Payment's `Amount`, which a partial payment does
     /// not reach.
+    ///
+    /// ```
+    /// use xrpl_client::stream::WsEvent;
+    /// use xrpl_core::types::Amount;
+    ///
+    /// # let message = serde_json::json!({"type": "transaction", "validated": true, "ledger_index": 5,
+    /// #     "engine_result": "tesSUCCESS", "engine_result_code": 0, "engine_result_message": "The transaction was applied.",
+    /// #     "tx_json": {"TransactionType": "Payment", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    /// #         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "DeliverMax": "1000000", "Fee": "12",
+    /// #         "Sequence": 1, "SigningPubKey": "", "Flags": 0},
+    /// #     "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": [],
+    /// #         "delivered_amount": "1000000"}});
+    /// // A validated Payment that delivered 1 XRP.
+    /// let Some(WsEvent::Transaction(tx)) = WsEvent::from_message(message) else { panic!() };
+    /// assert_eq!(tx.delivered_amount(), Some(Amount::xrp(1_000_000)?));
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn delivered_amount(&self) -> Option<xrpl_core::types::Amount> {
         xrpl_core::utils::delivered_amount(self.meta.as_ref()?)
     }
@@ -229,6 +310,23 @@ impl TransactionEvent {
     /// its metadata (the accounts `rippled` sends an `accounts` subscriber
     /// the transaction for: sender, destination, issuers, every account
     /// whose entries it changed).
+    ///
+    /// ```
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// # let message = serde_json::json!({"type": "transaction", "validated": true, "ledger_index": 5,
+    /// #     "engine_result": "tesSUCCESS", "engine_result_code": 0, "engine_result_message": "The transaction was applied.",
+    /// #     "tx_json": {"TransactionType": "Payment", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    /// #         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "DeliverMax": "1000000", "Fee": "12",
+    /// #         "Sequence": 1, "SigningPubKey": "", "Flags": 0},
+    /// #     "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": [],
+    /// #         "delivered_amount": "1000000"}});
+    /// // A Payment from rLUEXYuL… to rPT1Sjq2….
+    /// let Some(WsEvent::Transaction(tx)) = WsEvent::from_message(message) else { panic!() };
+    /// assert!(tx.affects("rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD"));
+    /// assert!(tx.affects("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"));
+    /// assert!(!tx.affects("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"));
+    /// ```
     pub fn affects(&self, account: &str) -> bool {
         fn names(v: &Value, account: &str) -> bool {
             match v {
@@ -248,6 +346,20 @@ impl TransactionEvent {
 }
 
 /// `validationReceived`: a validator signed a ledger.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "validationReceived", "full": true, "flags": 0x8000_0001u32,
+///     "ledger_hash": "58429A00D59B798B62C1A9C426358699F8216A3795387CBA197B6D779561D4DC",
+///     "ledger_index": 107856090, "signing_time": 846100681, "network_id": 0,
+///     "validation_public_key": "n9KXyhPmB1QDrWLo9Ut4WhWho9iNn5Si9igmnTfXHDfKLPvsSBvS",
+///     "signature": "304402207E8491BB957E052268183497D25EB54D6FF1AD377DBE161D4657A296C48274F802204044E77DF265CAEAF2A27BBFC19A2C5FA3B3E2F023BCC17F9FAD0F9BB6D988A1"});
+/// let Some(WsEvent::Validation(v)) = WsEvent::from_message(message) else { panic!() };
+/// assert_eq!(v.ledger_index, Some(107856090));
+/// assert!(v.full);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ValidationEvent {
@@ -306,6 +418,20 @@ pub struct ValidationEvent {
 }
 
 /// `serverStatus`: the server's load or fee changed.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "serverStatus", "server_status": "full", "base_fee": 10,
+///     "load_base": 256, "load_factor": 128333, "load_factor_fee_escalation": 128333,
+///     "load_factor_fee_queue": 256, "load_factor_fee_reference": 256, "load_factor_server": 256});
+/// let Some(WsEvent::Server(status)) = WsEvent::from_message(message) else { panic!() };
+/// // What a reference transaction costs to get into the open ledger now:
+/// // the base fee × load_factor / load_base.
+/// let drops = status.base_fee.unwrap_or(10) * status.load_factor / status.load_base;
+/// assert_eq!(drops, 5013);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ServerStatusEvent {
@@ -336,6 +462,15 @@ pub struct ServerStatusEvent {
 }
 
 /// `consensusPhase`: `"open"`, `"establish"` or `"accepted"`.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "consensusPhase", "consensus": "establish"});
+/// let Some(WsEvent::Consensus(phase)) = WsEvent::from_message(message) else { panic!() };
+/// assert_eq!(phase.consensus, "establish");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ConsensusEvent {
@@ -345,6 +480,21 @@ pub struct ConsensusEvent {
 
 /// `bookChanges`: each order book's open, high, low, close and volume in a
 /// validated ledger.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "bookChanges", "validated": true, "ledger_index": 107856092, "ledger_time": 846100690,
+///     "ledger_hash": "4A98DEE7F8D18C9865761A37D28B14E18C7856BB5E31623C7BBAA879793F0B7C",
+///     "changes": [{"currency_a": "XRP_drops",
+///         "currency_b": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
+///         "volume_a": "4902965822", "volume_b": "6381.896062861999", "open": "768261.6957471645",
+///         "high": "768403.5", "low": "768261.5776082667", "close": "768403.5"}]});
+/// let Some(WsEvent::BookChanges(trading)) = WsEvent::from_message(message) else { panic!() };
+/// assert_eq!(trading.changes.len(), 1);
+/// assert_eq!(trading.changes[0].volume_a, "4902965822"); // drops of XRP traded
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BookChangesEvent {
@@ -362,6 +512,20 @@ pub struct BookChangesEvent {
 }
 
 /// `manifestReceived`: a validator's new manifest (key rotation).
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "manifestReceived", "seq": 2, "domain": "ripple.ittc.ku.edu",
+///     "master_key": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C",
+///     "signing_key": "n9JeA5Q54JhUQYHieb2j7ZTCg9RTBagDkam3UP2kWQxTXfxFkA8R",
+///     "signature": "304402200296DCF23518D44E47B28D3722C139399AB87C2504F19CCCF127B3733089569E022015116F6EA2B131A73557E49FB689F27E15823EB4F4E599925C0C6CCAF1AE4A56",
+///     "master_signature": "10B6C15F942827A98FAF41AB5EC02A358B7DF6D1288A719C68BEF11333FF9CEAC48E4FE6D659086C993DCC87B549C7330D4FECBA48AA66423B500DCB3011C601"});
+/// let Some(WsEvent::Manifest(manifest)) = WsEvent::from_message(message) else { panic!() };
+/// assert_eq!(manifest.seq, 2);
+/// assert_eq!(manifest.domain.as_deref(), Some("ripple.ittc.ku.edu"));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ManifestEvent {
@@ -375,12 +539,24 @@ pub struct ManifestEvent {
     pub signature: String,
     /// The new signing key.
     pub signing_key: String,
-    /// A domain the account claims, hex (ASCII, lower case) (`Domain`).
+    /// The domain the validator claims, as text (`example.com`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
 }
 
 /// `peerStatusChange`: a peer's ledger or state changed.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::WsEvent;
+///
+/// let message = json!({"type": "peerStatusChange", "action": "ACCEPTED_LEDGER", "date": 846100681,
+///     "ledger_hash": "58429A00D59B798B62C1A9C426358699F8216A3795387CBA197B6D779561D4DC",
+///     "ledger_index": 107856090, "ledger_index_min": 107855833, "ledger_index_max": 107856089});
+/// let Some(WsEvent::PeerStatus(peer)) = WsEvent::from_message(message) else { panic!() };
+/// assert_eq!(peer.action, "ACCEPTED_LEDGER");
+/// assert_eq!(peer.ledger_index, Some(107856090));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PeerStatusEvent {
@@ -404,6 +580,20 @@ pub struct PeerStatusEvent {
 
 /// The offers of a book when subscribing with `snapshot` (`asks` and `bids`
 /// with `both`, otherwise `offers`).
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::stream::OrderBookSnapshot;
+///
+/// // The reply to a `books` subscription with `snapshot` and `both`.
+/// let reply = json!({"bids": [], "asks": [{"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0,
+///     "Sequence": 7, "TakerPays": "5000000",
+///     "TakerGets": {"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "10"}}]});
+/// let snapshot: OrderBookSnapshot = serde_json::from_value(reply)?;
+/// assert_eq!(snapshot.asks.map(|a| a.len()), Some(1));
+/// assert_eq!(snapshot.offers, None); // only without `both`
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OrderBookSnapshot {
