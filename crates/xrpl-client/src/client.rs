@@ -876,7 +876,7 @@ pub(crate) async fn sleep_secs(secs: u64) {
         if let Some(window) = web_sys::window() {
             let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
                 &resolve,
-                (secs * 1000) as i32,
+                i32::try_from(secs.saturating_mul(1000)).unwrap_or(i32::MAX),
             );
         }
     });

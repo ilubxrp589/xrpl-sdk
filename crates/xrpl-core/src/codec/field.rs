@@ -118,6 +118,10 @@ impl FieldId {
     }
 
     /// Encode field header to 1, 2, or 3 bytes per XRPL spec.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "only serialized fields are encoded; their codes are all below 256 (test every_code_fits_a_byte)"
+    )]
     pub fn encode(&self) -> Vec<u8> {
         let tc = self.type_code;
         let fc = self.field_code;
@@ -364,5 +368,27 @@ mod tests {
             FieldId::decode(&[0x00, 0x10, 0x10]).unwrap(),
             (FieldId::new(16, 16), 3)
         );
+    }
+
+    /// FieldId::encode writes each code in a byte.
+    #[test]
+    fn every_code_fits_a_byte() {
+        let defs: serde_json::Value =
+            serde_json::from_str(crate::codec::definitions::DEFINITIONS_JSON).unwrap();
+        for (name, def) in defs["FIELDS"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| (&f[0], &f[1]))
+        {
+            // Only serialized fields are written (hash, index, … are not).
+            if def["isSerialized"] == true {
+                assert!(def["nth"].as_i64().unwrap() < 256, "{name}");
+            }
+        }
+        for code in defs["TYPES"].as_object().unwrap().values() {
+            let code = code.as_i64().unwrap();
+            assert!(!(256..10_000).contains(&code), "{code}");
+        }
     }
 }

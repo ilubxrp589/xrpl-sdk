@@ -152,7 +152,8 @@ impl IouAmount {
 
         // The effective number is mantissa * 10^exponent
         // mantissa has 16 digits (since normalized to [10^15, 10^16))
-        let digits = s.len() as i32;
+        // A u64's digits: at most 20.
+        let digits = i32::try_from(s.len()).unwrap_or(i32::MAX);
         let decimal_point_pos = digits + exp;
 
         if decimal_point_pos <= 0 {

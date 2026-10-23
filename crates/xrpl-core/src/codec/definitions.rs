@@ -38,7 +38,7 @@ static TRANSACTION_TYPES: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
             if code < 0 {
                 return None;
             }
-            Some((name.clone(), code as u16))
+            Some((name.clone(), u16::try_from(code).ok()?))
         })
         .collect()
 });
@@ -55,7 +55,7 @@ static LEDGER_ENTRY_TYPES: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
             if code < 0 {
                 return None;
             }
-            Some((name.clone(), code as u16))
+            Some((name.clone(), u16::try_from(code).ok()?))
         })
         .collect()
 });
@@ -73,7 +73,7 @@ static TYPE_CODES: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
             if code < 0 {
                 return None;
             }
-            Some((name.clone(), code as u16))
+            Some((name.clone(), u16::try_from(code).ok()?))
         })
         .collect()
 });
@@ -110,7 +110,10 @@ static FIELD_MAP: LazyLock<HashMap<String, FieldDef>> = LazyLock::new(|| {
             None => continue,
         };
         let fc = match props["nth"].as_i64() {
-            Some(n) if n >= 0 => n as u16,
+            Some(n) => match u16::try_from(n) {
+                Ok(n) => n,
+                Err(_) => continue,
+            },
             _ => continue,
         };
         let is_vl = props["isVLEncoded"].as_bool().unwrap_or(false);

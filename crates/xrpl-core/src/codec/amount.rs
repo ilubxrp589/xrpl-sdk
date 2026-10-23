@@ -138,7 +138,8 @@ pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
 
     Ok(IouAmount {
         mantissa,
-        exponent: exponent as i8,
+        exponent: i8::try_from(exponent)
+            .map_err(|_| CoreError::InvalidAmount("exponent out of range".to_string()))?,
         is_negative,
     })
 }

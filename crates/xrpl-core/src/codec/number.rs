@@ -185,7 +185,8 @@ fn render(n: &Normal) -> String {
         Some((i, f)) if !i.is_empty() => (i.to_string(), f.to_string()),
         _ => (
             "0".to_string(),
-            "0".repeat(point.unsigned_abs() as usize) + &digits,
+            // |point| is within Number's exponent range (about 2^15).
+            "0".repeat(usize::try_from(point.unsigned_abs()).unwrap_or(0)) + &digits,
         ),
     };
     match frac.trim_end_matches('0') {

@@ -71,6 +71,10 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "shows the float truncation this avoids"
+    )]
     fn server_info_reserves_convert_exactly() {
         assert_eq!(reserve_xrp_to_drops(0.2).unwrap(), 200_000);
         assert_eq!(reserve_xrp_to_drops(1.001).unwrap(), 1_001_000);

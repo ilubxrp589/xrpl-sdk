@@ -601,7 +601,7 @@ mod tests {
         for line in std::fs::read_to_string(path).unwrap().lines() {
             let o: Value = serde_json::from_str(line).unwrap();
             let str_of = |k: &str| o[k].as_str().unwrap();
-            let u32_of = |k: &str| o[k].as_u64().unwrap() as u32;
+            let u32_of = |k: &str| u32::try_from(o[k].as_u64().unwrap()).unwrap();
             let ty = str_of("LedgerEntryType");
             let computed = match ty {
                 "AccountRoot" => keylet::account(str_of("Account")).unwrap(),

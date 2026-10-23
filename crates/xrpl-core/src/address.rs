@@ -20,7 +20,11 @@ const XRPL_ALPHABET: &[u8; 58] = b"rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm
 /// SAFETY: All bytes in XRPL_ALPHABET are ASCII (< 128), so indexing into a [u8; 128] is safe.
 /// The index `i` ranges 0..58, so XRPL_ALPHABET[i] is always in bounds.
 /// This runs in a const context where `.get()` is not available.
-#[allow(clippy::indexing_slicing)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    reason = "const context: i < 58 and every alphabet byte < 128"
+)]
 const DECODE_TABLE: [u8; 128] = {
     let mut table = [255u8; 128];
     let mut i = 0;

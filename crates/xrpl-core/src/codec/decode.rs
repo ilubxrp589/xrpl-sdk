@@ -45,10 +45,19 @@ static TRANSACTION_TYPE_NAMES: LazyLock<HashMap<u16, String>> = LazyLock::new(||
             if code < 0 {
                 return None;
             }
-            Some((code as u16, name.clone()))
+            Some((u16::try_from(code).ok()?, name.clone()))
         })
         .collect()
 });
+
+/// The low 16 bits, as rippled's `static_cast<std::uint16_t>` takes them.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "rippled truncates to 16 bits here; so must the decoder"
+)]
+fn low_16_bits(v: u32) -> u16 {
+    v as u16
+}
 
 /// Reverse map: ledger entry type code → name.
 static LEDGER_ENTRY_TYPE_NAMES: LazyLock<HashMap<u16, String>> = LazyLock::new(|| {
@@ -62,7 +71,7 @@ static LEDGER_ENTRY_TYPE_NAMES: LazyLock<HashMap<u16, String>> = LazyLock::new(|
             if code < 0 {
                 return None;
             }
-            Some((code as u16, name.clone()))
+            Some((u16::try_from(code).ok()?, name.clone()))
         })
         .collect()
 });
@@ -268,7 +277,7 @@ fn decode_uint32(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreErr
     // the 16-bit TxType as rippled's static_cast does.
     if field_name == "PermissionValue" {
         let name = granular_permission_name(val)
-            .or_else(|| transaction_type_name(val.wrapping_sub(1) as u16));
+            .or_else(|| transaction_type_name(low_16_bits(val.wrapping_sub(1))));
         if let Some(name) = name {
             return Ok((Value::String(name.to_string()), 4));
         }

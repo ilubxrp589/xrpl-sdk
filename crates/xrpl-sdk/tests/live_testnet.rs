@@ -140,7 +140,7 @@ fn check(checked: &mut Vec<String>, name: &str, got: String, want: String) {
 }
 
 fn seq(tx: &Value) -> u32 {
-    tx["Sequence"].as_u64().unwrap() as u32
+    u32::try_from(tx["Sequence"].as_u64().unwrap()).unwrap()
 }
 
 #[tokio::test]
