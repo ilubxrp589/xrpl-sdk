@@ -9,6 +9,7 @@
 
 use crate::client::Client;
 use crate::error::ClientError;
+use crate::host_of;
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -134,13 +135,6 @@ impl Shared {
             }
         }
     }
-}
-
-/// The host (and port) of a URL, without scheme, credentials, path or query.
-fn host_of(url: &str) -> String {
-    let rest = url.split_once("://").map_or(url, |(_, r)| r);
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    authority.rsplit('@').next().unwrap_or("").to_string()
 }
 
 async fn open(url: &str) -> Result<WsStream, ClientError> {
@@ -275,6 +269,18 @@ pub struct XrplWsClient {
     url: String,
     max_fee_drops: u64,
     shutdown: watch::Sender<bool>,
+}
+
+impl std::fmt::Debug for XrplWsClient {
+    /// The server's host (never the URL, which may carry a token), whether
+    /// connected, and the fee cap.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XrplWsClient")
+            .field("host", &self.shared.host)
+            .field("connected", &self.is_connected())
+            .field("max_fee_drops", &self.max_fee_drops)
+            .finish()
+    }
 }
 
 impl Drop for XrplWsClient {
@@ -510,6 +516,24 @@ pub struct Subscription {
 }
 
 impl Subscription {
+    /// The events as a [`futures::Stream`], for `StreamExt` combinators
+    /// (`filter`, `take`, `for_each`, …). It ends when the client is dropped.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use futures::StreamExt;
+    ///
+    /// let ledgers = client.subscribe_ledger().await?.into_stream();
+    /// ledgers.take(3).for_each(|event| async move { println!("{event:?}") }).await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn into_stream(self) -> impl futures::Stream<Item = WsEvent> + Send {
+        futures::stream::unfold(self, |mut subscription| async move {
+            subscription.recv().await.map(|event| (event, subscription))
+        })
+    }
+
     /// The next event; `None` once the client is dropped.
     pub async fn recv(&mut self) -> Option<WsEvent> {
         loop {

@@ -54,11 +54,24 @@ pub(crate) async fn read_capped(
         .map_err(|_| ClientError::UnexpectedResponse("a response that is not UTF-8".into()))
 }
 
-/// HTTP JSON-RPC client for XRPL nodes.
+/// HTTP JSON-RPC client for XRPL nodes. Cloning is cheap: clones share one
+/// connection pool.
+#[derive(Clone)]
 pub struct XrplHttpClient {
     base_url: String,
     inner: reqwest::Client,
     max_fee_drops: u64,
+}
+
+impl std::fmt::Debug for XrplHttpClient {
+    /// The server's host (never the URL, which may carry a token) and the
+    /// fee cap.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XrplHttpClient")
+            .field("host", &crate::host_of(&self.base_url))
+            .field("max_fee_drops", &self.max_fee_drops)
+            .finish()
+    }
 }
 
 impl XrplHttpClient {
@@ -140,6 +153,20 @@ impl Client for XrplHttpClient {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+
+    /// `{:?}` shows the server's host, never the rest of a URL that may
+    /// carry credentials or an API key.
+    #[test]
+    fn debug_shows_the_host_only() {
+        let client =
+            XrplHttpClient::new("https://user:s3cret@node.example:51234/rpc?key=abc123").unwrap();
+        let shown = format!("{client:?}");
+        assert!(shown.contains("node.example:51234"), "{shown}");
+        for secret in ["user", "s3cret", "rpc", "abc123"] {
+            assert!(!shown.contains(secret), "{shown}");
+        }
+        let _copy: XrplHttpClient = client.clone();
+    }
     use crate::types::*;
 
     #[test]

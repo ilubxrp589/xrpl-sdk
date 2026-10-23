@@ -43,6 +43,7 @@ impl Transaction for OfferCreate {
 }
 
 /// Builds a [`OfferCreate`] (from [`OfferCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct OfferCreateBuilder {
     common: TxCommon,
     taker_pays: Option<Value>,
@@ -156,6 +157,7 @@ impl Transaction for OfferCancel {
 }
 
 /// Builds a [`OfferCancel`] (from [`OfferCancel::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct OfferCancelBuilder {
     common: TxCommon,
     offer_sequence: Option<u32>,

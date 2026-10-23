@@ -85,6 +85,7 @@ impl Transaction for AMMCreate {
     }
 }
 /// Builds a [`AMMCreate`] (from [`AMMCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMCreateBuilder {
     common: TxCommon,
     amount: Option<Value>,
@@ -249,6 +250,7 @@ impl Transaction for AMMDeposit {
     }
 }
 /// Builds a [`AMMDeposit`] (from [`AMMDeposit::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMDepositBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -453,6 +455,7 @@ impl Transaction for AMMWithdraw {
     }
 }
 /// Builds a [`AMMWithdraw`] (from [`AMMWithdraw::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMWithdrawBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -614,6 +617,7 @@ impl Transaction for AMMVote {
     }
 }
 /// Builds a [`AMMVote`] (from [`AMMVote::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMVoteBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -733,6 +737,7 @@ impl Transaction for AMMBid {
     }
 }
 /// Builds a [`AMMBid`] (from [`AMMBid::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMBidBuilder {
     common: TxCommon,
     asset: Option<Value>,

@@ -271,13 +271,49 @@ pub fn x_address_to_classic(x_address: &str) -> Result<(String, Option<u32>, boo
     Ok((encode_account_id(&account_id), tag, test))
 }
 
-/// Key type for seed encoding/decoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The signature scheme of a key. Written as `rippled`'s `key_type` writes
+/// it (`"ed25519"`, `"secp256k1"`): by `Display`, `FromStr` and serde.
+///
+/// ```
+/// use xrpl_core::address::KeyType;
+///
+/// assert_eq!("secp256k1".parse::<KeyType>()?, KeyType::Secp256k1);
+/// assert_eq!(KeyType::Ed25519.to_string(), "ed25519");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum KeyType {
-    /// Ed25519: `rippled`'s default for new keys.
+    /// Ed25519: what `Wallet::generate` and xrpl.js make by default.
     Ed25519,
-    /// secp256k1 (ECDSA).
+    /// secp256k1 (ECDSA): `rippled`'s `wallet_propose` default, and Xaman's.
     Secp256k1,
+}
+
+impl core::fmt::Display for KeyType {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            KeyType::Ed25519 => "ed25519",
+            KeyType::Secp256k1 => "secp256k1",
+        })
+    }
+}
+
+impl core::str::FromStr for KeyType {
+    type Err = CoreError;
+
+    /// `"ed25519"` or `"secp256k1"`, in any case.
+    fn from_str(s: &str) -> Result<Self, CoreError> {
+        if s.eq_ignore_ascii_case("ed25519") {
+            Ok(KeyType::Ed25519)
+        } else if s.eq_ignore_ascii_case("secp256k1") {
+            Ok(KeyType::Secp256k1)
+        } else {
+            Err(CoreError::ValidationError(format!(
+                "a key type is \"ed25519\" or \"secp256k1\", not {s:?}"
+            )))
+        }
+    }
 }
 
 /// Encode a 16-byte seed to base58check.

@@ -7,8 +7,16 @@ use alloc::string::String;
 
 /// 20-byte XRPL account identifier.
 /// Stored as raw bytes; displayed as base58check classic address (starts with 'r').
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+/// Ordered by its bytes: the order `rippled` sorts multi-signers in (not the
+/// order of the addresses as text).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AccountId(pub [u8; 20]);
+
+impl AsRef<[u8]> for AccountId {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 impl AccountId {
     /// All zero bytes.

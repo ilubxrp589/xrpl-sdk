@@ -63,6 +63,7 @@ impl Transaction for Clawback {
     }
 }
 /// Builds a [`Clawback`] (from [`Clawback::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct ClawbackBuilder {
     common: TxCommon,
     amount: Option<Value>,

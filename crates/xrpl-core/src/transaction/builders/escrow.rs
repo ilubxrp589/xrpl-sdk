@@ -61,6 +61,7 @@ impl Transaction for EscrowCreate {
 }
 
 /// Builds a [`EscrowCreate`] (from [`EscrowCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct EscrowCreateBuilder {
     common: TxCommon,
     amount: Option<String>,
@@ -197,6 +198,7 @@ impl Transaction for EscrowFinish {
 }
 
 /// Builds a [`EscrowFinish`] (from [`EscrowFinish::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct EscrowFinishBuilder {
     common: TxCommon,
     owner: Option<String>,
@@ -303,6 +305,7 @@ impl Transaction for EscrowCancel {
 }
 
 /// Builds a [`EscrowCancel`] (from [`EscrowCancel::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct EscrowCancelBuilder {
     common: TxCommon,
     owner: Option<String>,

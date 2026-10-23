@@ -45,6 +45,7 @@ impl Transaction for PaymentChannelCreate {
     }
 }
 /// Builds a [`PaymentChannelCreate`] (from [`PaymentChannelCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentChannelCreateBuilder {
     common: TxCommon,
     amount: Option<String>,
@@ -176,6 +177,7 @@ impl Transaction for PaymentChannelFund {
     }
 }
 /// Builds a [`PaymentChannelFund`] (from [`PaymentChannelFund::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentChannelFundBuilder {
     common: TxCommon,
     channel: Option<String>,
@@ -289,6 +291,7 @@ impl Transaction for PaymentChannelClaim {
     }
 }
 /// Builds a [`PaymentChannelClaim`] (from [`PaymentChannelClaim::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentChannelClaimBuilder {
     common: TxCommon,
     channel: Option<String>,

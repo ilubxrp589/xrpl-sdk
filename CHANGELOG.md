@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Fixed
+- `KeyType::Ed25519`'s documentation called it `rippled`'s default for new
+  keys; `wallet_propose` defaults to secp256k1. (`Wallet::generate` and
+  xrpl.js default to Ed25519.)
 - docs/PARITY.md said the 6 recorded batches with `BatchSigners` were on
   Testnet; they are on Devnet.
 - **`BlockingClient` has every `Client` method**, as its documentation
@@ -46,6 +49,17 @@
   changed field.
 - `Client::balances(account, ledger)`: an account's XRP, trust-line
   balances and MPTs as typed `Amount`s, all read from one ledger.
+- **Standard traits.** `XrplHttpClient` is `Clone` (clones share one
+  connection pool). The HTTP, WebSocket (native and wasm) and blocking
+  clients are `Debug`, showing the server's host only, never a URL that may
+  carry a token. `Subscription::into_stream` gives the events as a
+  `futures::Stream`. `Hash128`/`160`/`192`/`256` are `FromStr` (hex),
+  `Ord` and `AsRef<[u8]>`. `AccountId` is `Ord` (by its bytes, the order
+  `rippled` sorts multi-signers in) and `AsRef<[u8]>`. `KeyType` is
+  `Display`, `FromStr`, `Hash` and serde, written as `rippled` writes
+  `key_type`. Every public type is `Debug` (the
+  `missing_debug_implementations` lint is on), including the 28 transaction
+  builders.
 - `transaction::cost::transaction_cost`: a transaction's base cost (base
   fees and owner reserves) as `rippled` 3.4.1's `calculateBaseFee` computes
   it, for pricing a transaction offline.

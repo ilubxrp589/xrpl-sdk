@@ -51,6 +51,7 @@ impl Transaction for TrustSet {
 }
 
 /// Builds a [`TrustSet`] (from [`TrustSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct TrustSetBuilder {
     common: TxCommon,
     limit_amount: Option<Value>,

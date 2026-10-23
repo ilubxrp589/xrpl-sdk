@@ -8,10 +8,12 @@ members = [
 ]
 exclude = ["fuzz"]
 
-# The CLAUDE.md safety rules, enforced: no unsafe, and no unwrap/expect/
-# unchecked indexing in library code (test modules opt out explicitly).
+# The safety rules, enforced: no unsafe, and no unwrap/expect/unchecked
+# indexing in library code (test modules opt out explicitly). Every public
+# type can be printed with `{:?}` (secrets show as redacted).
 [workspace.lints.rust]
 unsafe_code = "forbid"
+missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"

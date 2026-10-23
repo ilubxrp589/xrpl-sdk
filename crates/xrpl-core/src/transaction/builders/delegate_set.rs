@@ -42,6 +42,7 @@ impl Transaction for DelegateSet {
     }
 }
 /// Builds a [`DelegateSet`] (from [`DelegateSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct DelegateSetBuilder {
     common: TxCommon,
     authorize: Option<String>,

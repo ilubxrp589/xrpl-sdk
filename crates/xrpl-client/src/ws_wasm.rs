@@ -72,6 +72,32 @@ impl Subscription {
         }
         futures::StreamExt::next(&mut self.rx).await
     }
+
+    /// The events as a [`futures::Stream`] (see the native client's
+    /// `Subscription::into_stream`). It ends when the client is dropped.
+    pub fn into_stream(self) -> impl futures::Stream<Item = WsEvent> {
+        futures::stream::unfold(self, |mut subscription| async move {
+            subscription.recv().await.map(|event| (event, subscription))
+        })
+    }
+}
+
+impl std::fmt::Debug for Subscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Subscription").finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for XrplWsClient {
+    /// The server's host (never the URL, which may carry a token), whether
+    /// connected, and the fee cap.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XrplWsClient")
+            .field("host", &crate::host_of(&self.url))
+            .field("connected", &self.is_connected())
+            .field("max_fee_drops", &self.max_fee_drops)
+            .finish()
+    }
 }
 
 /// WebSocket client for XRPL nodes (WASM version using browser WebSocket API).

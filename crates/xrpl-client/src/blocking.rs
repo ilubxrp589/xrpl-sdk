@@ -43,6 +43,14 @@ pub struct BlockingClient<C: Client = XrplHttpClient> {
     runtime: tokio::runtime::Runtime,
 }
 
+impl<C: Client + std::fmt::Debug> std::fmt::Debug for BlockingClient<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BlockingClient")
+            .field("inner", &self.inner)
+            .finish_non_exhaustive()
+    }
+}
+
 impl BlockingClient<XrplHttpClient> {
     /// A blocking JSON-RPC client for the server at `url`.
     pub fn new(url: &str) -> Result<Self, ClientError> {

@@ -63,6 +63,7 @@ impl Transaction for Payment {
 }
 
 /// Builds a [`Payment`] (from [`Payment::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentBuilder {
     common: TxCommon,
     amount: Option<Value>,

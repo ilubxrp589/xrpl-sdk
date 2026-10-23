@@ -150,6 +150,14 @@
 
 #![warn(missing_docs)]
 
+/// The host (and port) of a URL, without scheme, credentials, path or query:
+/// what logs, errors and `Debug` show of a server (its URL may carry a token).
+pub(crate) fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    authority.rsplit('@').next().unwrap_or("").to_string()
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
 pub mod client;

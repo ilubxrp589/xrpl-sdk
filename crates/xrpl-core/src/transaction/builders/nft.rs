@@ -43,6 +43,7 @@ impl Transaction for NFTokenMint {
 }
 
 /// Builds a [`NFTokenMint`] (from [`NFTokenMint::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenMintBuilder {
     common: TxCommon,
     nf_token_taxon: Option<u32>,
@@ -151,6 +152,7 @@ impl Transaction for NFTokenBurn {
     }
 }
 /// Builds a [`NFTokenBurn`] (from [`NFTokenBurn::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenBurnBuilder {
     common: TxCommon,
     nf_token_id: Option<String>,
@@ -251,6 +253,7 @@ impl Transaction for NFTokenCreateOffer {
     }
 }
 /// Builds a [`NFTokenCreateOffer`] (from [`NFTokenCreateOffer::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenCreateOfferBuilder {
     common: TxCommon,
     nf_token_id: Option<String>,
@@ -365,6 +368,7 @@ impl Transaction for NFTokenCancelOffer {
     }
 }
 /// Builds a [`NFTokenCancelOffer`] (from [`NFTokenCancelOffer::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenCancelOfferBuilder {
     common: TxCommon,
     nf_token_offers: Option<Vec<String>>,
@@ -456,6 +460,7 @@ impl Transaction for NFTokenAcceptOffer {
     }
 }
 /// Builds a [`NFTokenAcceptOffer`] (from [`NFTokenAcceptOffer::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenAcceptOfferBuilder {
     common: TxCommon,
     nf_token_buy_offer: Option<String>,

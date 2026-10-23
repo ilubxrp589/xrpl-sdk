@@ -37,6 +37,7 @@ impl Transaction for SetRegularKey {
     }
 }
 /// Builds a [`SetRegularKey`] (from [`SetRegularKey::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct SetRegularKeyBuilder {
     common: TxCommon,
     regular_key: Option<String>,

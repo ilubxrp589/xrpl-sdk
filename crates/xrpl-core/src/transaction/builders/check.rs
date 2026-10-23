@@ -44,6 +44,7 @@ impl Transaction for CheckCreate {
     }
 }
 /// Builds a [`CheckCreate`] (from [`CheckCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct CheckCreateBuilder {
     common: TxCommon,
     destination: Option<String>,
@@ -163,6 +164,7 @@ impl Transaction for CheckCash {
     }
 }
 /// Builds a [`CheckCash`] (from [`CheckCash::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct CheckCashBuilder {
     common: TxCommon,
     check_id: Option<String>,
@@ -253,6 +255,7 @@ impl Transaction for CheckCancel {
     }
 }
 /// Builds a [`CheckCancel`] (from [`CheckCancel::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct CheckCancelBuilder {
     common: TxCommon,
     check_id: Option<String>,

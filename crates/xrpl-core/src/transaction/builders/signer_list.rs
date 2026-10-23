@@ -77,6 +77,7 @@ impl Transaction for SignerListSet {
     }
 }
 /// Builds a [`SignerListSet`] (from [`SignerListSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct SignerListSetBuilder {
     common: TxCommon,
     signer_quorum: Option<u32>,

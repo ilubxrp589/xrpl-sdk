@@ -85,6 +85,7 @@ impl Transaction for AccountSet {
 }
 
 /// Builds a [`AccountSet`] (from [`AccountSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AccountSetBuilder {
     common: TxCommon,
     set_flag: Option<u32>,
