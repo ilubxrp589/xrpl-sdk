@@ -73,34 +73,38 @@ fn with_classic_addresses(
     Ok(Cow::Owned(out))
 }
 
+/// How a top-level `DeliverMax` is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeliverMax {
+    /// There is none (or this is not the top level): the name is unknown.
+    Absent,
+    /// Beside an equal `Amount`: left out (the `Amount` is written).
+    Skip,
+    /// Alone: written as the `Amount` it is.
+    AsAmount,
+}
+
 /// A Payment's `DeliverMax`, as `rippled`'s `sign` and `submit` take it: API
-/// version 2 writes a Payment's `Amount` only under that name. Alone it
-/// becomes `Amount`; beside an equal `Amount` it is dropped; beside a
-/// different one, or on any other transaction type, it is an error.
-fn with_deliver_max(
-    obj: &serde_json::Map<String, Value>,
-) -> Result<Cow<'_, serde_json::Map<String, Value>>, CoreError> {
+/// version 2 writes a Payment's `Amount` only under that name. Alone it is
+/// written as `Amount`; beside an equal `Amount` it is left out; beside a
+/// different one, or on any other transaction type, it is an error. (Checked
+/// here, written by [`encode_fields`], so the transaction is never copied.)
+fn deliver_max(obj: &serde_json::Map<String, Value>) -> Result<DeliverMax, CoreError> {
     let Some(deliver_max) = obj.get("DeliverMax") else {
-        return Ok(Cow::Borrowed(obj));
+        return Ok(DeliverMax::Absent);
     };
     if obj.get("TransactionType").and_then(Value::as_str) != Some("Payment") {
         return Err(CoreError::UnknownField(
             "DeliverMax (only a Payment has it, as another name for Amount)".to_string(),
         ));
     }
-    if obj
-        .get("Amount")
-        .is_some_and(|amount| amount != deliver_max)
-    {
-        return Err(CoreError::CodecError(
+    match obj.get("Amount") {
+        Some(amount) if amount != deliver_max => Err(CoreError::CodecError(
             "Amount and DeliverMax differ; a Payment's DeliverMax is its Amount".to_string(),
-        ));
+        )),
+        Some(_) => Ok(DeliverMax::Skip),
+        None => Ok(DeliverMax::AsAmount),
     }
-    let mut out = obj.clone();
-    if let Some(amount) = out.remove("DeliverMax") {
-        out.insert("Amount".to_string(), amount);
-    }
-    Ok(Cow::Owned(out))
 }
 
 /// The fields of one object in canonical order, without an end marker.
@@ -108,13 +112,14 @@ fn with_deliver_max(
 /// A name the definitions do not hold is an error, as in `rippled`'s JSON
 /// parser: a misspelt `DestinationTag` must not vanish from what is signed.
 /// At the top level, `rippled`'s response-only keys ([`RESPONSE_ONLY_KEYS`])
-/// are skipped and `for_signing` leaves out the fields that are not signed.
-/// Inner objects are always written whole, as `rippled`'s `STObject::add`
-/// writes them.
+/// are skipped, a Payment's `DeliverMax` is written as [`deliver_max`] says,
+/// and `for_signing` leaves out the fields that are not signed. Inner objects
+/// are always written whole, as `rippled`'s `STObject::add` writes them.
 fn encode_fields(
     obj: &serde_json::Map<String, Value>,
     top_level: bool,
     for_signing: bool,
+    deliver_max: DeliverMax,
 ) -> Result<Vec<u8>, CoreError> {
     let obj = with_classic_addresses(obj)?;
     let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::with_capacity(obj.len());
@@ -123,8 +128,13 @@ fn encode_fields(
         if top_level && RESPONSE_ONLY_KEYS.contains(&name.as_str()) {
             continue;
         }
+        let name = match (name.as_str(), deliver_max) {
+            ("DeliverMax", DeliverMax::Skip) => continue,
+            ("DeliverMax", DeliverMax::AsAmount) => "Amount",
+            (other, _) => other,
+        };
         let field_def =
-            lookup_field_def(name).ok_or_else(|| CoreError::UnknownField(name.clone()))?;
+            lookup_field_def(name).ok_or_else(|| CoreError::UnknownField(name.to_string()))?;
         if !field_def.is_serialized || (for_signing && !field_def.is_signing) {
             continue;
         }
@@ -159,7 +169,7 @@ pub fn encode_transaction_json(json: &Value) -> Result<Vec<u8>, CoreError> {
     let obj = json
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-    encode_fields(&*with_deliver_max(obj)?, true, false)
+    encode_fields(obj, true, false, deliver_max(obj)?)
 }
 
 /// What a single signature covers, as `rippled` builds it
@@ -176,7 +186,7 @@ pub fn encode_for_signing(tx: &Value) -> Result<Vec<u8>, CoreError> {
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
     let mut result = b"STX\0".to_vec();
-    result.extend_from_slice(&encode_fields(&*with_deliver_max(obj)?, true, true)?);
+    result.extend_from_slice(&encode_fields(obj, true, true, deliver_max(obj)?)?);
     Ok(result)
 }
 
@@ -512,7 +522,7 @@ fn encode_st_object(value: &Value) -> Result<Vec<u8>, CoreError> {
     let obj = value
         .as_object()
         .ok_or_else(|| CoreError::CodecError("STObject must be a JSON object".to_string()))?;
-    let mut result = encode_fields(obj, false, false)?;
+    let mut result = encode_fields(obj, false, false, DeliverMax::Absent)?;
     result.push(0xE1); // object end marker
     Ok(result)
 }
@@ -877,7 +887,8 @@ pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<
     let obj = tx
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-    let mut obj = with_deliver_max(obj)?;
+    let deliver_max = deliver_max(obj)?;
+    let mut obj = Cow::Borrowed(obj);
     match obj.get("SigningPubKey") {
         None => {
             obj.to_mut()
@@ -892,7 +903,7 @@ pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<
     }
 
     let mut result = b"SMT\0".to_vec();
-    result.extend_from_slice(&encode_fields(&obj, true, true)?);
+    result.extend_from_slice(&encode_fields(&obj, true, true, deliver_max)?);
     result.extend_from_slice(AccountId::from_address(signing_account)?.as_bytes());
     Ok(result)
 }

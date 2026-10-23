@@ -42,8 +42,8 @@ fixture records where it came from.
 | `crates/xrpl-core/tests/fixtures/xrpljs/` | Transaction metadata and expected balance changes | xrpl.js's own test fixtures |
 | `tests/vectors/codec-fixtures.json` | 34 transactions and 261 ledger entries with their bytes | XRPLF codec fixtures (shared with xrpl.js) |
 | `crates/xrpl-core/src/codec/definitions.json` | Every type, field and result code | `rippled` 3.4.1 `server_definitions` |
-| `crates/xrpl-client/tests/fixtures/rippled/` | One response per method, 44 methods | `rippled` 3.4.1 on mainnet; Clio (`s2.ripple.com`) for Clio-only methods; Testnet for what the live test creates |
-| `crates/xrpl-client/tests/fixtures/streams/` | One message per stream kind | `rippled` 3.4.1 on mainnet (WebSocket) |
+| `crates/xrpl-client/tests/fixtures/rippled/` | 45 recorded responses: every public `rippled` and Clio method, some in two forms (binary, with options); API version 2 | `rippled` 3.4.1 on mainnet; Clio (`s2.ripple.com`) for Clio-only methods; Testnet for what the live test creates |
+| `crates/xrpl-client/tests/fixtures/streams/` | Messages of every stream kind, and `path_find` updates, API version 2 | `rippled` 3.4.1 on mainnet (WebSocket) |
 
 Unit tests that compare against `rippled` carry a comment saying which call
 produced the expected value (for example `// rippled 3.4.1 offline sign of
@@ -51,9 +51,15 @@ the Payment ...`), so any expected value can be re-derived.
 
 ### Refreshing fixtures
 
-- **Responses.** Run the live test with `XRPL_RECORD_DIR=<dir>`. It writes
-  the responses to the requests it makes in the fixture format; copy the ones
-  you want into `crates/xrpl-client/tests/fixtures/rippled/`.
+- **Responses.** `crates/xrpl-client/scripts/record_fixtures.py responses
+  --rippled <url>` sends each recorded request again to a mainnet `rippled`
+  (the Clio-only ones to a mainnet Clio), in API version 2, and writes the
+  answers in place; `record_fixtures.py streams --ws <url>` records the
+  stream messages, an order book snapshot and a `path_find` search from a
+  `rippled`'s admin WebSocket. The Testnet recordings come from the live
+  test run with `XRPL_RECORD_DIR=<dir>`: it writes the responses to the
+  requests it makes in the fixture format; copy them into
+  `crates/xrpl-client/tests/fixtures/rippled/`.
 - **`Number` rules.** `crates/xrpl-core/scripts/probe_number.py` asks a
   `rippled` node (through `simulate`, which applies nothing) how it writes and
   reads `Number` values. The tables in `src/codec/number.rs` are its answers.
@@ -64,9 +70,14 @@ the Payment ...`), so any expected value can be re-derived.
 - **Ledger entry IDs without a sample.** `rippled`'s `ledger_entry` reports
   the index it computes even for an entry that does not exist; the expected
   IDs in `hashes.rs` (`new_keylets_match_rippled`) came from it.
-- **Definitions and typed models.** When `rippled` releases a new version,
-  replace `definitions.json` with its `server_definitions` result and run
-  `crates/xrpl-core/scripts/gen_transactions.py` and `gen_ledger_objects.py`.
+- **Definitions and typed models.** When `rippled` releases a new version
+  (the weekly definitions check opens an issue), record its
+  `server_definitions` result over
+  `crates/xrpl-client/tests/fixtures/rippled/server_definitions.json`, copy
+  its types, fields, transaction and ledger entry types and result codes into
+  `crates/xrpl-core/src/codec/definitions.json` (CI checks the two agree),
+  and run `crates/xrpl-core/scripts/gen_transactions.py` and
+  `gen_ledger_objects.py`.
   These regenerate the typed transactions, ledger entries and flags. The
   test `every_type_is_checked_against_rippled` then names any new transaction
   type that no fixture covers yet.
@@ -119,16 +130,30 @@ goes in the CHANGELOG.
 
 | Job | Runs |
 |---|---|
-| Test | `cargo test --workspace` |
+| Test | `cargo test --workspace` on Linux, macOS and Windows |
+| SemVer | `cargo-semver-checks` against the release on crates.io: no breaking change unless the version says so |
+| Package | `cargo package --workspace`: each crate builds from its packaged files alone |
 | Clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` |
 | Format | `cargo fmt --check` |
 | MSRV | `cargo check --locked` on Rust 1.85 (core) and 1.88 (everything) |
-| WASM build | Clippy for `wasm32-unknown-unknown` with the `wasm` feature |
-| Docs | `cargo doc` with warnings as errors |
+| WASM build | Clippy for `wasm32-unknown-unknown` (core, client, SDK, with `wasm`), and the client's unit tests in Node.js |
+| Features | Clippy for the client and the SDK with no features, `http` only and `ws` only |
+| Definitions | The codec's definitions are the recorded `server_definitions` answer (`check_definitions.py --offline`) |
+| Benchmarks and examples | The benchmarks and the Cloudflare Worker example (outside the workspace) build |
+| Docs | `cargo doc` with warnings as errors, on stable and as docs.rs builds it (nightly, `--cfg docsrs`) |
+| Licences and sources | `cargo-deny`: every dependency's licence is allowed, crates come from crates.io |
 | Security Audit | `cargo audit` against the RustSec database |
-| Live Testnet Tests | The live test, after pushes to `main` |
+| Live Testnet Tests | The live test (`--cfg xrpl_live_tests`), after pushes to `main` |
 
 `.github/workflows/fuzz.yml` runs the fuzz targets as described above.
+
+`.github/workflows/definitions.yml` runs every Monday (and by hand): it
+compares `rippled`'s definitions on Devnet, Testnet and mainnet with the
+SDK's (`crates/xrpl-core/scripts/check_definitions.py`), and when a network
+knows something new (a transaction type, field, ledger entry, result code
+or flag) opens an issue that lists exactly what changed and how to catch up.
+Devnet gets a new `rippled` first, so the issue comes before mainnet
+changes.
 
 ## The rules the code is held to
 

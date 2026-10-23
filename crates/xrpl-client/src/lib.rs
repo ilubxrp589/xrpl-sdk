@@ -145,8 +145,8 @@
 //!
 //! Requests ask for `rippled`'s API version 2 ([`API_VERSION`]), and every
 //! response type in [`types`] is checked against a version 2 response
-//! recorded from a real server: 44 recordings (38 from `rippled` 3.4.1 and
-//! Clio on mainnet, 6 from Testnet), 2,587 field paths. Each must parse, and
+//! recorded from a real server: 45 recordings of 42 methods (39 from
+//! `rippled` 3.4.1 and Clio on mainnet, 6 from Testnet), 2,605 field paths. Each must parse, and
 //! serializing it back must keep every field the server sent, so a field the
 //! types do not model fails the test instead of silently vanishing
 //! (`tests/rippled_responses.rs`). `account_objects`, `ledger_data` and

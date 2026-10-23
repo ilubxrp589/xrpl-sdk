@@ -38,7 +38,7 @@ and the fuzzers, offline, in well under a minute.
 | Batch signing data | Batches `rippled` accepted | 6 of 6 verify; tampering fails | `transaction/batch.rs` |
 | Ledger entry IDs (keylets) | Mainnet entries' `index`, and `rippled` 3.4.1 `ledger_entry` | 14 entries, 12 types; 9 more IDs of 6 more kinds | `hashes.rs` |
 | Ledger entries: typed and back | Mainnet ledger #107827070 | 20 entries, 15 types, exact JSON | `crates/xrpl-core/tests/ledger_objects.rs` |
-| Every typed response | Recorded `rippled` 3.4.1 and Clio responses | 44 methods, no field lost | `crates/xrpl-client/tests/rippled_responses.rs` |
+| Every typed response | Recorded `rippled` 3.4.1 and Clio responses | 42 methods (45 recordings), no field lost | `crates/xrpl-client/tests/rippled_responses.rs` |
 | Every stream event | Recorded `rippled` 3.4.1 stream messages | 9 messages, one of each kind | `crates/xrpl-client/tests/stream_events.rs` |
 | End to end | The XRPL Testnet | 15 kinds of entry ID, 2 batches, multi-signing, every hash | `crates/xrpl-sdk/tests/live_testnet.rs` |
 | Never panics, round trips hold | libFuzzer + AddressSanitizer | 8 targets, about 86 million inputs in the final run | `fuzz/` |
@@ -222,20 +222,21 @@ refused without the sequence).
   typed variant and serialize back to exactly `rippled`'s JSON.
 - **Responses.** Every typed response is checked against a response recorded
   from a real server in `rippled`'s API version 2 (the version every request
-  asks for): 44 methods from `rippled` 3.4.1 on mainnet, and Clio
-  (`s2.ripple.com`) for the Clio-only methods, re-recorded with
-  `crates/xrpl-client/scripts/record_fixtures.py`. Each must parse into its
+  asks for): 42 methods (45 recordings) from `rippled` 3.4.1 on mainnet and
+  Testnet, and Clio (`s2.ripple.com`) for the Clio-only methods, re-recorded
+  with `crates/xrpl-client/scripts/record_fixtures.py`. Each must parse into its
   request's response type and serialize back with every field the server
   sent. A field the types do not model fails the test instead of vanishing.
-- **Streams.** 9 recorded stream kinds, API version 2 (ledger, transactions, proposed
-  transactions, validations, book changes, order books, server, peer status,
-  consensus) each become their own typed event and keep every field.
+- **Streams.** Recorded messages of 9 stream kinds (ledger, transactions,
+  proposed transactions, validations, book changes, server, peer status,
+  consensus, `path_find` updates), API version 2, and an order book
+  snapshot: each becomes its own typed event and keeps every field.
 
 ## 5. Live, on the XRPL Testnet
 
-`RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet` funds two wallets from
-the Testnet faucet and submits one transaction of each kind that creates a
-ledger entry. The following are checked against what the network did:
+`RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test
+live_testnet` funds two wallets from the Testnet faucet and submits one
+transaction of each kind that creates a ledger entry. The following are checked against what the network did:
 
 - **Hashes.** Every submitted transaction's hash, as `hash_signed_tx_blob`
   computes it before submission, against the hash `rippled` reports.

@@ -286,7 +286,7 @@ itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and h
 | Transaction models | 186 real transactions (51 types) round-trip to the same JSON, bytes and ID; an example of every other type, signed by rippled 3.4.1, encodes to its exact `tx_blob`: all 82 types |
 | Edge cases of the format: `Number`, amounts, token values, paths, issues, object structure | 94 binary forms, 80 JSON values and 42 token values put to rippled 3.4.1's `simulate`: the SDK writes and shows each as rippled does, and refuses what rippled refuses instead of rounding or guessing |
 | Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
-| Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet in API version 2 (`scripts/record_fixtures.py` re-records them): each must parse, and serializing it back must keep all 2,587 field paths |
+| Typed responses | 45 responses (42 methods) recorded from rippled 3.4.1, Clio and Testnet in API version 2 (`scripts/record_fixtures.py` re-records them): each must parse, and serializing it back must keep all 2,605 field paths |
 | End to end | `RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
 | Robustness | 9 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |
 
@@ -295,10 +295,11 @@ itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and h
 Measured against xrpl-rust 1.3.0 on the same real mainnet transactions, after checking that both
 give identical results ([docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method and every number):
 
-- encoding a transaction is 8 to 24 times faster, decoding 1.7 to 12 times faster;
-- deriving Ed25519 keys is 5 times faster, and signing a whole transaction 1.3 to 1.7 times faster;
+- encoding a transaction is 8 to 25 times faster, decoding 1.6 to 11.5 times faster;
+- deriving Ed25519 keys is 5 times faster, and signing a whole transaction 1.2 to 1.7 times faster;
+- decoding an address takes the same time;
 - a bare secp256k1 signature is 1.5 times slower (pure-Rust `k256`, against the C library
-  libsecp256k1), and decoding an address 1.2 times slower.
+  libsecp256k1).
 
 ## License
 

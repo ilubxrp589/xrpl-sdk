@@ -7,6 +7,28 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Changed
+- **Faster encoding of a Payment that carries `DeliverMax`.** Since 0.6 the
+  encoder copied the whole transaction to drop or rename `DeliverMax`; it now
+  checks it and writes it in place (encoding a mainnet Payment: 4.64 µs →
+  3.85 µs). The rules are unchanged: alone it is the `Amount`, beside an
+  equal `Amount` it is left out, otherwise it is an error.
+- **Faster address decoding:** one allocation instead of growing a buffer
+  (decoding a classic address: 476 ns → 372 ns, as fast as xrpl-rust's).
+
+### Docs and project
+- **A weekly check of `rippled`'s definitions** (`.github/workflows/definitions.yml`):
+  every Monday it compares the definitions on Devnet, Testnet and mainnet
+  with the SDK's, and when a network's `rippled` knows a new transaction
+  type, field, ledger entry, result code or flag, opens an issue that lists
+  exactly what and how to catch up
+  (`crates/xrpl-core/scripts/check_definitions.py`). CI also checks on every
+  change that the codec's definitions are the recorded ones.
+- Benchmarks re-run for 0.8 ([docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
+- Counts corrected: the 0.8.0 documentation said 44 recorded responses and
+  2,587 field paths; with `path_find` they are 45 (42 methods) and 2,605.
+  TESTING.md lists every CI job and how to re-record the fixtures.
+
 ## [v0.8.0] (2026-10-23)
 
 One consistent API, the 1.0 candidate: 0.8 is the one deliberate set of

@@ -11,23 +11,23 @@ faster halcyon-xrpl-core is, or how many times slower where it is slower.
 
 | Operation | Input | halcyon-xrpl-core | xrpl-rust 1.3.0 | halcyon-xrpl-core is |
 |---|---|---:|---:|---:|
-| Decode binary → JSON | Payment (XRP) | 3.98 µs | 6.68 µs | 1.7× faster |
-| | OfferCreate | 6.30 µs | 73.88 µs | 11.7× faster |
-| | TrustSet | 4.60 µs | 38.75 µs | 8.4× faster |
-| | NFTokenMint | 4.11 µs | 7.14 µs | 1.7× faster |
-| | AMMDeposit | 6.22 µs | 28.66 µs | 4.6× faster |
-| Encode JSON → binary | Payment (XRP) | 3.88 µs | 31.25 µs | 8.1× faster |
-| | OfferCreate | 5.50 µs | 134 µs | 24.3× faster |
-| | TrustSet | 4.18 µs | 75.38 µs | 18.0× faster |
-| | NFTokenMint | 4.01 µs | 32.07 µs | 8.0× faster |
-| | AMMDeposit | 5.94 µs | 70.45 µs | 11.9× faster |
-| Derive keys from a seed | Ed25519 | 17.81 µs | 90.46 µs | 5.1× faster |
+| Decode binary → JSON | Payment (XRP) | 4.17 µs | 6.73 µs | 1.6× faster |
+| | OfferCreate | 6.45 µs | 73.91 µs | 11.5× faster |
+| | TrustSet | 4.71 µs | 39.52 µs | 8.4× faster |
+| | NFTokenMint | 4.38 µs | 7.12 µs | 1.6× faster |
+| | AMMDeposit | 6.50 µs | 28.61 µs | 4.4× faster |
+| Encode JSON → binary | Payment (XRP) | 3.84 µs | 31.34 µs | 8.2× faster |
+| | OfferCreate | 5.30 µs | 133 µs | 25.1× faster |
+| | TrustSet | 4.14 µs | 75.10 µs | 18.1× faster |
+| | NFTokenMint | 3.83 µs | 31.71 µs | 8.3× faster |
+| | AMMDeposit | 6.02 µs | 69.15 µs | 11.5× faster |
+| Derive keys from a seed | Ed25519 | 17.47 µs | 89.44 µs | 5.1× faster |
 | | secp256k1 | 114 µs | 114 µs | the same |
-| Sign signing data | Ed25519 | 36.05 µs | 36.03 µs | the same |
-| | secp256k1 | 44.45 µs | 29.11 µs | 1.5× slower |
-| Sign a transaction (JSON in, signed JSON out) | Ed25519 | 39.35 µs | 67.78 µs | 1.7× faster |
-| | secp256k1 | 48.60 µs | 61.13 µs | 1.3× faster |
-| Decode a classic address | `rHb9CJAW…` | 439 ns | 360 ns | 1.2× slower |
+| Sign signing data | Ed25519 | 34.75 µs | 35.41 µs | the same |
+| | secp256k1 | 44.44 µs | 28.81 µs | 1.5× slower |
+| Sign a transaction (JSON in, signed JSON out) | Ed25519 | 39.00 µs | 66.76 µs | 1.7× faster |
+| | secp256k1 | 48.84 µs | 60.63 µs | 1.2× faster |
+| Decode a classic address | `rHb9CJAW…` | 373 ns | 376 ns | the same |
 
 ## What is measured
 
@@ -77,20 +77,26 @@ Both use deterministic nonces (RFC 6979), so their signatures are identical.
   The C library is faster at the raw signature; signing a whole transaction,
   which also encodes it, is still faster with halcyon-xrpl-core. Ed25519, the
   SDK's default key type, uses `ed25519-dalek` in both libraries.
-- **Address decoding.** About 80 ns slower per address. Next to the
-  microseconds spent encoding and signing each transaction, that is small,
-  and it has not been optimized yet.
+- **Address decoding.** The same speed. (It was about 80 ns slower until,
+  after 0.8.0, the decoder allocated its buffer once instead of growing it.)
 
 ## Method
 
 - **Machine.** AMD Ryzen 5 4500 (6 cores, 12 threads), Linux 6.17, Rust
   1.96.0, the `bench` profile (optimized), on a shared build machine (load
-  average 1 to 2 during the run). Treat differences under about 5% as noise.
+  average about 1 during the runs, the benchmark itself included). Treat
+  differences under about 5% as noise.
 - **Harness.** [criterion](https://crates.io/crates/criterion) 0.5: 100
-  samples per benchmark after a warm-up; the table shows the median.
-- **Versions.** halcyon-xrpl-core at this commit; xrpl-rust 1.3.0 with
+  samples per benchmark after a warm-up.
+- **Two runs, the lower median.** The whole suite ran twice on the same
+  code; each row shows the lower of its two medians. Work elsewhere on a
+  shared machine only ever slows a run down: in these two runs 31 of the 34
+  measurements agreed within 1.5%, and each of the other three was slow in
+  one run only (by 6 to 22%).
+- **Versions.** halcyon-xrpl-core 0.8.0, with the encoding and address
+  changes listed under `[Unreleased]` in the changelog; xrpl-rust 1.3.0 with
   `default-features = false, features = ["std", "core"]`.
-- **Date.** 2026-10-22.
+- **Date.** 2026-10-23.
 
 ## Running them yourself
 

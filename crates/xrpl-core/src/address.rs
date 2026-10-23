@@ -105,8 +105,9 @@ fn base58_decode(s: &str) -> Result<Vec<u8>, CoreError> {
     let zero_char = *XRPL_ALPHABET.first().unwrap_or(&b'r');
     let leading_zeros = s.chars().take_while(|&c| c == zero_char as char).count();
 
-    // Convert from base58 to bytes
-    let mut bytes: Vec<u8> = Vec::new();
+    // Convert from base58 to bytes (each character carries under 6 bits, so
+    // the bytes never outnumber the characters: one allocation).
+    let mut bytes: Vec<u8> = Vec::with_capacity(s.len());
     for c in s.chars() {
         if c as u32 >= 128 {
             return Err(CoreError::InvalidBase58(format!("invalid character: {c}")));
@@ -129,7 +130,8 @@ fn base58_decode(s: &str) -> Result<Vec<u8>, CoreError> {
     }
 
     // Add leading zeros
-    let mut result = vec![0u8; leading_zeros];
+    let mut result = Vec::with_capacity(leading_zeros + bytes.len());
+    result.resize(leading_zeros, 0);
     result.extend(bytes.iter().rev());
     Ok(result)
 }

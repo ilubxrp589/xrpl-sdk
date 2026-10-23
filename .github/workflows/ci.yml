@@ -126,6 +126,15 @@ jobs:
             done
           done
 
+  # The codec's definitions are the recorded rippled answer the transaction
+  # models and ledger entry types are generated from (no network).
+  definitions:
+    name: Definitions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 crates/xrpl-core/scripts/check_definitions.py --offline
+
   # The crates outside the workspace build against this version too: the
   # benchmarks and the Cloudflare Worker example.
   extras:

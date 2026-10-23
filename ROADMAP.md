@@ -105,4 +105,6 @@ The 0.8 API, settled, with a stability promise: no breaking change without a maj
 ## Ongoing
 
 - [ ] Benchmarks re-run and published with each release
-- [ ] Following each `rippled` release: new amendments, fields and transaction types
+- [ ] Following each `rippled` release: new amendments, fields and transaction types (a weekly
+      check compares Devnet, Testnet and mainnet with the SDK's definitions and opens an issue
+      when they differ)
