@@ -351,13 +351,12 @@ fn encode_xrp_string(s: &str) -> Result<Vec<u8>, CoreError> {
     Ok(amount::encode_xrp_signed(negative, drops)?.to_vec())
 }
 
-/// XRP's currency code in either 20-byte form: all zero (`xrpCurrency`), or
-/// "XRP" in the ISO position (`badCurrency`, which `rippled` refuses with
-/// `temBAD_CURRENCY`). Neither can name a token.
+/// XRP's currency code (all zero, `xrpCurrency`; "XRP" reads as it), which
+/// cannot name a token: `rippled`'s JSON parser refuses it. (Its
+/// `badCurrency`, "XRP" in the ISO position, passes the parser and is
+/// refused later, in preflight, so it is written as given.)
 fn is_xrp_currency_code(bytes: &[u8; 20]) -> bool {
-    let mut bad = [0u8; 20];
-    bad[12..15].copy_from_slice(b"XRP");
-    *bytes == [0u8; 20] || *bytes == bad
+    *bytes == [0u8; 20]
 }
 
 fn encode_amount_field(value: &Value) -> Result<Vec<u8>, CoreError> {
@@ -1238,7 +1237,9 @@ mod tests {
         };
         assert!(amount("XRP").is_err());
         assert!(amount("0000000000000000000000000000000000000000").is_err());
-        assert!(amount("0000000000000000000000005852500000000000").is_err());
+        // rippled's parser takes badCurrency (its preflight refuses it); so
+        // does the codec, so that whatever decodes encodes again.
+        assert!(amount("0000000000000000000000005852500000000000").is_ok());
         assert!(amount("USD").is_ok());
     }
 
