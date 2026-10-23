@@ -473,9 +473,9 @@
 //!   every other type, signed by `rippled` 3.4.1, encodes to its exact
 //!   `tx_blob`: all 82 types. Batch signatures verify against real batches.
 //! - **Utilities**: xrpl.js's own fixtures and expected results.
-//! - **Typed responses**: 44 responses recorded from `rippled` 3.4.1, Clio and
-//!   Testnet; each must parse, and serializing it back must keep every one of
-//!   their 2,587 field paths.
+//! - **Typed responses**: 45 responses (42 methods) recorded from `rippled`
+//!   3.4.1, Clio and Testnet; each must parse, and serializing it back must
+//!   keep every one of their 2,605 field paths.
 //! - **End to end** (`RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet`):
 //!   two faucet wallets create a Ticket, Check, Escrow, payment channel (and
 //!   redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding,
