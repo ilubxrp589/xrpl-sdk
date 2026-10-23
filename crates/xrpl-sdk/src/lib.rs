@@ -439,11 +439,15 @@
 //!
 //! | Crate | Feature | Default | Enables |
 //! |---|---|---|---|
-//! | `halcyon-xrpl-sdk`, `halcyon-xrpl-client` | `http`, `ws`, `full` | `http` | accepted for compatibility; on native targets both the HTTP and the WebSocket client are always built |
-//! | | `live-tests` | no | the tests that talk to Testnet |
-//! | `halcyon-xrpl-client` | `wasm` | no | the browser build: HTTP through `fetch`, WebSocket through the browser's `WebSocket` |
+//! | `halcyon-xrpl-sdk`, `halcyon-xrpl-client` | `http` | yes | [`XrplHttpClient`], the faucet ([`generate_faucet_wallet`]) and [`BlockingClient`] (`reqwest`) |
+//! | | `ws` | yes | [`XrplWsClient`]: subscriptions, `path_find` (`tokio-tungstenite`) |
+//! | | `wasm` | no | the browser / Node.js build (`wasm32-unknown-unknown`): HTTP through `fetch`, WebSocket through the JavaScript `WebSocket` |
 //! | `halcyon-xrpl-core` | `std` | yes | the codec, hashes, utilities and JSON support; without it, types and crypto only (`no_std` + `alloc`) |
 //! | | `wasm` | no | `wasm32-unknown-unknown` builds and the JavaScript bindings |
+//!
+//! Without `http` and `ws` (`default-features = false`), the client part is
+//! the [`Client`] trait with every typed request and response, and nothing
+//! that touches the network: bring your own [`Transport`].
 //!
 //! ## How it is checked
 //!
@@ -469,7 +473,7 @@
 //! - **Typed responses**: 44 responses recorded from `rippled` 3.4.1, Clio and
 //!   Testnet; each must parse, and serializing it back must keep every one of
 //!   their 2,587 field paths.
-//! - **End to end** (`cargo test -p halcyon-xrpl-sdk --features live-tests`):
+//! - **End to end** (`RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet`):
 //!   two faucet wallets create a Ticket, Check, Escrow, payment channel (and
 //!   redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding,
 //!   Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on
@@ -542,18 +546,20 @@ pub use xrpl_core::utils;
 pub use xrpl_core::CoreError;
 
 // Re-exports from xrpl-client
-#[cfg(not(target_arch = "wasm32"))]
-pub use xrpl_client::blocking::BlockingClient;
 pub use xrpl_client::error::{ClientError, TransportErrorKind};
-pub use xrpl_client::faucet::{self, FaucetNetwork};
-pub use xrpl_client::http::XrplHttpClient;
 pub use xrpl_client::requests::{self, Paginated, Request};
+pub use xrpl_client::stream::{LedgerEvent, TransactionEvent, WsEvent};
 pub use xrpl_client::types::*;
-pub use xrpl_client::XrplWsClient;
-pub use xrpl_client::{Client, Transport, TransportFuture};
+pub use xrpl_client::{Client, Transport, TransportFuture, API_VERSION};
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
+#[cfg(all(feature = "http", not(target_arch = "wasm32")))]
+pub use xrpl_client::blocking::BlockingClient;
+#[cfg(feature = "http")]
+pub use xrpl_client::faucet::{self, FaucetNetwork};
+#[cfg(feature = "http")]
+pub use xrpl_client::XrplHttpClient;
+#[cfg(feature = "ws")]
+pub use xrpl_client::{Subscription, XrplWsClient};
 
 pub use wallet::{sign, sign_async, SignedTransaction, Wallet};
 pub use xrpl_core::transaction::metadata::{
@@ -571,6 +577,7 @@ pub use xrpl_core::transaction::ToTxJson;
 /// when the faucet refuses (429 when it limits its rate),
 /// [`ClientError::UnexpectedResponse`] when no validated ledger shows the
 /// funding within about 40 seconds, and a [`ClientError`] when a request fails.
+#[cfg(feature = "http")]
 pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, ClientError> {
     let wallet = Wallet::generate();
     faucet::fund_and_wait(network, wallet.classic_address()).await?;

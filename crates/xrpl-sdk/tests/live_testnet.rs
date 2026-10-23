@@ -1,4 +1,4 @@
-//! End to end on the XRPL Testnet (`--features live-tests`): two faucet
+//! End to end on the XRPL Testnet (`--cfg xrpl_live_tests`): two faucet
 //! wallets submit one transaction of each kind that creates a ledger entry,
 //! and every entry's ID must be the one `keylet` computes. Along the way the
 //! SDK's own transaction hash, NFTokenID, balance changes and payment
@@ -9,7 +9,7 @@
 //!
 //! With `XRPL_RECORD_DIR=<dir>` the responses of those requests are written
 //! there in the format of `halcyon-xrpl-client`'s `tests/fixtures/rippled`.
-#![cfg(feature = "live-tests")]
+#![cfg(xrpl_live_tests)]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use serde_json::{json, Value};

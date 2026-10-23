@@ -186,6 +186,20 @@ below says how to update.
   `Keypair::sign` and `Keypair::verify`, deprecated since 0.6.0, are removed:
   use `sign_message` / `verify_message` (careful: for secp256k1 the old
   `sign` took a 32-byte hash, `sign_message` hashes the message itself).
+- **Features that do something.** `http` and `ws` (both on by default)
+  now decide what is built, in `halcyon-xrpl-client` and
+  `halcyon-xrpl-sdk`: `http` is `XrplHttpClient`, the faucet and
+  `BlockingClient` (`reqwest`); `ws` is `XrplWsClient` (`tokio-tungstenite`).
+  Without either, the client is the `Client` trait with every typed request
+  and response, for a transport of your own. The SDK has a `wasm` feature
+  (it builds for `wasm32-unknown-unknown` now). tokio is no longer built
+  with every feature: only what each part uses, and the SDK needs it only
+  for its tests and examples. *Update:* `features = ["full"]` → the
+  default (`full` is gone); the WebSocket client is now on by default in
+  `halcyon-xrpl-client` too (`default-features = false, features = ["http"]`
+  to leave it out). The live Testnet tests are no longer a feature:
+  `RUSTFLAGS="--cfg xrpl_live_tests" cargo test` runs them (`live-tests`
+  is gone).
 - **Client errors.**
   - `ClientError::Http(reqwest::Error)` is gone: reqwest is no longer part
     of the public API, so a reqwest upgrade cannot break your code. A

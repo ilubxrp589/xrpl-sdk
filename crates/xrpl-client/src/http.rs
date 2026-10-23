@@ -610,7 +610,7 @@ mod tests {
     }
 }
 
-// Live testnet tests — only run with `cargo test --features live-tests`
+// Live testnet tests — only run with `RUSTFLAGS="--cfg xrpl_live_tests" cargo test`
 #[cfg(all(test, not(target_arch = "wasm32")))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod transport_tests {
@@ -692,7 +692,7 @@ mod transport_tests {
     }
 }
 
-#[cfg(all(test, feature = "live-tests"))]
+#[cfg(all(test, xrpl_live_tests))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;

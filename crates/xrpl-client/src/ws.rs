@@ -1054,7 +1054,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "live-tests"))]
+#[cfg(all(test, xrpl_live_tests))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;

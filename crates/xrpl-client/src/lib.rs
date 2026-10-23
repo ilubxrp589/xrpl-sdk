@@ -13,15 +13,18 @@
 //!
 //! ## Transports
 //!
-//! | Type | Transport | Targets |
-//! |---|---|---|
-//! | [`XrplHttpClient`] | JSON-RPC over HTTPS (`reqwest`, rustls) | native and `wasm32` |
-//! | [`XrplWsClient`] | WebSocket with subscriptions and automatic reconnection (`tokio-tungstenite`) | native |
-//! | `XrplWsClient` (wasm) | the browser's `WebSocket` | `wasm32` with the `wasm` feature |
+//! | Type | Transport | Targets | Feature |
+//! |---|---|---|---|
+//! | [`XrplHttpClient`] | JSON-RPC over HTTPS (`reqwest`, rustls) | native and `wasm32` | `http` (default) |
+//! | [`XrplWsClient`] | WebSocket with subscriptions and automatic reconnection (`tokio-tungstenite`) | native | `ws` (default) |
+//! | `XrplWsClient` (wasm) | the browser's `WebSocket` | `wasm32` | `ws` and `wasm` |
 //!
-//! All of them implement [`Client`]: a transport supplies
-//! [`Client::raw_request`], and every method below is written once on top of
-//! it, so they behave the same on every transport.
+//! All of them implement [`Transport`], and so [`Client`]: a transport
+//! supplies [`Transport::send_raw`], and every method below is written once
+//! on top of it, so they behave the same on every transport. With neither
+//! feature (`default-features = false`) the crate is the [`Client`] trait,
+//! the typed requests and responses, and nothing that touches the network:
+//! bring your own [`Transport`].
 //!
 //! ## The `Client` trait
 //!
@@ -152,35 +155,39 @@
 
 /// The host (and port) of a URL, without scheme, credentials, path or query:
 /// what logs, errors and `Debug` show of a server (its URL may carry a token).
+#[cfg(any(feature = "http", feature = "ws"))]
 pub(crate) fn host_of(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     authority.rsplit('@').next().unwrap_or("").to_string()
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "http", not(target_arch = "wasm32")))]
 pub mod blocking;
 pub mod client;
 pub mod error;
+#[cfg(feature = "http")]
 pub mod faucet;
+#[cfg(feature = "http")]
 pub mod http;
 pub mod requests;
 pub mod stream;
 pub mod types;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "ws", not(target_arch = "wasm32")))]
 pub mod ws;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "ws", target_arch = "wasm32"))]
 pub mod ws_wasm;
 
 pub use client::{Client, MaybeSend, MaybeSync, Transport, TransportFuture, API_VERSION};
 pub use error::{ClientError, TransportErrorKind};
+#[cfg(feature = "http")]
 pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "ws", not(target_arch = "wasm32")))]
 pub use ws::{Subscription, WsClientBuilder, XrplWsClient};
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "ws", target_arch = "wasm32"))]
 pub use ws_wasm::{Subscription, XrplWsClient};

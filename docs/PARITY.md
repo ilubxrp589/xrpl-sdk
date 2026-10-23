@@ -233,7 +233,7 @@ refused without the sequence).
 
 ## 5. Live, on the XRPL Testnet
 
-`cargo test -p halcyon-xrpl-sdk --features live-tests` funds two wallets from
+`RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet` funds two wallets from
 the Testnet faucet and submits one transaction of each kind that creates a
 ledger entry. The following are checked against what the network did:
 
@@ -388,7 +388,7 @@ The rest are places this report makes no claim.
 ```bash
 cargo test --workspace                                    # all offline checks
 cargo test -p halcyon-xrpl-core --test codec_fixtures -- --nocapture   # with counts
-cargo test -p halcyon-xrpl-sdk --features live-tests -- --nocapture    # Testnet, ~2 minutes
+RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet -- --nocapture    # Testnet, ~2 minutes
 
 python3 fuzz/seed_corpus.py                               # fuzzing (nightly Rust)
 cargo +nightly fuzz run fuzz_roundtrip -- -max_total_time=120

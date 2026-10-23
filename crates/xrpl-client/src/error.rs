@@ -194,6 +194,7 @@ impl std::fmt::Display for TransportErrorKind {
 
 impl ClientError {
     /// A [`ClientError::Transport`] of `kind` with `message`.
+    #[cfg(any(feature = "http", feature = "ws"))]
     pub(crate) fn transport(kind: TransportErrorKind, message: impl std::fmt::Display) -> Self {
         ClientError::Transport {
             kind,

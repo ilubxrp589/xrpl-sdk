@@ -20,6 +20,7 @@ pub const API_VERSION: u32 = 2;
 
 /// `params` with [`API_VERSION`] added, unless it names a version (or is not
 /// an object).
+#[cfg(any(feature = "http", feature = "ws"))]
 pub(crate) fn with_api_version(mut params: Value) -> Value {
     if let Some(obj) = params.as_object_mut() {
         obj.entry("api_version")
@@ -1610,6 +1611,7 @@ fn classify_submit(sr: SubmitResult) -> Result<SubmitResult, ClientError> {
 
 /// rippled's error, from the object that carries it (an HTTP response's
 /// `result`, or a WebSocket message), with the whole object kept.
+#[cfg(any(feature = "http", feature = "ws", test))]
 pub(crate) fn rpc_error(obj: &Value) -> ClientError {
     let text = |k: &str| obj.get(k).and_then(Value::as_str).map(str::to_string);
     ClientError::RpcError {
@@ -1621,6 +1623,7 @@ pub(crate) fn rpc_error(obj: &Value) -> ClientError {
 
 /// A WebSocket response's `result`, or the error it carries (`rippled` puts
 /// a WebSocket error's fields at the top of the message).
+#[cfg(feature = "ws")]
 pub(crate) fn ws_response(message: &Value) -> Result<Value, ClientError> {
     if message.get("status").and_then(Value::as_str) == Some("error")
         || message.get("error").is_some()
@@ -1956,6 +1959,7 @@ mod tests {
 
     /// The trait's futures stay Send for the real clients (tokio::spawn needs it).
     #[allow(dead_code)]
+    #[cfg(all(feature = "http", feature = "ws"))]
     fn client_futures_are_send(
         http: &crate::XrplHttpClient,
         ws: &crate::XrplWsClient,

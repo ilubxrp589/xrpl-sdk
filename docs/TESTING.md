@@ -10,7 +10,7 @@ refresh it. [PARITY.md](PARITY.md) lists what the tests establish against
 cargo test --workspace                  # everything offline: unit, fixtures, doc examples, CLI
 cargo test -p halcyon-xrpl-core         # one crate
 cargo test codec_ -- --nocapture        # by name, with the tests' own counts printed
-cargo test -p halcyon-xrpl-sdk --features live-tests -- --nocapture   # the live Testnet test
+RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet -- --nocapture   # the live Testnet test
 ```
 
 The offline suite needs no network and takes well under a minute on a laptop.
@@ -25,7 +25,7 @@ The live test needs the XRPL Testnet faucet and takes about two minutes.
 | Doc examples | `///` and `//!` comments | Every example in the API docs compiles and runs |
 | Transport tests | `#[cfg(test)]` of `client.rs`, `ws.rs`, `http.rs` | `submit_and_wait` and `autofill` against a mock server that answers each call as `rippled` would (every outcome path, on a paused clock); the WebSocket client against a local WebSocket server (per-subscription events, drop closes, reconnect and resubscribe); HTTP body caps and URL-free errors against a local server |
 | CLI tests | `crates/xrpl-cli/tests/cli.rs` | The offline `hxrpl` commands, run as a user would; the `--yes` guard against a local server that says which network it is on |
-| Live test | `crates/xrpl-sdk/tests/live_testnet.rs` | End to end on Testnet (feature `live-tests`) |
+| Live test | `crates/xrpl-sdk/tests/live_testnet.rs` | End to end on Testnet (`--cfg xrpl_live_tests`) |
 | Fuzz targets | `fuzz/fuzz_targets/` | Never panic, and round trips hold, on any input |
 | Benchmarks | `benchmarks/` | Speed against xrpl-rust on the same inputs ([BENCHMARKS.md](BENCHMARKS.md)) |
 
@@ -73,7 +73,7 @@ the Payment ...`), so any expected value can be re-derived.
 
 ## The live Testnet test
 
-`--features live-tests` enables `crates/xrpl-sdk/tests/live_testnet.rs`. It
+`--cfg xrpl_live_tests` (in `RUSTFLAGS`) enables `crates/xrpl-sdk/tests/live_testnet.rs`. It
 funds two wallets from the Testnet faucet, submits one transaction of each
 kind that creates a ledger entry, two batches and a multi-signed transaction,
 and checks every hash, entry ID and parsed response against what the network

@@ -97,6 +97,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --target wasm32-unknown-unknown -p halcyon-xrpl-core -p halcyon-xrpl-client --features wasm -- -D warnings
+      - run: cargo clippy --target wasm32-unknown-unknown -p halcyon-xrpl-sdk --features wasm -- -D warnings
       # The client's unit tests in Node.js: no browser window, as in a worker.
       - name: Install wasm-bindgen-test-runner (the version Cargo.lock pins)
         run: |
@@ -105,6 +106,25 @@ jobs:
       - run: cargo test --locked --target wasm32-unknown-unknown -p halcyon-xrpl-client --lib --features wasm
         env:
           CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
+
+  # Each feature on its own builds, warning-free: none (the Client trait and
+  # the types only), `http` only, `ws` only.
+  features:
+    name: Features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          for crate in halcyon-xrpl-client halcyon-xrpl-sdk; do
+            for features in "" "--features http" "--features ws"; do
+              echo "== $crate --no-default-features $features"
+              cargo clippy --locked --all-targets -p $crate --no-default-features $features -- -D warnings
+            done
+          done
 
   # The crates outside the workspace build against this version too: the
   # benchmarks and the Cloudflare Worker example.
@@ -145,7 +165,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Not continue-on-error: a failure against the live network shows.
-      - run: cargo test --workspace --features live-tests
+      - run: cargo test --workspace
+        env:
+          RUSTFLAGS: --cfg xrpl_live_tests
 
   # Every dependency's licence is one deny.toml allows, from crates.io only,
   # with no wildcard versions.
