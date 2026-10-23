@@ -23,7 +23,8 @@ The live test needs the XRPL Testnet faucet and takes about two minutes.
 | Unit tests | `#[cfg(test)]` module of each source file | The rules of one module, often with `rippled`'s own answers as the expected values |
 | Fixture tests | `crates/*/tests/*.rs` | Whole-crate behaviour against recorded real-network data |
 | Doc examples | `///` and `//!` comments | Every example in the API docs compiles and runs |
-| CLI tests | `crates/xrpl-cli/tests/cli.rs` | The offline `hxrpl` commands, run as a user would |
+| Transport tests | `#[cfg(test)]` of `client.rs`, `ws.rs`, `http.rs` | `submit_and_wait` and `autofill` against a mock server that answers each call as `rippled` would (every outcome path, on a paused clock); the WebSocket client against a local WebSocket server (per-subscription events, drop closes, reconnect and resubscribe); HTTP body caps and URL-free errors against a local server |
+| CLI tests | `crates/xrpl-cli/tests/cli.rs` | The offline `hxrpl` commands, run as a user would; the `--yes` guard against a local server that says which network it is on |
 | Live test | `crates/xrpl-sdk/tests/live_testnet.rs` | End to end on Testnet (feature `live-tests`) |
 | Fuzz targets | `fuzz/fuzz_targets/` | Never panic, and round trips hold, on any input |
 | Benchmarks | `benchmarks/` | Speed against xrpl-rust on the same inputs ([BENCHMARKS.md](BENCHMARKS.md)) |
@@ -56,6 +57,13 @@ the Payment ...`), so any expected value can be re-derived.
 - **`Number` rules.** `crates/xrpl-core/scripts/probe_number.py` asks a
   `rippled` node (through `simulate`, which applies nothing) how it writes and
   reads `Number` values. The tables in `src/codec/number.rs` are its answers.
+- **Token values.** `crates/xrpl-core/scripts/probe_iou.py` asks the same
+  way how `rippled` reads a token value from JSON (syntax, rounding, range);
+  the table in `src/types/amount.rs` (`reads_token_values_as_rippled_does`)
+  holds its answers.
+- **Ledger entry IDs without a sample.** `rippled`'s `ledger_entry` reports
+  the index it computes even for an entry that does not exist; the expected
+  IDs in `hashes.rs` (`new_keylets_match_rippled`) came from it.
 - **Definitions and typed models.** When `rippled` releases a new version,
   replace `definitions.json` with its `server_definitions` result and run
   `crates/xrpl-core/scripts/gen_transactions.py` and `gen_ledger_objects.py`.

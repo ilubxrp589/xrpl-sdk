@@ -40,7 +40,7 @@ welcome as GitHub issues.
 - [x] A command-line tool: `cargo install halcyon-xrpl-cli` (`hxrpl`)
 - [ ] An example of every public item on docs.rs
 
-## 0.5: trust
+## 0.5: trust (released 2026-10-22)
 
 - [x] Fuzzing in CI: eight targets, seeded with real XRPL data, on every pull request and weekly
 - [x] Benchmarks against xrpl-rust on the same inputs ([docs/BENCHMARKS.md](docs/BENCHMARKS.md))
@@ -48,6 +48,17 @@ welcome as GitHub issues.
 - [x] A parity report: every check against `rippled` 3.4.1 ([docs/PARITY.md](docs/PARITY.md))
 - [x] The codec reads and writes exactly what `rippled` does at the edges: `Number`, amounts,
       payment paths (including MPT path steps), each probed against `rippled` itself
+
+## 0.6: security
+
+- [x] A full adversarial review of every crate, with each finding fixed and tested (see the
+      [changelog](CHANGELOG.md)): the codec refuses what `rippled` refuses instead of changing the
+      transaction, fees are capped, `submit_and_wait` answers only with final outcomes, secrets
+      never reach logs or errors, each WebSocket subscription hears only its own events
+- [x] Keylets for every ledger entry type, checked against the index `rippled` computes
+- [x] `delivered_amount` helpers; exact reserves and book liquidity
+- [x] Narrowing `as` casts denied by Clippy in every crate
+- [x] [docs/CRYPTO.md](docs/CRYPTO.md) and a security policy with a private reporting channel
 
 ## Ongoing
 

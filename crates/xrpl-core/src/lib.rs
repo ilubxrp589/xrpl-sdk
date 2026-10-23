@@ -154,8 +154,11 @@
 //! signatures verify against real batches `rippled` accepted. Ledger entry IDs match real mainnet entries
 //! and a live Testnet run. The utilities pass xrpl.js's own fixtures.
 //!
-//! Where the format has edge cases (`Number`, amounts, payment paths), each case was put to
-//! `rippled` 3.4.1 itself, and the codec reads, writes and refuses exactly what `rippled` does.
+//! Where the format has edge cases (`Number`, amounts, token values, payment paths), each case
+//! was put to `rippled` 3.4.1 itself, and the codec reads, writes and refuses what `rippled`
+//! does; the few deliberate differences (each safer than `rippled`'s JSON reader) are listed in
+//! the parity report. A field name `rippled` does not define, or an integer too large for its
+//! field, is an error, never dropped or wrapped.
 //! Eight fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
 //! it, is in the [parity report](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md);
 //! speed against xrpl-rust is in the

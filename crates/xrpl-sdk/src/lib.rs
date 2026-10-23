@@ -68,7 +68,9 @@
 //! `rippled` does by default; [`Wallet::generate_with_type`] makes secp256k1
 //! ones. [`Wallet::from_seed`] restores a wallet from its seed (`s…`), and
 //! [`Wallet::seed`] gives the seed of a wallet made from one. Private keys and
-//! seeds are wiped from memory when dropped.
+//! seeds are wiped from memory when dropped and never shown by `Debug` (the
+//! limits of that, and what is signed how, are in
+//! [docs/CRYPTO.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/CRYPTO.md)).
 //!
 //! Signing needs no network. This example signs a payment and checks the
 //! result against `rippled` 3.4.1, which signed the same transaction with the
@@ -311,9 +313,16 @@
 //! # Ok(()) }
 //! ```
 //!
-//! The WebSocket client reconnects on its own and resubscribes. Every
-//! `rippled` stream arrives as a typed [`WsEvent`] (checked against messages
-//! recorded from mainnet): subscribe with `subscribe_ledger`,
+//! Each `subscribe_*` receiver ([`Subscription`]) hears only its own stream
+//! (`subscribe_account` only that account's validated transactions);
+//! `events()` hears everything. A receiver that falls behind gets
+//! [`WsEvent::Missed`] instead of an error that ends the loop. When the
+//! connection drops or goes silent, the client sends [`WsEvent::Disconnected`],
+//! reconnects, subscribes again to everything (a refusal is
+//! [`WsEvent::ResubscribeFailed`]) and sends [`WsEvent::Reconnected`];
+//! dropping the client closes the connection. Every `rippled` stream arrives
+//! as a typed [`WsEvent`] (checked against messages recorded from mainnet):
+//! subscribe with `subscribe_ledger`,
 //! `subscribe_transactions` (each transaction a typed [`Tx`]),
 //! `subscribe_transactions_proposed`, `subscribe_account`,
 //! `subscribe_validations`, `subscribe_server`, `subscribe_consensus`,
@@ -476,9 +485,13 @@
 //!   every ID, hash and balance change must be what the network recorded, and
 //!   the typed queries for what they made (channels, NFT offers, oracle prices,
 //!   MPT holders through Clio) must parse the answers.
-//! - **Edge cases of the format** (`Number`, amounts, payment paths): each was
-//!   put to `rippled` 3.4.1 itself, and the codec reads, writes and refuses
-//!   exactly what `rippled` does.
+//! - **Edge cases of the format** (`Number`, amounts, token values, payment
+//!   paths): each was put to `rippled` 3.4.1 itself, and the codec reads,
+//!   writes and refuses what `rippled` does (the deliberate differences are in
+//!   the parity report).
+//! - **Ledger entry IDs**: every kind, including bridges, credential
+//!   preauthorizations and order-book directories, matches the index
+//!   `rippled` 3.4.1 computes.
 //! - **Robustness**: eight fuzz targets, seeded with all of the above, run in
 //!   CI on every change: nothing panics, and decode → encode → decode is stable.
 //!
