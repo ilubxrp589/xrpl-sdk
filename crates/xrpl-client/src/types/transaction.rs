@@ -10,6 +10,7 @@ use std::collections::HashMap;
 /// the preliminary result of applying the transaction to the open ledger.
 /// Only a validated ledger makes a result final.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SubmitResult {
     /// `tesSUCCESS`, `tec…`, `tem…`, `tef…`, `tel…` or `ter…`.
     pub engine_result: String,
@@ -57,6 +58,7 @@ pub struct SubmitResult {
 /// sit at the top level next to `meta`, `hash`, `ledger_index` and the rest;
 /// they are in `tx_fields`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TxResult {
     /// Metadata, once the transaction is in a ledger (a hex string with `binary: true`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -101,6 +103,7 @@ impl TxResult {
 /// [`transaction_entry`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/transaction_entry):
 /// a transaction from one given ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransactionEntryResult {
     /// The transaction, as JSON.
     pub tx_json: Value,
@@ -121,6 +124,7 @@ pub struct TransactionEntryResult {
 /// what a transaction would do in the current open ledger, without
 /// submitting it (rippled 2.4+). Nothing is signed or sent to the network.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SimulateResult {
     /// Whether it would apply (always `false`: nothing is applied).
     pub applied: bool,

@@ -7,6 +7,7 @@ use serde_json::Value;
 /// a single-asset vault and its share issuance (SingleAssetVault amendment).
 /// The vault is kept as JSON until mainnet data lets it be checked typed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultInfoResult {
     /// The vault and its share issuance.
     pub vault: Value,

@@ -13,6 +13,7 @@ use serde_json::Value;
 
 /// `AMM` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMM {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -73,6 +74,7 @@ pub struct AMM {
 
 /// `AccountRoot` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountRoot {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -267,6 +269,7 @@ impl AccountRoot {
 
 /// `Amendments` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Amendments {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -309,6 +312,7 @@ pub struct Amendments {
 
 /// `Bridge` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bridge {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -357,6 +361,7 @@ pub struct Bridge {
 
 /// `Check` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Check {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -415,6 +420,7 @@ pub struct Check {
 
 /// `Credential` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Credential {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -478,6 +484,7 @@ impl Credential {
 
 /// `DID` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DID {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -517,6 +524,7 @@ pub struct DID {
 
 /// `Delegate` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Delegate {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -556,6 +564,7 @@ pub struct Delegate {
 
 /// `DepositPreauth` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DepositPreauth {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -592,6 +601,7 @@ pub struct DepositPreauth {
 
 /// `DirectoryNode` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DirectoryNode {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -710,6 +720,7 @@ impl DirectoryNode {
 
 /// `Escrow` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Escrow {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -793,6 +804,7 @@ pub struct Escrow {
 
 /// `FeeSettings` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FeeSettings {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -866,6 +878,7 @@ pub struct FeeSettings {
 
 /// `LedgerHashes` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerHashes {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -897,6 +910,7 @@ pub struct LedgerHashes {
 
 /// `Loan` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Loan {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1074,6 +1088,7 @@ impl Loan {
 
 /// `LoanBroker` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanBroker {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1163,6 +1178,7 @@ pub struct LoanBroker {
 
 /// `MPToken` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MPToken {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1262,6 +1278,7 @@ impl MPToken {
 
 /// `MPTokenIssuance` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MPTokenIssuance {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1395,6 +1412,7 @@ impl MPTokenIssuance {
 
 /// `NFTokenOffer` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenOffer {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1458,6 +1476,7 @@ impl NFTokenOffer {
 
 /// `NFTokenPage` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenPage {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1495,6 +1514,7 @@ pub struct NFTokenPage {
 
 /// `NegativeUNL` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NegativeUNL {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1544,6 +1564,7 @@ pub struct NegativeUNL {
 
 /// `Offer` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Offer {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1620,6 +1641,7 @@ impl Offer {
 
 /// `Oracle` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Oracle {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1668,6 +1690,7 @@ pub struct Oracle {
 
 /// `PayChannel` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PayChannel {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1743,6 +1766,7 @@ pub struct PayChannel {
 
 /// `PermissionedDomain` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PermissionedDomain {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1775,6 +1799,7 @@ pub struct PermissionedDomain {
 
 /// `RippleState` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RippleState {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1886,6 +1911,7 @@ impl RippleState {
 
 /// `SignerList` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SignerList {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1935,6 +1961,7 @@ impl SignerList {
 
 /// `Sponsorship` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Sponsorship {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1996,6 +2023,7 @@ impl Sponsorship {
 
 /// `Ticket` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Ticket {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2025,6 +2053,7 @@ pub struct Ticket {
 
 /// `Vault` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Vault {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2134,6 +2163,7 @@ impl Vault {
 
 /// `XChainOwnedClaimID` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainOwnedClaimID {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2175,6 +2205,7 @@ pub struct XChainOwnedClaimID {
 
 /// `XChainOwnedCreateAccountClaimID` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainOwnedCreateAccountClaimID {
     /// The object's ID (rippled's `index`).
     #[serde(default, skip_serializing_if = "Option::is_none")]

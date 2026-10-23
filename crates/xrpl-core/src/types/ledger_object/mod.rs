@@ -14,6 +14,7 @@ macro_rules! ledger_object_enum {
         /// A ledger entry, typed by its `LedgerEntryType`.
         #[allow(clippy::upper_case_acronyms, clippy::large_enum_variant)]
         #[derive(Debug, Clone, PartialEq)]
+        #[non_exhaustive]
         pub enum LedgerObject {
             $(
                 #[doc = concat!("`", stringify!($name), "`")]

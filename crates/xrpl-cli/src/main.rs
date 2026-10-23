@@ -614,10 +614,8 @@ async fn run(cli: Cli) -> Res {
             taker_pays,
             limit,
         } => {
-            let req = requests::BookOffersRequest {
-                limit: Some(limit),
-                ..requests::BookOffersRequest::new(asset(&taker_gets)?, asset(&taker_pays)?)
-            };
+            let req = requests::BookOffersRequest::new(asset(&taker_gets)?, asset(&taker_pays)?)
+                .with_limit(limit);
             print(&client()?.request(&req).await?)?;
         }
         Command::Watch { stream, count } => {

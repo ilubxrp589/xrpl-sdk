@@ -9,6 +9,7 @@ use xrpl_core::types::Amount;
 /// [`book_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_offers):
 /// an order book, best offer first.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BookOffersResult {
     /// The offers.
     pub offers: Vec<BookOffer>,
@@ -32,6 +33,7 @@ pub struct BookOffersResult {
 /// One offer of an order book: its `Offer` entry plus what the owner can
 /// actually fund.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BookOffer {
     /// The offer's owner.
     #[serde(rename = "Account")]
@@ -83,6 +85,7 @@ pub struct BookOffer {
 /// [`amm_info`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/amm_info):
 /// an automated market maker's pool.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AmmInfoResult {
     /// The pool.
     pub amm: AmmInfo,
@@ -102,6 +105,7 @@ pub struct AmmInfoResult {
 
 /// An AMM pool.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AmmInfo {
     /// The AMM's own account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -134,6 +138,7 @@ pub struct AmmInfo {
 
 /// The AMM's auction slot: who holds the discounted fee, until when.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AuctionSlot {
     /// The slot holder.
     pub account: String,
@@ -152,6 +157,7 @@ pub struct AuctionSlot {
 
 /// An account the auction slot holder authorised.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AuthAccount {
     /// The account.
     pub account: String,
@@ -159,6 +165,7 @@ pub struct AuthAccount {
 
 /// A liquidity provider's trading-fee vote.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VoteSlot {
     /// The voting liquidity provider.
     pub account: String,
@@ -171,6 +178,7 @@ pub struct VoteSlot {
 /// [`book_changes`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_changes):
 /// each order book's open, high, low, close and volume in one ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BookChangesResult {
     /// Each book's trading.
     pub changes: Vec<BookChange>,
@@ -194,6 +202,7 @@ pub struct BookChangesResult {
 /// One book's trading in the ledger. Currencies are `XRP_drops` or
 /// `issuer/currency`; rates are B per A.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BookChange {
     /// The first currency (`XRP_drops` or `issuer/currency`).
     pub currency_a: String,
@@ -219,6 +228,7 @@ pub struct BookChange {
 /// [`deposit_authorized`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/deposit_authorized):
 /// whether one account may pay another directly.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DepositAuthorizedResult {
     /// Whether the source may pay the destination.
     pub deposit_authorized: bool,
@@ -246,6 +256,7 @@ pub struct DepositAuthorizedResult {
 /// [`get_aggregate_price`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/get_aggregate_price):
 /// statistics over several price oracles' prices for one pair.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AggregatePriceResult {
     /// Statistics over every price.
     pub entire_set: PriceStats,
@@ -272,6 +283,7 @@ pub struct AggregatePriceResult {
 
 /// Mean, count and standard deviation of a set of prices.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PriceStats {
     /// The mean price.
     pub mean: String,
@@ -285,6 +297,7 @@ pub struct PriceStats {
 /// and [`nft_sell_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/nft_sell_offers):
 /// the open offers for one NFT.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NftOffersResult {
     /// The NFT's ID.
     pub nft_id: String,
@@ -312,6 +325,7 @@ pub struct NftOffersResult {
 
 /// One NFT offer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NftOffer {
     /// The price.
     pub amount: Amount,
@@ -332,6 +346,7 @@ pub struct NftOffer {
 /// [`ripple_path_find`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/ripple_path_find):
 /// ways to deliver an amount, and what each costs the sender.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RipplePathFindResult {
     /// The ways to pay.
     pub alternatives: Vec<PathAlternative>,
@@ -365,6 +380,7 @@ pub struct RipplePathFindResult {
 /// One way to pay: the paths to put in the Payment's `Paths`, and the most it
 /// costs (`SendMax`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PathAlternative {
     /// The paths to use.
     pub paths_computed: Vec<Vec<PathStep>>,
@@ -383,6 +399,7 @@ pub struct PathAlternative {
 /// One step of a payment path: an account to ripple through, or a currency
 /// (and issuer) to convert into on the DEX.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PathStep {
     /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(default, skip_serializing_if = "Option::is_none")]

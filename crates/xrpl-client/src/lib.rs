@@ -49,7 +49,7 @@
 //! let nfts = clio.request_all(NftsByIssuerRequest::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")).await?;
 //!
 //! let page = clio
-//!     .request(&LedgerDataRequest { entry_type: Some("amm".into()), limit: Some(10), ..LedgerDataRequest::new(LedgerIndex::Validated) })
+//!     .request(&LedgerDataRequest::new(LedgerIndex::Validated).with_entry_type("amm").with_limit(10u32))
 //!     .await?;
 //! println!("{} NFTs; {} AMMs on the first page", nfts.len(), page.state.len());
 //! # Ok(()) }
@@ -68,16 +68,16 @@
 //!
 //! // The XRP/RLUSD order book, with amounts typed as `xrpl_core::types::Amount`.
 //! let book = client
-//!     .request(&BookOffersRequest {
-//!         limit: Some(10),
-//!         ..BookOffersRequest::new(
+//!     .request(
+//!         &BookOffersRequest::new(
 //!             serde_json::json!({"currency": "XRP"}),
 //!             serde_json::json!({
 //!                 "currency": "524C555344000000000000000000000000000000",
 //!                 "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De"
 //!             }),
 //!         )
-//!     })
+//!         .with_limit(10u32),
+//!     )
 //!     .await?;
 //! for offer in &book.offers {
 //!     println!("{:?} for {:?}", offer.taker_gets, offer.taker_pays);

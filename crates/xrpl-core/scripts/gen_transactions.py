@@ -119,6 +119,7 @@ for n in names:
     req_names = ", ".join(f"`{f['name']}`" for f in required) or "none beyond the common fields"
     out.append(f"/// Required: {req_names}.")
     out.append("#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]")
+    out.append("#[non_exhaustive]")
     out.append(f"pub struct {n} {{")
     out.append("    /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).")
     out.append("    #[serde(flatten)]")
@@ -180,6 +181,18 @@ for n in names:
         out.append("            owner_funds: None,")
     out.append("        }")
     out.append("    }")
+    for f in own:
+        if f["optionality"] == 0:
+            continue
+        s_ = snake(f["name"])
+        bare = s_.replace("r#", "")
+        out.append("")
+        out.append(f"    /// With `{f['name']}` set (see [`Self::{bare}`]).")
+        out.append("    #[must_use]")
+        out.append(f"    pub fn with_{bare}(mut self, value: impl Into<{rust_ty(f['name'])}>) -> Self {{")
+        out.append(f"        self.{s_} = Some(value.into());")
+        out.append("        self")
+        out.append("    }")
     out.append("}")
     out.append("")
     out.append(f"impl TxModel for {n} {{")

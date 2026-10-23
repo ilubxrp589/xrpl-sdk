@@ -248,15 +248,12 @@
 //! println!("{} drops, sequence {}", info.account_data.balance, info.account_data.sequence);
 //!
 //! // Any typed request, by value.
-//! let fee = client.request(&requests::FeeRequest {}).await?;
+//! let fee = client.request(&requests::FeeRequest::new()).await?;
 //! println!("open ledger fee: {} drops", fee.drops.open_ledger_fee);
 //!
 //! // Every page of a paginated request, following `marker`.
 //! let lines = client
-//!     .request_all(requests::AccountLinesRequest {
-//!         limit: Some(400),
-//!         ..requests::AccountLinesRequest::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
-//!     })
+//!     .request_all(requests::AccountLinesRequest::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").with_limit(400u32))
 //!     .await?;
 //! println!("{} trust lines", lines.len());
 //!

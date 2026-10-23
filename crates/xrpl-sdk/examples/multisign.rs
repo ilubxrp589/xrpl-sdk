@@ -25,22 +25,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let carol = generate_faucet_wallet(net).await?;
 
     // 1. Alice's signer list: Bob and Carol, one vote each, two needed.
-    let mut list = SignerListSet::new(alice.classic_address(), 2);
-    list.signer_entries = Some(
+    let list = SignerListSet::new(alice.classic_address(), 2).with_signer_entries(
         [&bob, &carol]
             .iter()
-            .map(|w| SignerEntry {
-                account: w.classic_address().to_string(),
-                signer_weight: 1,
-                wallet_locator: None,
-            })
-            .collect(),
+            .map(|w| SignerEntry::new(w.classic_address(), 1))
+            .collect::<Vec<_>>(),
     );
     send(&client, &alice, list.to_json()?).await?;
 
     // 2. A transaction from Alice's account, signed by Bob and Carol.
-    let mut domain = AccountSet::new(alice.classic_address());
-    domain.domain = Some(utils::str_to_hex("example.com"));
+    let domain =
+        AccountSet::new(alice.classic_address()).with_domain(utils::str_to_hex("example.com"));
     let mut tx = domain.to_json()?;
     client.autofill(&mut tx).await?;
     let fee: u64 = tx["Fee"].as_str().ok_or("no Fee")?.parse()?;

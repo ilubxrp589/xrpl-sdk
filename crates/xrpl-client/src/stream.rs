@@ -135,6 +135,7 @@ impl WsEvent {
 
 /// `ledgerClosed`: a ledger was closed and validated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerEvent {
     /// The ledger the answer is from.
     pub ledger_index: u32,
@@ -167,6 +168,7 @@ pub struct LedgerEvent {
 /// `transaction`: a transaction, typed, with its result. A proposed one
 /// (`validated: false`) is only a preliminary result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransactionEvent {
     /// The transaction, typed by its `TransactionType` (see
     /// `xrpl_core::transaction::models`).
@@ -241,6 +243,7 @@ impl TransactionEvent {
 
 /// `validationReceived`: a validator signed a ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ValidationEvent {
     /// That ledger's hash.
     pub ledger_hash: String,
@@ -298,6 +301,7 @@ pub struct ValidationEvent {
 
 /// `serverStatus`: the server's load or fee changed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerStatusEvent {
     /// `full`, `syncing`, …
     pub server_status: String,
@@ -327,6 +331,7 @@ pub struct ServerStatusEvent {
 
 /// `consensusPhase`: `"open"`, `"establish"` or `"accepted"`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConsensusEvent {
     /// The consensus phase (`open`, `establish`, `accepted`).
     pub consensus: String,
@@ -335,6 +340,7 @@ pub struct ConsensusEvent {
 /// `bookChanges`: each order book's open, high, low, close and volume in a
 /// validated ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BookChangesEvent {
     /// Each book's trading.
     pub changes: Vec<BookChange>,
@@ -351,6 +357,7 @@ pub struct BookChangesEvent {
 
 /// `manifestReceived`: a validator's new manifest (key rotation).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ManifestEvent {
     /// The validator's master key.
     pub master_key: String,
@@ -369,6 +376,7 @@ pub struct ManifestEvent {
 
 /// `peerStatusChange`: a peer's ledger or state changed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PeerStatusEvent {
     /// `CLOSING_LEDGER`, `ACCEPTED_LEDGER`, `SWITCHED_LEDGER` or `LOST_SYNC`.
     pub action: String,
@@ -391,6 +399,7 @@ pub struct PeerStatusEvent {
 /// The offers of a book when subscribing with `snapshot` (`asks` and `bids`
 /// with `both`, otherwise `offers`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OrderBookSnapshot {
     /// The offers.
     #[serde(default, skip_serializing_if = "Option::is_none")]

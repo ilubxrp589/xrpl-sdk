@@ -8,6 +8,7 @@ use serde_json::Value;
 /// [`ledger`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger):
 /// a ledger's header, and its transactions or state when asked for.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerResult {
     /// The header (absent only for an unknown ledger, which is an error).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -32,6 +33,7 @@ pub struct LedgerResult {
 /// A ledger header. `rippled`'s API version 1 writes `ledger_index` and
 /// `total_coins` as strings; both versions are read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerInfo {
     /// The state tree's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -92,6 +94,7 @@ pub struct LedgerInfo {
 /// [`ledger_closed`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_closed):
 /// the latest closed (not necessarily validated) ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerClosedResult {
     /// That ledger's hash.
     pub ledger_hash: String,
@@ -102,6 +105,7 @@ pub struct LedgerClosedResult {
 /// [`ledger_current`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_current):
 /// the index of the open ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerCurrentResult {
     /// The open ledger the answer is from (when not a validated one).
     pub ledger_current_index: u32,
@@ -111,6 +115,7 @@ pub struct LedgerCurrentResult {
 /// a page of a ledger's state, typed. With `binary: true` each entry is
 /// `{ "data", "index" }`, kept as [`LedgerObject::Other`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerDataResult {
     /// What the server reports.
     pub state: Vec<LedgerObject>,
@@ -134,6 +139,7 @@ pub struct LedgerDataResult {
 /// [`ledger_entry`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_entry):
 /// one ledger entry, typed (`node`) or as hex (`node_binary`, with `binary: true`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerEntryResult {
     /// The entry's ID.
     pub index: String,

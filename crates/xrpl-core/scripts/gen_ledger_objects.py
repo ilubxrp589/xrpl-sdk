@@ -102,6 +102,7 @@ for n in names:
         seen.add(f["name"]); fl.append(f)
     out.append(f"/// `{n}` ledger entry.")
     out.append("#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]")
+    out.append("#[non_exhaustive]")
     out.append(f"pub struct {n} {{")
     out.append("    /// The object's ID (rippled's `index`).")
     out.append("    #[serde(default, skip_serializing_if = \"Option::is_none\")]")
