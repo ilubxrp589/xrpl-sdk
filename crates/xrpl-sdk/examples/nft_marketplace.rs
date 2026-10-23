@@ -10,7 +10,9 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use xrpl_sdk::models::{NFTokenAcceptOffer, NFTokenCreateOffer, NFTokenMint};
+use xrpl_sdk::models::{
+    NFTokenAcceptOffer, NFTokenCreateOffer, NFTokenCreateOfferFlags, NFTokenMint, NFTokenMintFlags,
+};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -24,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. Mint: transferable, 5% (5000 / 100,000) on every resale.
     let mut mint = NFTokenMint::new(artist.classic_address(), 1);
-    mint.common.flags = Some(NFTokenMint::TF_TRANSFERABLE);
+    mint.common.flags = Some(u32::from(NFTokenMintFlags::TRANSFERABLE));
     mint.transfer_fee = Some(5000);
     mint.uri = Some(utils::str_to_hex("ipfs://bafy.../artwork.json"));
     let minted = send(&client, &artist, mint.to_json()?).await?;
@@ -76,7 +78,7 @@ async fn sell_and_buy(
         Hash256::from_hex(nft_id)?,
         Amount::Xrp(drops),
     );
-    offer.common.flags = Some(NFTokenCreateOffer::TF_SELL_NFTOKEN);
+    offer.common.flags = Some(u32::from(NFTokenCreateOfferFlags::SELL_NFTOKEN));
     send(client, seller, offer.to_json()?).await?;
     // The offer's ID, from the NFT's sell offers.
     let offers = client

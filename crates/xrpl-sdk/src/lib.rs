@@ -143,17 +143,16 @@
 //! it too). `to_json` gives the JSON to autofill, sign and submit:
 //!
 //! ```
-//! use xrpl_sdk::{models::{Payment, TrustSet}, Amount, TxModel};
+//! use xrpl_sdk::{models::{Payment, TrustSet, TrustSetFlags}, Amount, TxModel};
 //!
 //! let pay = Payment::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", Amount::Xrp(2_000_000))
 //!     .with_destination_tag(77u32);
 //! assert_eq!(pay.to_json()?["DestinationTag"], 77);
 //!
-//! let mut line = TrustSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
-//! line.limit_amount = Some(serde_json::from_value(serde_json::json!(
-//!     {"currency": "USD", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "1000"}
-//! ))?);
-//! line.common.flags = Some(TrustSet::TF_SET_NO_RIPPLE);
+//! // Flags are typed per transaction type: a flag of another type does not compile.
+//! let line = TrustSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+//!     .with_limit_amount(Amount::token("1000", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?)
+//!     .with_flags(TrustSetFlags::SET_NO_RIPPLE);
 //! assert_eq!(line.to_json()?["LimitAmount"]["value"], "1000");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -173,8 +172,8 @@
 //! // Alice pays Bob 5 XRP and Bob pays Alice 2 XRP, all or nothing.
 //! let pay_bob: Tx = models::Payment::new(alice.classic_address(), bob.classic_address(), Amount::Xrp(5_000_000)).into();
 //! let pay_alice: Tx = models::Payment::new(bob.classic_address(), alice.classic_address(), Amount::Xrp(2_000_000)).into();
-//! let mut batch_tx = models::Batch::new(alice.classic_address(), vec![pay_bob, pay_alice]);
-//! batch_tx.common.flags = Some(models::Batch::TF_ALL_OR_NOTHING);
+//! let batch_tx = models::Batch::new(alice.classic_address(), vec![pay_bob, pay_alice])
+//!     .with_flags(models::BatchFlags::ALL_OR_NOTHING);
 //!
 //! let mut tx = batch_tx.to_json()?;
 //! client.autofill(&mut tx).await?;                         // inner sequences and the batch fee

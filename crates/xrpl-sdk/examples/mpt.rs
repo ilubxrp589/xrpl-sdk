@@ -9,7 +9,9 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use xrpl_sdk::models::{MPTokenAuthorize, MPTokenIssuanceCreate, Payment};
+use xrpl_sdk::models::{
+    MPTokenAuthorize, MPTokenIssuanceCreate, MPTokenIssuanceCreateFlags, Payment,
+};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -24,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut create = MPTokenIssuanceCreate::new(issuer.classic_address());
     create.asset_scale = Some(2);
     create.maximum_amount = Some("1000000".into());
-    create.common.flags = Some(MPTokenIssuanceCreate::TF_MPT_CAN_TRANSFER);
+    create.common.flags = Some(u32::from(MPTokenIssuanceCreateFlags::MPT_CAN_TRANSFER));
     create.mp_token_metadata = Some(utils::str_to_hex(
         r#"{"ticker":"HAL","name":"Halcyon test token"}"#,
     ));

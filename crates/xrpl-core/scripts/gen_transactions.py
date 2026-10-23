@@ -112,16 +112,63 @@ out = [
     "",
     "use super::*;",
     "",
-    "/// `tfFullyCanonicalSig`: set on every transaction since the RequireFullyCanonicalSig amendment.",
-    f"pub const TF_FULLY_CANONICAL_SIG: u32 = 0x{tx_flags['universal']['tfFullyCanonicalSig']:08X};",
-    "/// `tfInnerBatchTxn`: marks a transaction inside a `Batch` (unsigned, zero fee).",
-    f"pub const TF_INNER_BATCH_TXN: u32 = 0x{tx_flags['universal']['tfInnerBatchTxn']:08X};",
+    "use crate::flags::flags_type;",
     "",
 ]
+UNIVERSAL = [
+    ("FULLY_CANONICAL_SIG", tx_flags["universal"]["tfFullyCanonicalSig"],
+     "`tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment."),
+    ("INNER_BATCH_TXN", tx_flags["universal"]["tfInnerBatchTxn"],
+     "`tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee)."),
+]
+
+
+def flags_block(type_name, doc, flags):
+    """flags_type! for `flags` [(CONST, value, doc)] plus the universal ones."""
+    lines = ["flags_type!(", f"    /// {doc}", f"    {type_name} {{"]
+    for const, value, d in list(flags) + UNIVERSAL:
+        lines.append(f"        /// {d}")
+        lines.append(f"        {const} = 0x{value:08X},")
+    lines += ["    }", ");", ""]
+    return lines
+
+
+out += flags_block("UniversalFlags", "The flags any transaction may carry (for the types with none of their own).", [])
+
+
+def variant(flag):  # asfRequireDest -> RequireDest
+    return flag[3:]
+
+
+out += ["/// A value of [`AccountSet`]'s `SetFlag` / `ClearFlag` (`asf…`): one account setting to turn on",
+        "/// or off. `u32::from(flag)` is its number.",
+        "#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]",
+        "#[non_exhaustive]",
+        "pub enum AccountSetFlag {"]
+for flag, value in sorted(asf.items(), key=lambda kv: kv[1]):
+    out += [f"    /// `{flag}` ({value}).", f"    {variant(flag)} = {value},"]
+out += ["}", "",
+        "impl From<AccountSetFlag> for u32 {",
+        "    fn from(flag: AccountSetFlag) -> u32 {",
+        "        flag as u32",
+        "    }",
+        "}", "",
+        "impl AccountSetFlag {",
+        "    /// The flag with this number, if this version knows it.",
+        "    pub fn from_value(value: u32) -> Option<Self> {",
+        "        match value {"]
+for flag, value in sorted(asf.items(), key=lambda kv: kv[1]):
+    out.append(f"            {value} => Some(Self::{variant(flag)}),")
+out += ["            _ => None,", "        }", "    }", "}", ""]
 nfields = 0
 for n in names:
     own = [f for f in formats[n] if f["name"] not in common]
     required = [f for f in own if f["optionality"] == 0]
+    own_flags = sorted(tx_flags.get(n, {}).items(), key=lambda kv: kv[1])
+    flags_ty = f"{n}Flags" if own_flags else "UniversalFlags"
+    if own_flags:
+        out += flags_block(f"{n}Flags", f"The flags of a [`{n}`] (`Flags`).",
+                           [(const_name(f)[3:], v, f"`{f}`.") for f, v in own_flags])
     out.append(f"/// [`{n}`](https://xrpl.org/docs/references/protocol/transactions/types/{doc_slug(n)}) transaction.")
     out.append("///")
     req_names = ", ".join(f"`{f['name']}`" for f in required) or "none beyond the common fields"
@@ -158,13 +205,6 @@ for n in names:
     out.append(f"impl {n} {{")
     out.append(f'    /// `"{n}"`.')
     out.append(f'    pub const TRANSACTION_TYPE: &\'static str = "{n}";')
-    for flag, value in sorted(tx_flags.get(n, {}).items(), key=lambda kv: kv[1]):
-        out.append(f"    /// `{flag}`.")
-        out.append(f"    pub const {const_name(flag)}: u32 = 0x{value:08X};")
-    if n == "AccountSet":
-        for flag, value in sorted(asf.items(), key=lambda kv: kv[1]):
-            out.append(f"    /// `{flag}`: a `SetFlag` / `ClearFlag` value.")
-            out.append(f"    pub const {const_name(flag)}: u32 = {value};")
     def param(f):
         t = rust_ty(f["name"])
         return f"{snake(f['name'])}: {'impl Into<String>' if t == 'String' else t}"
@@ -205,6 +245,7 @@ for n in names:
     out.append("")
     out.append(f"impl TxModel for {n} {{")
     out.append(f'    const TRANSACTION_TYPE: &\'static str = "{n}";')
+    out.append(f"    type Flags = {flags_ty};")
     if n in VALIDATED:
         out.append("    fn validate(&self) -> Result<(), CoreError> {")
         out.append(f"        super::validate::{VALIDATED[n]}(self)")

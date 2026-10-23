@@ -11,7 +11,7 @@
 )]
 
 use serde_json::json;
-use xrpl_sdk::models::{AccountSet, Payment, TrustSet};
+use xrpl_sdk::models::{AccountSet, AccountSetFlag, Payment, TrustSet};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. The issuer lets its token ripple between holders (DefaultRipple).
     let mut settings = AccountSet::new(issuer.classic_address());
-    settings.set_flag = Some(AccountSet::ASF_DEFAULT_RIPPLE);
+    settings.set_flag = Some(u32::from(AccountSetFlag::DefaultRipple));
     send(&client, &issuer, settings.to_json()?).await?;
 
     // 2. Alice and Bob each trust the issuer for up to 1,000 USD.

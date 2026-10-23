@@ -307,7 +307,7 @@ async fn keylets_and_helpers_match_testnet() {
     // Batch, one account: Alice pays Bob twice, all or nothing. autofill numbers
     // the inner transactions and prices the batch; each inner transaction lands
     // on the ledger under the ID batch::inner_transaction_ids computed.
-    let mut one = json!({"TransactionType": "Batch", "Account": a, "Flags": models::Batch::TF_ALL_OR_NOTHING, "RawTransactions": [
+    let mut one = json!({"TransactionType": "Batch", "Account": a, "Flags": u32::from(models::BatchFlags::ALL_OR_NOTHING), "RawTransactions": [
         {"RawTransaction": {"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "1000000"}},
         {"RawTransaction": {"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "2000000"}},
     ]});
@@ -326,7 +326,7 @@ async fn keylets_and_helpers_match_testnet() {
     let inner_a: models::Tx = models::Payment::new(a, b, Amount::Xrp(1_000_000)).into();
     let inner_b: models::Tx = models::Payment::new(b, a, Amount::Xrp(500_000)).into();
     let mut typed = models::Batch::new(a, vec![inner_a, inner_b]);
-    typed.common.flags = Some(models::Batch::TF_ALL_OR_NOTHING);
+    typed.common.flags = Some(u32::from(models::BatchFlags::ALL_OR_NOTHING));
     let mut two = typed.to_json().unwrap();
     client.autofill(&mut two).await.unwrap();
     let bob_approves = bob.sign_batch(&two).unwrap();

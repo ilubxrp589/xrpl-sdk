@@ -107,21 +107,22 @@
 //!
 //! [`transaction::models`] has a struct for each of the 82 transaction types
 //! `rippled` 3.4.1 defines, generated from its own definitions: every field
-//! under `rippled`'s name, `new` with the required ones, and the flags as
-//! constants. [`transaction::models::Tx`] parses any transaction strictly (a
+//! under `rippled`'s name, `new` with the required ones and `with_…` for
+//! the rest, and its flags as a typed set ([`flags`]).
+//! [`transaction::models::Tx`] parses any transaction strictly (a
 //! field its type does not have is an error).
 //!
 //! ```
-//! use xrpl_core::transaction::models::{OfferCreate, Tx, TxModel};
+//! use xrpl_core::transaction::models::{OfferCreate, OfferCreateFlags, Tx, TxModel};
 //! use xrpl_core::types::Amount;
 //!
 //! // Sell 25 XRP for 10 USD: the taker pays 10 USD and gets 25 XRP.
-//! let mut offer = OfferCreate::new(
+//! let offer = OfferCreate::new(
 //!     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
 //!     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?, // TakerPays
 //!     Amount::Xrp(25_000_000),                                          // TakerGets
-//! );
-//! offer.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
+//! )
+//! .with_flags(OfferCreateFlags::IMMEDIATE_OR_CANCEL);
 //! let json = offer.to_json()?;
 //! assert_eq!(json["Flags"], 0x0002_0000);
 //! assert!(matches!(Tx::from_value(json)?, Tx::OfferCreate(_)));
@@ -181,6 +182,7 @@ pub mod address;
 pub mod codec;
 pub mod crypto;
 pub mod error;
+pub mod flags;
 #[cfg(feature = "std")]
 pub mod hashes;
 #[cfg(feature = "std")]

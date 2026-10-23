@@ -8,10 +8,87 @@
 
 use super::*;
 
-/// `tfFullyCanonicalSig`: set on every transaction since the RequireFullyCanonicalSig amendment.
-pub const TF_FULLY_CANONICAL_SIG: u32 = 0x80000000;
-/// `tfInnerBatchTxn`: marks a transaction inside a `Batch` (unsigned, zero fee).
-pub const TF_INNER_BATCH_TXN: u32 = 0x40000000;
+use crate::flags::flags_type;
+
+flags_type!(
+    /// The flags any transaction may carry (for the types with none of their own).
+    UniversalFlags {
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
+/// A value of [`AccountSet`]'s `SetFlag` / `ClearFlag` (`asf…`): one account setting to turn on
+/// or off. `u32::from(flag)` is its number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum AccountSetFlag {
+    /// `asfRequireDest` (1).
+    RequireDest = 1,
+    /// `asfRequireAuth` (2).
+    RequireAuth = 2,
+    /// `asfDisallowXRP` (3).
+    DisallowXRP = 3,
+    /// `asfDisableMaster` (4).
+    DisableMaster = 4,
+    /// `asfAccountTxnID` (5).
+    AccountTxnID = 5,
+    /// `asfNoFreeze` (6).
+    NoFreeze = 6,
+    /// `asfGlobalFreeze` (7).
+    GlobalFreeze = 7,
+    /// `asfDefaultRipple` (8).
+    DefaultRipple = 8,
+    /// `asfDepositAuth` (9).
+    DepositAuth = 9,
+    /// `asfAuthorizedNFTokenMinter` (10).
+    AuthorizedNFTokenMinter = 10,
+    /// `asfDisallowIncomingNFTokenOffer` (12).
+    DisallowIncomingNFTokenOffer = 12,
+    /// `asfDisallowIncomingCheck` (13).
+    DisallowIncomingCheck = 13,
+    /// `asfDisallowIncomingPayChan` (14).
+    DisallowIncomingPayChan = 14,
+    /// `asfDisallowIncomingTrustline` (15).
+    DisallowIncomingTrustline = 15,
+    /// `asfAllowTrustLineClawback` (16).
+    AllowTrustLineClawback = 16,
+    /// `asfAllowTrustLineLocking` (17).
+    AllowTrustLineLocking = 17,
+}
+
+impl From<AccountSetFlag> for u32 {
+    fn from(flag: AccountSetFlag) -> u32 {
+        flag as u32
+    }
+}
+
+impl AccountSetFlag {
+    /// The flag with this number, if this version knows it.
+    pub fn from_value(value: u32) -> Option<Self> {
+        match value {
+            1 => Some(Self::RequireDest),
+            2 => Some(Self::RequireAuth),
+            3 => Some(Self::DisallowXRP),
+            4 => Some(Self::DisableMaster),
+            5 => Some(Self::AccountTxnID),
+            6 => Some(Self::NoFreeze),
+            7 => Some(Self::GlobalFreeze),
+            8 => Some(Self::DefaultRipple),
+            9 => Some(Self::DepositAuth),
+            10 => Some(Self::AuthorizedNFTokenMinter),
+            12 => Some(Self::DisallowIncomingNFTokenOffer),
+            13 => Some(Self::DisallowIncomingCheck),
+            14 => Some(Self::DisallowIncomingPayChan),
+            15 => Some(Self::DisallowIncomingTrustline),
+            16 => Some(Self::AllowTrustLineClawback),
+            17 => Some(Self::AllowTrustLineLocking),
+            _ => None,
+        }
+    }
+}
 
 /// [`AMMBid`](https://xrpl.org/docs/references/protocol/transactions/types/ammbid) transaction.
 ///
@@ -84,6 +161,7 @@ impl AMMBid {
 
 impl TxModel for AMMBid {
     const TRANSACTION_TYPE: &'static str = "AMMBid";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::amm_bid(self)
     }
@@ -100,6 +178,18 @@ impl From<AMMBid> for Tx {
         Tx::AMMBid(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`AMMClawback`] (`Flags`).
+    AMMClawbackFlags {
+        /// `tfClawTwoAssets`.
+        CLAW_TWO_ASSETS = 0x00000001,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`AMMClawback`](https://xrpl.org/docs/references/protocol/transactions/types/ammclawback) transaction.
 ///
@@ -127,8 +217,6 @@ pub struct AMMClawback {
 impl AMMClawback {
     /// `"AMMClawback"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMClawback";
-    /// `tfClawTwoAssets`.
-    pub const TF_CLAW_TWO_ASSETS: u32 = 0x00000001;
 
     /// A `AMMClawback` from `account` with its required fields; everything else unset.
     pub fn new(
@@ -156,6 +244,7 @@ impl AMMClawback {
 
 impl TxModel for AMMClawback {
     const TRANSACTION_TYPE: &'static str = "AMMClawback";
+    type Flags = AMMClawbackFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -212,6 +301,7 @@ impl AMMCreate {
 
 impl TxModel for AMMCreate {
     const TRANSACTION_TYPE: &'static str = "AMMCreate";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::amm_create(self)
     }
@@ -262,6 +352,7 @@ impl AMMDelete {
 
 impl TxModel for AMMDelete {
     const TRANSACTION_TYPE: &'static str = "AMMDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -275,6 +366,28 @@ impl From<AMMDelete> for Tx {
         Tx::AMMDelete(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`AMMDeposit`] (`Flags`).
+    AMMDepositFlags {
+        /// `tfLPToken`.
+        LP_TOKEN = 0x00010000,
+        /// `tfSingleAsset`.
+        SINGLE_ASSET = 0x00080000,
+        /// `tfTwoAsset`.
+        TWO_ASSET = 0x00100000,
+        /// `tfOneAssetLPToken`.
+        ONE_ASSET_LP_TOKEN = 0x00200000,
+        /// `tfLimitLPToken`.
+        LIMIT_LP_TOKEN = 0x00400000,
+        /// `tfTwoAssetIfEmpty`.
+        TWO_ASSET_IF_EMPTY = 0x00800000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`AMMDeposit`](https://xrpl.org/docs/references/protocol/transactions/types/ammdeposit) transaction.
 ///
@@ -319,18 +432,6 @@ pub struct AMMDeposit {
 impl AMMDeposit {
     /// `"AMMDeposit"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMDeposit";
-    /// `tfLPToken`.
-    pub const TF_LP_TOKEN: u32 = 0x00010000;
-    /// `tfSingleAsset`.
-    pub const TF_SINGLE_ASSET: u32 = 0x00080000;
-    /// `tfTwoAsset`.
-    pub const TF_TWO_ASSET: u32 = 0x00100000;
-    /// `tfOneAssetLPToken`.
-    pub const TF_ONE_ASSET_LP_TOKEN: u32 = 0x00200000;
-    /// `tfLimitLPToken`.
-    pub const TF_LIMIT_LP_TOKEN: u32 = 0x00400000;
-    /// `tfTwoAssetIfEmpty`.
-    pub const TF_TWO_ASSET_IF_EMPTY: u32 = 0x00800000;
 
     /// A `AMMDeposit` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
@@ -384,6 +485,7 @@ impl AMMDeposit {
 
 impl TxModel for AMMDeposit {
     const TRANSACTION_TYPE: &'static str = "AMMDeposit";
+    type Flags = AMMDepositFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::amm_deposit(self)
     }
@@ -438,6 +540,7 @@ impl AMMVote {
 
 impl TxModel for AMMVote {
     const TRANSACTION_TYPE: &'static str = "AMMVote";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::amm_vote(self)
     }
@@ -454,6 +557,30 @@ impl From<AMMVote> for Tx {
         Tx::AMMVote(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`AMMWithdraw`] (`Flags`).
+    AMMWithdrawFlags {
+        /// `tfLPToken`.
+        LP_TOKEN = 0x00010000,
+        /// `tfWithdrawAll`.
+        WITHDRAW_ALL = 0x00020000,
+        /// `tfOneAssetWithdrawAll`.
+        ONE_ASSET_WITHDRAW_ALL = 0x00040000,
+        /// `tfSingleAsset`.
+        SINGLE_ASSET = 0x00080000,
+        /// `tfTwoAsset`.
+        TWO_ASSET = 0x00100000,
+        /// `tfOneAssetLPToken`.
+        ONE_ASSET_LP_TOKEN = 0x00200000,
+        /// `tfLimitLPToken`.
+        LIMIT_LP_TOKEN = 0x00400000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`AMMWithdraw`](https://xrpl.org/docs/references/protocol/transactions/types/ammwithdraw) transaction.
 ///
@@ -487,20 +614,6 @@ pub struct AMMWithdraw {
 impl AMMWithdraw {
     /// `"AMMWithdraw"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
-    /// `tfLPToken`.
-    pub const TF_LP_TOKEN: u32 = 0x00010000;
-    /// `tfWithdrawAll`.
-    pub const TF_WITHDRAW_ALL: u32 = 0x00020000;
-    /// `tfOneAssetWithdrawAll`.
-    pub const TF_ONE_ASSET_WITHDRAW_ALL: u32 = 0x00040000;
-    /// `tfSingleAsset`.
-    pub const TF_SINGLE_ASSET: u32 = 0x00080000;
-    /// `tfTwoAsset`.
-    pub const TF_TWO_ASSET: u32 = 0x00100000;
-    /// `tfOneAssetLPToken`.
-    pub const TF_ONE_ASSET_LP_TOKEN: u32 = 0x00200000;
-    /// `tfLimitLPToken`.
-    pub const TF_LIMIT_LP_TOKEN: u32 = 0x00400000;
 
     /// A `AMMWithdraw` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
@@ -546,6 +659,7 @@ impl AMMWithdraw {
 
 impl TxModel for AMMWithdraw {
     const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
+    type Flags = AMMWithdrawFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::amm_withdraw(self)
     }
@@ -622,6 +736,7 @@ impl AccountDelete {
 
 impl TxModel for AccountDelete {
     const TRANSACTION_TYPE: &'static str = "AccountDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -635,6 +750,28 @@ impl From<AccountDelete> for Tx {
         Tx::AccountDelete(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`AccountSet`] (`Flags`).
+    AccountSetFlags {
+        /// `tfRequireDestTag`.
+        REQUIRE_DEST_TAG = 0x00010000,
+        /// `tfOptionalDestTag`.
+        OPTIONAL_DEST_TAG = 0x00020000,
+        /// `tfRequireAuth`.
+        REQUIRE_AUTH = 0x00040000,
+        /// `tfOptionalAuth`.
+        OPTIONAL_AUTH = 0x00080000,
+        /// `tfDisallowXRP`.
+        DISALLOW_XRP = 0x00100000,
+        /// `tfAllowXRP`.
+        ALLOW_XRP = 0x00200000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`AccountSet`](https://xrpl.org/docs/references/protocol/transactions/types/accountset) transaction.
 ///
@@ -700,50 +837,6 @@ pub struct AccountSet {
 impl AccountSet {
     /// `"AccountSet"`.
     pub const TRANSACTION_TYPE: &'static str = "AccountSet";
-    /// `tfRequireDestTag`.
-    pub const TF_REQUIRE_DEST_TAG: u32 = 0x00010000;
-    /// `tfOptionalDestTag`.
-    pub const TF_OPTIONAL_DEST_TAG: u32 = 0x00020000;
-    /// `tfRequireAuth`.
-    pub const TF_REQUIRE_AUTH: u32 = 0x00040000;
-    /// `tfOptionalAuth`.
-    pub const TF_OPTIONAL_AUTH: u32 = 0x00080000;
-    /// `tfDisallowXRP`.
-    pub const TF_DISALLOW_XRP: u32 = 0x00100000;
-    /// `tfAllowXRP`.
-    pub const TF_ALLOW_XRP: u32 = 0x00200000;
-    /// `asfRequireDest`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_REQUIRE_DEST: u32 = 1;
-    /// `asfRequireAuth`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_REQUIRE_AUTH: u32 = 2;
-    /// `asfDisallowXRP`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_XRP: u32 = 3;
-    /// `asfDisableMaster`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISABLE_MASTER: u32 = 4;
-    /// `asfAccountTxnID`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_ACCOUNT_TXN_ID: u32 = 5;
-    /// `asfNoFreeze`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_NO_FREEZE: u32 = 6;
-    /// `asfGlobalFreeze`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_GLOBAL_FREEZE: u32 = 7;
-    /// `asfDefaultRipple`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DEFAULT_RIPPLE: u32 = 8;
-    /// `asfDepositAuth`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DEPOSIT_AUTH: u32 = 9;
-    /// `asfAuthorizedNFTokenMinter`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_AUTHORIZED_NFTOKEN_MINTER: u32 = 10;
-    /// `asfDisallowIncomingNFTokenOffer`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_NFTOKEN_OFFER: u32 = 12;
-    /// `asfDisallowIncomingCheck`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_CHECK: u32 = 13;
-    /// `asfDisallowIncomingPayChan`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_PAY_CHAN: u32 = 14;
-    /// `asfDisallowIncomingTrustline`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_TRUSTLINE: u32 = 15;
-    /// `asfAllowTrustLineClawback`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_ALLOW_TRUST_LINE_CLAWBACK: u32 = 16;
-    /// `asfAllowTrustLineLocking`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_ALLOW_TRUST_LINE_LOCKING: u32 = 17;
 
     /// A `AccountSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -835,6 +928,7 @@ impl AccountSet {
 
 impl TxModel for AccountSet {
     const TRANSACTION_TYPE: &'static str = "AccountSet";
+    type Flags = AccountSetFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::account_set(self)
     }
@@ -851,6 +945,24 @@ impl From<AccountSet> for Tx {
         Tx::AccountSet(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`Batch`] (`Flags`).
+    BatchFlags {
+        /// `tfAllOrNothing`.
+        ALL_OR_NOTHING = 0x00010000,
+        /// `tfOnlyOne`.
+        ONLY_ONE = 0x00020000,
+        /// `tfUntilFailure`.
+        UNTIL_FAILURE = 0x00040000,
+        /// `tfIndependent`.
+        INDEPENDENT = 0x00080000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`Batch`](https://xrpl.org/docs/references/protocol/transactions/types/batch) transaction.
 ///
@@ -877,14 +989,6 @@ pub struct Batch {
 impl Batch {
     /// `"Batch"`.
     pub const TRANSACTION_TYPE: &'static str = "Batch";
-    /// `tfAllOrNothing`.
-    pub const TF_ALL_OR_NOTHING: u32 = 0x00010000;
-    /// `tfOnlyOne`.
-    pub const TF_ONLY_ONE: u32 = 0x00020000;
-    /// `tfUntilFailure`.
-    pub const TF_UNTIL_FAILURE: u32 = 0x00040000;
-    /// `tfIndependent`.
-    pub const TF_INDEPENDENT: u32 = 0x00080000;
 
     /// A `Batch` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, raw_transactions: Vec<Tx>) -> Self {
@@ -905,6 +1009,7 @@ impl Batch {
 
 impl TxModel for Batch {
     const TRANSACTION_TYPE: &'static str = "Batch";
+    type Flags = BatchFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -948,6 +1053,7 @@ impl CheckCancel {
 
 impl TxModel for CheckCancel {
     const TRANSACTION_TYPE: &'static str = "CheckCancel";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1017,6 +1123,7 @@ impl CheckCash {
 
 impl TxModel for CheckCash {
     const TRANSACTION_TYPE: &'static str = "CheckCash";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1109,6 +1216,7 @@ impl CheckCreate {
 
 impl TxModel for CheckCreate {
     const TRANSACTION_TYPE: &'static str = "CheckCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1163,6 +1271,7 @@ impl Clawback {
 
 impl TxModel for Clawback {
     const TRANSACTION_TYPE: &'static str = "Clawback";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::clawback(self)
     }
@@ -1227,6 +1336,7 @@ impl ConfidentialMPTClawback {
 
 impl TxModel for ConfidentialMPTClawback {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTClawback";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1334,6 +1444,7 @@ impl ConfidentialMPTConvert {
 
 impl TxModel for ConfidentialMPTConvert {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTConvert";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1425,6 +1536,7 @@ impl ConfidentialMPTConvertBack {
 
 impl TxModel for ConfidentialMPTConvertBack {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTConvertBack";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1468,6 +1580,7 @@ impl ConfidentialMPTMergeInbox {
 
 impl TxModel for ConfidentialMPTMergeInbox {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTMergeInbox";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1594,6 +1707,7 @@ impl ConfidentialMPTSend {
 
 impl TxModel for ConfidentialMPTSend {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTSend";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1645,6 +1759,7 @@ impl CredentialAccept {
 
 impl TxModel for CredentialAccept {
     const TRANSACTION_TYPE: &'static str = "CredentialAccept";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1722,6 +1837,7 @@ impl CredentialCreate {
 
 impl TxModel for CredentialCreate {
     const TRANSACTION_TYPE: &'static str = "CredentialCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1787,6 +1903,7 @@ impl CredentialDelete {
 
 impl TxModel for CredentialDelete {
     const TRANSACTION_TYPE: &'static str = "CredentialDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1826,6 +1943,7 @@ impl DIDDelete {
 
 impl TxModel for DIDDelete {
     const TRANSACTION_TYPE: &'static str = "DIDDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1902,6 +2020,7 @@ impl DIDSet {
 
 impl TxModel for DIDSet {
     const TRANSACTION_TYPE: &'static str = "DIDSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1953,6 +2072,7 @@ impl DelegateSet {
 
 impl TxModel for DelegateSet {
     const TRANSACTION_TYPE: &'static str = "DelegateSet";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::delegate_set(self)
     }
@@ -2053,6 +2173,7 @@ impl DepositPreauth {
 
 impl TxModel for DepositPreauth {
     const TRANSACTION_TYPE: &'static str = "DepositPreauth";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2066,6 +2187,20 @@ impl From<DepositPreauth> for Tx {
         Tx::DepositPreauth(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`EnableAmendment`] (`Flags`).
+    EnableAmendmentFlags {
+        /// `tfGotMajority`.
+        GOT_MAJORITY = 0x00010000,
+        /// `tfLostMajority`.
+        LOST_MAJORITY = 0x00020000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`EnableAmendment`](https://xrpl.org/docs/references/protocol/transactions/types/enableamendment) transaction.
 ///
@@ -2087,10 +2222,6 @@ pub struct EnableAmendment {
 impl EnableAmendment {
     /// `"EnableAmendment"`.
     pub const TRANSACTION_TYPE: &'static str = "EnableAmendment";
-    /// `tfGotMajority`.
-    pub const TF_GOT_MAJORITY: u32 = 0x00010000;
-    /// `tfLostMajority`.
-    pub const TF_LOST_MAJORITY: u32 = 0x00020000;
 
     /// A `EnableAmendment` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, ledger_sequence: u32, amendment: Hash256) -> Self {
@@ -2104,6 +2235,7 @@ impl EnableAmendment {
 
 impl TxModel for EnableAmendment {
     const TRANSACTION_TYPE: &'static str = "EnableAmendment";
+    type Flags = EnableAmendmentFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2151,6 +2283,7 @@ impl EscrowCancel {
 
 impl TxModel for EscrowCancel {
     const TRANSACTION_TYPE: &'static str = "EscrowCancel";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2254,6 +2387,7 @@ impl EscrowCreate {
 
 impl TxModel for EscrowCreate {
     const TRANSACTION_TYPE: &'static str = "EscrowCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2342,6 +2476,7 @@ impl EscrowFinish {
 
 impl TxModel for EscrowFinish {
     const TRANSACTION_TYPE: &'static str = "EscrowFinish";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2411,6 +2546,7 @@ impl LedgerStateFix {
 
 impl TxModel for LedgerStateFix {
     const TRANSACTION_TYPE: &'static str = "LedgerStateFix";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2476,6 +2612,7 @@ impl LoanBrokerCoverClawback {
 
 impl TxModel for LoanBrokerCoverClawback {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverClawback";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2523,6 +2660,7 @@ impl LoanBrokerCoverDeposit {
 
 impl TxModel for LoanBrokerCoverDeposit {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverDeposit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2615,6 +2753,7 @@ impl LoanBrokerCoverWithdraw {
 
 impl TxModel for LoanBrokerCoverWithdraw {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverWithdraw";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2658,6 +2797,7 @@ impl LoanBrokerDelete {
 
 impl TxModel for LoanBrokerDelete {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2787,6 +2927,7 @@ impl LoanBrokerSet {
 
 impl TxModel for LoanBrokerSet {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2830,6 +2971,7 @@ impl LoanDelete {
 
 impl TxModel for LoanDelete {
     const TRANSACTION_TYPE: &'static str = "LoanDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2843,6 +2985,22 @@ impl From<LoanDelete> for Tx {
         Tx::LoanDelete(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`LoanManage`] (`Flags`).
+    LoanManageFlags {
+        /// `tfLoanDefault`.
+        LOAN_DEFAULT = 0x00010000,
+        /// `tfLoanImpair`.
+        LOAN_IMPAIR = 0x00020000,
+        /// `tfLoanUnimpair`.
+        LOAN_UNIMPAIR = 0x00040000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`LoanManage`](https://xrpl.org/docs/references/protocol/transactions/types/loanmanage) transaction.
 ///
@@ -2861,12 +3019,6 @@ pub struct LoanManage {
 impl LoanManage {
     /// `"LoanManage"`.
     pub const TRANSACTION_TYPE: &'static str = "LoanManage";
-    /// `tfLoanDefault`.
-    pub const TF_LOAN_DEFAULT: u32 = 0x00010000;
-    /// `tfLoanImpair`.
-    pub const TF_LOAN_IMPAIR: u32 = 0x00020000;
-    /// `tfLoanUnimpair`.
-    pub const TF_LOAN_UNIMPAIR: u32 = 0x00040000;
 
     /// A `LoanManage` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, loan_id: Hash256) -> Self {
@@ -2879,6 +3031,7 @@ impl LoanManage {
 
 impl TxModel for LoanManage {
     const TRANSACTION_TYPE: &'static str = "LoanManage";
+    type Flags = LoanManageFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2892,6 +3045,22 @@ impl From<LoanManage> for Tx {
         Tx::LoanManage(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`LoanPay`] (`Flags`).
+    LoanPayFlags {
+        /// `tfLoanOverpayment`.
+        LOAN_OVERPAYMENT = 0x00010000,
+        /// `tfLoanFullPayment`.
+        LOAN_FULL_PAYMENT = 0x00020000,
+        /// `tfLoanLatePayment`.
+        LOAN_LATE_PAYMENT = 0x00040000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`LoanPay`](https://xrpl.org/docs/references/protocol/transactions/types/loanpay) transaction.
 ///
@@ -2913,12 +3082,6 @@ pub struct LoanPay {
 impl LoanPay {
     /// `"LoanPay"`.
     pub const TRANSACTION_TYPE: &'static str = "LoanPay";
-    /// `tfLoanOverpayment`.
-    pub const TF_LOAN_OVERPAYMENT: u32 = 0x00010000;
-    /// `tfLoanFullPayment`.
-    pub const TF_LOAN_FULL_PAYMENT: u32 = 0x00020000;
-    /// `tfLoanLatePayment`.
-    pub const TF_LOAN_LATE_PAYMENT: u32 = 0x00040000;
 
     /// A `LoanPay` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, loan_id: Hash256, amount: Amount) -> Self {
@@ -2932,6 +3095,7 @@ impl LoanPay {
 
 impl TxModel for LoanPay {
     const TRANSACTION_TYPE: &'static str = "LoanPay";
+    type Flags = LoanPayFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2945,6 +3109,18 @@ impl From<LoanPay> for Tx {
         Tx::LoanPay(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`LoanSet`] (`Flags`).
+    LoanSetFlags {
+        /// `tfLoanOverpayment`.
+        LOAN_OVERPAYMENT = 0x00010000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`LoanSet`](https://xrpl.org/docs/references/protocol/transactions/types/loanset) transaction.
 ///
@@ -3067,8 +3243,6 @@ pub struct LoanSet {
 impl LoanSet {
     /// `"LoanSet"`.
     pub const TRANSACTION_TYPE: &'static str = "LoanSet";
-    /// `tfLoanOverpayment`.
-    pub const TF_LOAN_OVERPAYMENT: u32 = 0x00010000;
 
     /// A `LoanSet` from `account` with its required fields; everything else unset.
     pub fn new(
@@ -3206,6 +3380,7 @@ impl LoanSet {
 
 impl TxModel for LoanSet {
     const TRANSACTION_TYPE: &'static str = "LoanSet";
+    type Flags = LoanSetFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3219,6 +3394,18 @@ impl From<LoanSet> for Tx {
         Tx::LoanSet(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`MPTokenAuthorize`] (`Flags`).
+    MPTokenAuthorizeFlags {
+        /// `tfMPTUnauthorize`.
+        MPT_UNAUTHORIZE = 0x00000001,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`MPTokenAuthorize`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenauthorize) transaction.
 ///
@@ -3240,8 +3427,6 @@ pub struct MPTokenAuthorize {
 impl MPTokenAuthorize {
     /// `"MPTokenAuthorize"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenAuthorize";
-    /// `tfMPTUnauthorize`.
-    pub const TF_MPT_UNAUTHORIZE: u32 = 0x00000001;
 
     /// A `MPTokenAuthorize` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
@@ -3262,6 +3447,7 @@ impl MPTokenAuthorize {
 
 impl TxModel for MPTokenAuthorize {
     const TRANSACTION_TYPE: &'static str = "MPTokenAuthorize";
+    type Flags = MPTokenAuthorizeFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3275,6 +3461,30 @@ impl From<MPTokenAuthorize> for Tx {
         Tx::MPTokenAuthorize(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`MPTokenIssuanceCreate`] (`Flags`).
+    MPTokenIssuanceCreateFlags {
+        /// `tfMPTCanLock`.
+        MPT_CAN_LOCK = 0x00000002,
+        /// `tfMPTRequireAuth`.
+        MPT_REQUIRE_AUTH = 0x00000004,
+        /// `tfMPTCanEscrow`.
+        MPT_CAN_ESCROW = 0x00000008,
+        /// `tfMPTCanTrade`.
+        MPT_CAN_TRADE = 0x00000010,
+        /// `tfMPTCanTransfer`.
+        MPT_CAN_TRANSFER = 0x00000020,
+        /// `tfMPTCanClawback`.
+        MPT_CAN_CLAWBACK = 0x00000040,
+        /// `tfMPTCanHoldConfidentialBalance`.
+        MPT_CAN_HOLD_CONFIDENTIAL_BALANCE = 0x00000080,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`MPTokenIssuanceCreate`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuancecreate) transaction.
 ///
@@ -3328,20 +3538,6 @@ pub struct MPTokenIssuanceCreate {
 impl MPTokenIssuanceCreate {
     /// `"MPTokenIssuanceCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceCreate";
-    /// `tfMPTCanLock`.
-    pub const TF_MPT_CAN_LOCK: u32 = 0x00000002;
-    /// `tfMPTRequireAuth`.
-    pub const TF_MPT_REQUIRE_AUTH: u32 = 0x00000004;
-    /// `tfMPTCanEscrow`.
-    pub const TF_MPT_CAN_ESCROW: u32 = 0x00000008;
-    /// `tfMPTCanTrade`.
-    pub const TF_MPT_CAN_TRADE: u32 = 0x00000010;
-    /// `tfMPTCanTransfer`.
-    pub const TF_MPT_CAN_TRANSFER: u32 = 0x00000020;
-    /// `tfMPTCanClawback`.
-    pub const TF_MPT_CAN_CLAWBACK: u32 = 0x00000040;
-    /// `tfMPTCanHoldConfidentialBalance`.
-    pub const TF_MPT_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000080;
 
     /// A `MPTokenIssuanceCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -3401,6 +3597,7 @@ impl MPTokenIssuanceCreate {
 
 impl TxModel for MPTokenIssuanceCreate {
     const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceCreate";
+    type Flags = MPTokenIssuanceCreateFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3444,6 +3641,7 @@ impl MPTokenIssuanceDestroy {
 
 impl TxModel for MPTokenIssuanceDestroy {
     const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceDestroy";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3457,6 +3655,34 @@ impl From<MPTokenIssuanceDestroy> for Tx {
         Tx::MPTokenIssuanceDestroy(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`MPTokenIssuanceSet`] (`Flags`).
+    MPTokenIssuanceSetFlags {
+        /// `tfMPTLock`.
+        MPT_LOCK = 0x00000001,
+        /// `tfMPTUnlock`.
+        MPT_UNLOCK = 0x00000002,
+        /// `tfMPTSetCanLock`.
+        MPT_SET_CAN_LOCK = 0x00000004,
+        /// `tfMPTSetRequireAuth`.
+        MPT_SET_REQUIRE_AUTH = 0x00000008,
+        /// `tfMPTSetCanEscrow`.
+        MPT_SET_CAN_ESCROW = 0x00000010,
+        /// `tfMPTSetCanTrade`.
+        MPT_SET_CAN_TRADE = 0x00000020,
+        /// `tfMPTSetCanTransfer`.
+        MPT_SET_CAN_TRANSFER = 0x00000040,
+        /// `tfMPTSetCanClawback`.
+        MPT_SET_CAN_CLAWBACK = 0x00000080,
+        /// `tfMPTSetCanHoldConfidentialBalance`.
+        MPT_SET_CAN_HOLD_CONFIDENTIAL_BALANCE = 0x00000100,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`MPTokenIssuanceSet`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuanceset) transaction.
 ///
@@ -3516,24 +3742,6 @@ pub struct MPTokenIssuanceSet {
 impl MPTokenIssuanceSet {
     /// `"MPTokenIssuanceSet"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceSet";
-    /// `tfMPTLock`.
-    pub const TF_MPT_LOCK: u32 = 0x00000001;
-    /// `tfMPTUnlock`.
-    pub const TF_MPT_UNLOCK: u32 = 0x00000002;
-    /// `tfMPTSetCanLock`.
-    pub const TF_MPT_SET_CAN_LOCK: u32 = 0x00000004;
-    /// `tfMPTSetRequireAuth`.
-    pub const TF_MPT_SET_REQUIRE_AUTH: u32 = 0x00000008;
-    /// `tfMPTSetCanEscrow`.
-    pub const TF_MPT_SET_CAN_ESCROW: u32 = 0x00000010;
-    /// `tfMPTSetCanTrade`.
-    pub const TF_MPT_SET_CAN_TRADE: u32 = 0x00000020;
-    /// `tfMPTSetCanTransfer`.
-    pub const TF_MPT_SET_CAN_TRANSFER: u32 = 0x00000040;
-    /// `tfMPTSetCanClawback`.
-    pub const TF_MPT_SET_CAN_CLAWBACK: u32 = 0x00000080;
-    /// `tfMPTSetCanHoldConfidentialBalance`.
-    pub const TF_MPT_SET_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000100;
 
     /// A `MPTokenIssuanceSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
@@ -3602,6 +3810,7 @@ impl MPTokenIssuanceSet {
 
 impl TxModel for MPTokenIssuanceSet {
     const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceSet";
+    type Flags = MPTokenIssuanceSetFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3686,6 +3895,7 @@ impl NFTokenAcceptOffer {
 
 impl TxModel for NFTokenAcceptOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenAcceptOffer";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::nf_token_accept_offer(self)
     }
@@ -3743,6 +3953,7 @@ impl NFTokenBurn {
 
 impl TxModel for NFTokenBurn {
     const TRANSACTION_TYPE: &'static str = "NFTokenBurn";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3786,6 +3997,7 @@ impl NFTokenCancelOffer {
 
 impl TxModel for NFTokenCancelOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenCancelOffer";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3799,6 +4011,18 @@ impl From<NFTokenCancelOffer> for Tx {
         Tx::NFTokenCancelOffer(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`NFTokenCreateOffer`] (`Flags`).
+    NFTokenCreateOfferFlags {
+        /// `tfSellNFToken`.
+        SELL_NFTOKEN = 0x00000001,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`NFTokenCreateOffer`](https://xrpl.org/docs/references/protocol/transactions/types/nftokencreateoffer) transaction.
 ///
@@ -3837,8 +4061,6 @@ pub struct NFTokenCreateOffer {
 impl NFTokenCreateOffer {
     /// `"NFTokenCreateOffer"`.
     pub const TRANSACTION_TYPE: &'static str = "NFTokenCreateOffer";
-    /// `tfSellNFToken`.
-    pub const TF_SELL_NFTOKEN: u32 = 0x00000001;
 
     /// A `NFTokenCreateOffer` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, nf_token_id: Hash256, amount: Amount) -> Self {
@@ -3876,6 +4098,7 @@ impl NFTokenCreateOffer {
 
 impl TxModel for NFTokenCreateOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenCreateOffer";
+    type Flags = NFTokenCreateOfferFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3889,6 +4112,24 @@ impl From<NFTokenCreateOffer> for Tx {
         Tx::NFTokenCreateOffer(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`NFTokenMint`] (`Flags`).
+    NFTokenMintFlags {
+        /// `tfBurnable`.
+        BURNABLE = 0x00000001,
+        /// `tfOnlyXRP`.
+        ONLY_XRP = 0x00000002,
+        /// `tfTransferable`.
+        TRANSFERABLE = 0x00000008,
+        /// `tfMutable`.
+        MUTABLE = 0x00000010,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`NFTokenMint`](https://xrpl.org/docs/references/protocol/transactions/types/nftokenmint) transaction.
 ///
@@ -3937,14 +4178,6 @@ pub struct NFTokenMint {
 impl NFTokenMint {
     /// `"NFTokenMint"`.
     pub const TRANSACTION_TYPE: &'static str = "NFTokenMint";
-    /// `tfBurnable`.
-    pub const TF_BURNABLE: u32 = 0x00000001;
-    /// `tfOnlyXRP`.
-    pub const TF_ONLY_XRP: u32 = 0x00000002;
-    /// `tfTransferable`.
-    pub const TF_TRANSFERABLE: u32 = 0x00000008;
-    /// `tfMutable`.
-    pub const TF_MUTABLE: u32 = 0x00000010;
 
     /// A `NFTokenMint` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, nf_token_taxon: u32) -> Self {
@@ -4005,6 +4238,7 @@ impl NFTokenMint {
 
 impl TxModel for NFTokenMint {
     const TRANSACTION_TYPE: &'static str = "NFTokenMint";
+    type Flags = NFTokenMintFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4070,6 +4304,7 @@ impl NFTokenModify {
 
 impl TxModel for NFTokenModify {
     const TRANSACTION_TYPE: &'static str = "NFTokenModify";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4113,6 +4348,7 @@ impl OfferCancel {
 
 impl TxModel for OfferCancel {
     const TRANSACTION_TYPE: &'static str = "OfferCancel";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4126,6 +4362,26 @@ impl From<OfferCancel> for Tx {
         Tx::OfferCancel(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`OfferCreate`] (`Flags`).
+    OfferCreateFlags {
+        /// `tfPassive`.
+        PASSIVE = 0x00010000,
+        /// `tfImmediateOrCancel`.
+        IMMEDIATE_OR_CANCEL = 0x00020000,
+        /// `tfFillOrKill`.
+        FILL_OR_KILL = 0x00040000,
+        /// `tfSell`.
+        SELL = 0x00080000,
+        /// `tfHybrid`.
+        HYBRID = 0x00100000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`OfferCreate`](https://xrpl.org/docs/references/protocol/transactions/types/offercreate) transaction.
 ///
@@ -4173,16 +4429,6 @@ pub struct OfferCreate {
 impl OfferCreate {
     /// `"OfferCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "OfferCreate";
-    /// `tfPassive`.
-    pub const TF_PASSIVE: u32 = 0x00010000;
-    /// `tfImmediateOrCancel`.
-    pub const TF_IMMEDIATE_OR_CANCEL: u32 = 0x00020000;
-    /// `tfFillOrKill`.
-    pub const TF_FILL_OR_KILL: u32 = 0x00040000;
-    /// `tfSell`.
-    pub const TF_SELL: u32 = 0x00080000;
-    /// `tfHybrid`.
-    pub const TF_HYBRID: u32 = 0x00100000;
 
     /// A `OfferCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, taker_pays: Amount, taker_gets: Amount) -> Self {
@@ -4221,6 +4467,7 @@ impl OfferCreate {
 
 impl TxModel for OfferCreate {
     const TRANSACTION_TYPE: &'static str = "OfferCreate";
+    type Flags = OfferCreateFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4264,6 +4511,7 @@ impl OracleDelete {
 
 impl TxModel for OracleDelete {
     const TRANSACTION_TYPE: &'static str = "OracleDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4357,6 +4605,7 @@ impl OracleSet {
 
 impl TxModel for OracleSet {
     const TRANSACTION_TYPE: &'static str = "OracleSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4370,6 +4619,24 @@ impl From<OracleSet> for Tx {
         Tx::OracleSet(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`Payment`] (`Flags`).
+    PaymentFlags {
+        /// `tfNoRippleDirect`.
+        NO_RIPPLE_DIRECT = 0x00010000,
+        /// `tfPartialPayment`.
+        PARTIAL_PAYMENT = 0x00020000,
+        /// `tfLimitQuality`.
+        LIMIT_QUALITY = 0x00040000,
+        /// `tfSponsorCreatedAccount`.
+        SPONSOR_CREATED_ACCOUNT = 0x00080000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`Payment`](https://xrpl.org/docs/references/protocol/transactions/types/payment) transaction.
 ///
@@ -4436,14 +4703,6 @@ pub struct Payment {
 impl Payment {
     /// `"Payment"`.
     pub const TRANSACTION_TYPE: &'static str = "Payment";
-    /// `tfNoRippleDirect`.
-    pub const TF_NO_RIPPLE_DIRECT: u32 = 0x00010000;
-    /// `tfPartialPayment`.
-    pub const TF_PARTIAL_PAYMENT: u32 = 0x00020000;
-    /// `tfLimitQuality`.
-    pub const TF_LIMIT_QUALITY: u32 = 0x00040000;
-    /// `tfSponsorCreatedAccount`.
-    pub const TF_SPONSOR_CREATED_ACCOUNT: u32 = 0x00080000;
 
     /// A `Payment` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, destination: impl Into<String>, amount: Amount) -> Self {
@@ -4514,6 +4773,7 @@ impl Payment {
 
 impl TxModel for Payment {
     const TRANSACTION_TYPE: &'static str = "Payment";
+    type Flags = PaymentFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4527,6 +4787,20 @@ impl From<Payment> for Tx {
         Tx::Payment(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`PaymentChannelClaim`] (`Flags`).
+    PaymentChannelClaimFlags {
+        /// `tfRenew`.
+        RENEW = 0x00010000,
+        /// `tfClose`.
+        CLOSE = 0x00020000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`PaymentChannelClaim`](https://xrpl.org/docs/references/protocol/transactions/types/paymentchannelclaim) transaction.
 ///
@@ -4564,10 +4838,6 @@ pub struct PaymentChannelClaim {
 impl PaymentChannelClaim {
     /// `"PaymentChannelClaim"`.
     pub const TRANSACTION_TYPE: &'static str = "PaymentChannelClaim";
-    /// `tfRenew`.
-    pub const TF_RENEW: u32 = 0x00010000;
-    /// `tfClose`.
-    pub const TF_CLOSE: u32 = 0x00020000;
 
     /// A `PaymentChannelClaim` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, channel: Hash256) -> Self {
@@ -4620,6 +4890,7 @@ impl PaymentChannelClaim {
 
 impl TxModel for PaymentChannelClaim {
     const TRANSACTION_TYPE: &'static str = "PaymentChannelClaim";
+    type Flags = PaymentChannelClaimFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4711,6 +4982,7 @@ impl PaymentChannelCreate {
 
 impl TxModel for PaymentChannelCreate {
     const TRANSACTION_TYPE: &'static str = "PaymentChannelCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4773,6 +5045,7 @@ impl PaymentChannelFund {
 
 impl TxModel for PaymentChannelFund {
     const TRANSACTION_TYPE: &'static str = "PaymentChannelFund";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4816,6 +5089,7 @@ impl PermissionedDomainDelete {
 
 impl TxModel for PermissionedDomainDelete {
     const TRANSACTION_TYPE: &'static str = "PermissionedDomainDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4870,6 +5144,7 @@ impl PermissionedDomainSet {
 
 impl TxModel for PermissionedDomainSet {
     const TRANSACTION_TYPE: &'static str = "PermissionedDomainSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5025,6 +5300,7 @@ impl SetFee {
 
 impl TxModel for SetFee {
     const TRANSACTION_TYPE: &'static str = "SetFee";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5079,6 +5355,7 @@ impl SetRegularKey {
 
 impl TxModel for SetRegularKey {
     const TRANSACTION_TYPE: &'static str = "SetRegularKey";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5138,6 +5415,7 @@ impl SignerListSet {
 
 impl TxModel for SignerListSet {
     const TRANSACTION_TYPE: &'static str = "SignerListSet";
+    type Flags = UniversalFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::signer_list_set(self)
     }
@@ -5154,6 +5432,26 @@ impl From<SignerListSet> for Tx {
         Tx::SignerListSet(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`SponsorshipSet`] (`Flags`).
+    SponsorshipSetFlags {
+        /// `tfSponsorshipSetRequireSignForFee`.
+        SPONSORSHIP_SET_REQUIRE_SIGN_FOR_FEE = 0x00010000,
+        /// `tfSponsorshipClearRequireSignForFee`.
+        SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_FEE = 0x00020000,
+        /// `tfSponsorshipSetRequireSignForReserve`.
+        SPONSORSHIP_SET_REQUIRE_SIGN_FOR_RESERVE = 0x00040000,
+        /// `tfSponsorshipClearRequireSignForReserve`.
+        SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_RESERVE = 0x00080000,
+        /// `tfDeleteObject`.
+        DELETE_OBJECT = 0x00100000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`SponsorshipSet`](https://xrpl.org/docs/references/protocol/transactions/types/sponsorshipset) transaction.
 ///
@@ -5196,16 +5494,6 @@ pub struct SponsorshipSet {
 impl SponsorshipSet {
     /// `"SponsorshipSet"`.
     pub const TRANSACTION_TYPE: &'static str = "SponsorshipSet";
-    /// `tfSponsorshipSetRequireSignForFee`.
-    pub const TF_SPONSORSHIP_SET_REQUIRE_SIGN_FOR_FEE: u32 = 0x00010000;
-    /// `tfSponsorshipClearRequireSignForFee`.
-    pub const TF_SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_FEE: u32 = 0x00020000;
-    /// `tfSponsorshipSetRequireSignForReserve`.
-    pub const TF_SPONSORSHIP_SET_REQUIRE_SIGN_FOR_RESERVE: u32 = 0x00040000;
-    /// `tfSponsorshipClearRequireSignForReserve`.
-    pub const TF_SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_RESERVE: u32 = 0x00080000;
-    /// `tfDeleteObject`.
-    pub const TF_DELETE_OBJECT: u32 = 0x00100000;
 
     /// A `SponsorshipSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -5257,6 +5545,7 @@ impl SponsorshipSet {
 
 impl TxModel for SponsorshipSet {
     const TRANSACTION_TYPE: &'static str = "SponsorshipSet";
+    type Flags = SponsorshipSetFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5270,6 +5559,22 @@ impl From<SponsorshipSet> for Tx {
         Tx::SponsorshipSet(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`SponsorshipTransfer`] (`Flags`).
+    SponsorshipTransferFlags {
+        /// `tfSponsorshipEnd`.
+        SPONSORSHIP_END = 0x00010000,
+        /// `tfSponsorshipCreate`.
+        SPONSORSHIP_CREATE = 0x00020000,
+        /// `tfSponsorshipReassign`.
+        SPONSORSHIP_REASSIGN = 0x00040000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`SponsorshipTransfer`](https://xrpl.org/docs/references/protocol/transactions/types/sponsorshiptransfer) transaction.
 ///
@@ -5291,12 +5596,6 @@ pub struct SponsorshipTransfer {
 impl SponsorshipTransfer {
     /// `"SponsorshipTransfer"`.
     pub const TRANSACTION_TYPE: &'static str = "SponsorshipTransfer";
-    /// `tfSponsorshipEnd`.
-    pub const TF_SPONSORSHIP_END: u32 = 0x00010000;
-    /// `tfSponsorshipCreate`.
-    pub const TF_SPONSORSHIP_CREATE: u32 = 0x00020000;
-    /// `tfSponsorshipReassign`.
-    pub const TF_SPONSORSHIP_REASSIGN: u32 = 0x00040000;
 
     /// A `SponsorshipTransfer` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -5324,6 +5623,7 @@ impl SponsorshipTransfer {
 
 impl TxModel for SponsorshipTransfer {
     const TRANSACTION_TYPE: &'static str = "SponsorshipTransfer";
+    type Flags = SponsorshipTransferFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5367,6 +5667,7 @@ impl TicketCreate {
 
 impl TxModel for TicketCreate {
     const TRANSACTION_TYPE: &'static str = "TicketCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5380,6 +5681,30 @@ impl From<TicketCreate> for Tx {
         Tx::TicketCreate(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`TrustSet`] (`Flags`).
+    TrustSetFlags {
+        /// `tfSetfAuth`.
+        SETF_AUTH = 0x00010000,
+        /// `tfSetNoRipple`.
+        SET_NO_RIPPLE = 0x00020000,
+        /// `tfClearNoRipple`.
+        CLEAR_NO_RIPPLE = 0x00040000,
+        /// `tfSetFreeze`.
+        SET_FREEZE = 0x00100000,
+        /// `tfClearFreeze`.
+        CLEAR_FREEZE = 0x00200000,
+        /// `tfSetDeepFreeze`.
+        SET_DEEP_FREEZE = 0x00400000,
+        /// `tfClearDeepFreeze`.
+        CLEAR_DEEP_FREEZE = 0x00800000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`TrustSet`](https://xrpl.org/docs/references/protocol/transactions/types/trustset) transaction.
 ///
@@ -5412,20 +5737,6 @@ pub struct TrustSet {
 impl TrustSet {
     /// `"TrustSet"`.
     pub const TRANSACTION_TYPE: &'static str = "TrustSet";
-    /// `tfSetfAuth`.
-    pub const TF_SETF_AUTH: u32 = 0x00010000;
-    /// `tfSetNoRipple`.
-    pub const TF_SET_NO_RIPPLE: u32 = 0x00020000;
-    /// `tfClearNoRipple`.
-    pub const TF_CLEAR_NO_RIPPLE: u32 = 0x00040000;
-    /// `tfSetFreeze`.
-    pub const TF_SET_FREEZE: u32 = 0x00100000;
-    /// `tfClearFreeze`.
-    pub const TF_CLEAR_FREEZE: u32 = 0x00200000;
-    /// `tfSetDeepFreeze`.
-    pub const TF_SET_DEEP_FREEZE: u32 = 0x00400000;
-    /// `tfClearDeepFreeze`.
-    pub const TF_CLEAR_DEEP_FREEZE: u32 = 0x00800000;
 
     /// A `TrustSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -5461,6 +5772,7 @@ impl TrustSet {
 
 impl TxModel for TrustSet {
     const TRANSACTION_TYPE: &'static str = "TrustSet";
+    type Flags = TrustSetFlags;
     fn validate(&self) -> Result<(), CoreError> {
         super::validate::trust_set(self)
     }
@@ -5520,6 +5832,7 @@ impl UNLModify {
 
 impl TxModel for UNLModify {
     const TRANSACTION_TYPE: &'static str = "UNLModify";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5578,6 +5891,7 @@ impl VaultClawback {
 
 impl TxModel for VaultClawback {
     const TRANSACTION_TYPE: &'static str = "VaultClawback";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5591,6 +5905,20 @@ impl From<VaultClawback> for Tx {
         Tx::VaultClawback(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`VaultCreate`] (`Flags`).
+    VaultCreateFlags {
+        /// `tfVaultPrivate`.
+        VAULT_PRIVATE = 0x00010000,
+        /// `tfVaultShareNonTransferable`.
+        VAULT_SHARE_NON_TRANSFERABLE = 0x00020000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`VaultCreate`](https://xrpl.org/docs/references/protocol/transactions/types/vaultcreate) transaction.
 ///
@@ -5656,10 +5984,6 @@ pub struct VaultCreate {
 impl VaultCreate {
     /// `"VaultCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "VaultCreate";
-    /// `tfVaultPrivate`.
-    pub const TF_VAULT_PRIVATE: u32 = 0x00010000;
-    /// `tfVaultShareNonTransferable`.
-    pub const TF_VAULT_SHARE_NON_TRANSFERABLE: u32 = 0x00020000;
 
     /// A `VaultCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset) -> Self {
@@ -5744,6 +6068,7 @@ impl VaultCreate {
 
 impl TxModel for VaultCreate {
     const TRANSACTION_TYPE: &'static str = "VaultCreate";
+    type Flags = VaultCreateFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5798,6 +6123,7 @@ impl VaultDelete {
 
 impl TxModel for VaultDelete {
     const TRANSACTION_TYPE: &'static str = "VaultDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5845,6 +6171,7 @@ impl VaultDeposit {
 
 impl TxModel for VaultDeposit {
     const TRANSACTION_TYPE: &'static str = "VaultDeposit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5925,6 +6252,7 @@ impl VaultSet {
 
 impl TxModel for VaultSet {
     const TRANSACTION_TYPE: &'static str = "VaultSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6017,6 +6345,7 @@ impl VaultWithdraw {
 
 impl TxModel for VaultWithdraw {
     const TRANSACTION_TYPE: &'static str = "VaultWithdraw";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6078,6 +6407,7 @@ impl XChainAccountCreateCommit {
 
 impl TxModel for XChainAccountCreateCommit {
     const TRANSACTION_TYPE: &'static str = "XChainAccountCreateCommit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6174,6 +6504,7 @@ impl XChainAddAccountCreateAttestation {
 
 impl TxModel for XChainAddAccountCreateAttestation {
     const TRANSACTION_TYPE: &'static str = "XChainAddAccountCreateAttestation";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6275,6 +6606,7 @@ impl XChainAddClaimAttestation {
 
 impl TxModel for XChainAddClaimAttestation {
     const TRANSACTION_TYPE: &'static str = "XChainAddClaimAttestation";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6351,6 +6683,7 @@ impl XChainClaim {
 
 impl TxModel for XChainClaim {
     const TRANSACTION_TYPE: &'static str = "XChainClaim";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6422,6 +6755,7 @@ impl XChainCommit {
 
 impl TxModel for XChainCommit {
     const TRANSACTION_TYPE: &'static str = "XChainCommit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6488,6 +6822,7 @@ impl XChainCreateBridge {
 
 impl TxModel for XChainCreateBridge {
     const TRANSACTION_TYPE: &'static str = "XChainCreateBridge";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6544,6 +6879,7 @@ impl XChainCreateClaimID {
 
 impl TxModel for XChainCreateClaimID {
     const TRANSACTION_TYPE: &'static str = "XChainCreateClaimID";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -6557,6 +6893,18 @@ impl From<XChainCreateClaimID> for Tx {
         Tx::XChainCreateClaimID(tx)
     }
 }
+
+flags_type!(
+    /// The flags of a [`XChainModifyBridge`] (`Flags`).
+    XChainModifyBridgeFlags {
+        /// `tfClearAccountCreateAmount`.
+        CLEAR_ACCOUNT_CREATE_AMOUNT = 0x00010000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
 
 /// [`XChainModifyBridge`](https://xrpl.org/docs/references/protocol/transactions/types/xchainmodifybridge) transaction.
 ///
@@ -6589,8 +6937,6 @@ pub struct XChainModifyBridge {
 impl XChainModifyBridge {
     /// `"XChainModifyBridge"`.
     pub const TRANSACTION_TYPE: &'static str = "XChainModifyBridge";
-    /// `tfClearAccountCreateAmount`.
-    pub const TF_CLEAR_ACCOUNT_CREATE_AMOUNT: u32 = 0x00010000;
 
     /// A `XChainModifyBridge` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, x_chain_bridge: XChainBridge) -> Self {
@@ -6619,6 +6965,7 @@ impl XChainModifyBridge {
 
 impl TxModel for XChainModifyBridge {
     const TRANSACTION_TYPE: &'static str = "XChainModifyBridge";
+    type Flags = XChainModifyBridgeFlags;
     fn common(&self) -> &Common {
         &self.common
     }

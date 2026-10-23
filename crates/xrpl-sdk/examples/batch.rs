@@ -10,7 +10,7 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use xrpl_sdk::models::{Batch, Payment};
+use xrpl_sdk::models::{Batch, BatchFlags, Payment};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .into();
     let mut batch_tx = Batch::new(alice.classic_address(), vec![pay_bob, pay_alice]);
-    batch_tx.common.flags = Some(Batch::TF_ALL_OR_NOTHING);
+    batch_tx.common.flags = Some(u32::from(BatchFlags::ALL_OR_NOTHING));
     let mut tx = batch_tx.to_json()?;
 
     // 2. autofill numbers the inner transactions and prices the whole batch.

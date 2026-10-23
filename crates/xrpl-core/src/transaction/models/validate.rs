@@ -5,6 +5,7 @@
 //! why before anything is signed or sent.
 
 use super::*;
+use crate::flags::Flags;
 
 /// The largest AMM trading fee: 1000 (1%, in 1/100,000).
 const MAX_TRADING_FEE: u16 = 1000;
@@ -92,10 +93,10 @@ pub(super) fn amm_create(tx: &AMMCreate) -> Result<(), CoreError> {
 }
 
 /// The one mode flag among `modes` set in `flags`.
-fn one_mode(tx: &str, flags: u32, modes: u32) -> Result<u32, CoreError> {
-    let mode = flags & modes;
+fn one_mode<F: Flags>(tx: &str, flags: F, modes: F) -> Result<F, CoreError> {
+    let mode = flags.bits() & modes.bits();
     if mode.count_ones() == 1 {
-        Ok(mode)
+        Ok(F::from_bits(mode))
     } else {
         Err(invalid(
             tx,
@@ -105,14 +106,14 @@ fn one_mode(tx: &str, flags: u32, modes: u32) -> Result<u32, CoreError> {
 }
 
 pub(super) fn amm_deposit(tx: &AMMDeposit) -> Result<(), CoreError> {
-    type D = AMMDeposit;
-    let modes = D::TF_LP_TOKEN
-        | D::TF_SINGLE_ASSET
-        | D::TF_TWO_ASSET
-        | D::TF_ONE_ASSET_LP_TOKEN
-        | D::TF_LIMIT_LP_TOKEN
-        | D::TF_TWO_ASSET_IF_EMPTY;
-    let mode = one_mode("AMMDeposit", tx.common.flags.unwrap_or(0), modes)?;
+    type D = AMMDepositFlags;
+    let modes = D::LP_TOKEN
+        | D::SINGLE_ASSET
+        | D::TWO_ASSET
+        | D::ONE_ASSET_LP_TOKEN
+        | D::LIMIT_LP_TOKEN
+        | D::TWO_ASSET_IF_EMPTY;
+    let mode = one_mode("AMMDeposit", tx.flags(), modes)?;
     let (a, a2, lp, ep) = (
         tx.amount.is_some(),
         tx.amount2.is_some(),
@@ -120,11 +121,11 @@ pub(super) fn amm_deposit(tx: &AMMDeposit) -> Result<(), CoreError> {
         tx.e_price.is_some(),
     );
     let fits = match mode {
-        D::TF_LP_TOKEN => lp && a == a2 && !ep,
-        D::TF_SINGLE_ASSET => a && !a2 && !lp && !ep,
-        D::TF_TWO_ASSET | D::TF_TWO_ASSET_IF_EMPTY => a && a2 && !lp && !ep,
-        D::TF_ONE_ASSET_LP_TOKEN => a && lp && !a2 && !ep,
-        D::TF_LIMIT_LP_TOKEN => a && ep && !a2 && !lp,
+        D::LP_TOKEN => lp && a == a2 && !ep,
+        D::SINGLE_ASSET => a && !a2 && !lp && !ep,
+        D::TWO_ASSET | D::TWO_ASSET_IF_EMPTY => a && a2 && !lp && !ep,
+        D::ONE_ASSET_LP_TOKEN => a && lp && !a2 && !ep,
+        D::LIMIT_LP_TOKEN => a && ep && !a2 && !lp,
         _ => false,
     };
     if !fits {
@@ -133,7 +134,7 @@ pub(super) fn amm_deposit(tx: &AMMDeposit) -> Result<(), CoreError> {
             "the amounts set do not fit the deposit mode flag",
         ));
     }
-    if tx.trading_fee.is_some() && mode != D::TF_TWO_ASSET_IF_EMPTY {
+    if tx.trading_fee.is_some() && mode != D::TWO_ASSET_IF_EMPTY {
         return Err(invalid(
             "AMMDeposit",
             "TradingFee goes only with tfTwoAssetIfEmpty",
@@ -146,15 +147,15 @@ pub(super) fn amm_deposit(tx: &AMMDeposit) -> Result<(), CoreError> {
 }
 
 pub(super) fn amm_withdraw(tx: &AMMWithdraw) -> Result<(), CoreError> {
-    type W = AMMWithdraw;
-    let modes = W::TF_LP_TOKEN
-        | W::TF_WITHDRAW_ALL
-        | W::TF_ONE_ASSET_WITHDRAW_ALL
-        | W::TF_SINGLE_ASSET
-        | W::TF_TWO_ASSET
-        | W::TF_ONE_ASSET_LP_TOKEN
-        | W::TF_LIMIT_LP_TOKEN;
-    let mode = one_mode("AMMWithdraw", tx.common.flags.unwrap_or(0), modes)?;
+    type W = AMMWithdrawFlags;
+    let modes = W::LP_TOKEN
+        | W::WITHDRAW_ALL
+        | W::ONE_ASSET_WITHDRAW_ALL
+        | W::SINGLE_ASSET
+        | W::TWO_ASSET
+        | W::ONE_ASSET_LP_TOKEN
+        | W::LIMIT_LP_TOKEN;
+    let mode = one_mode("AMMWithdraw", tx.flags(), modes)?;
     let (a, a2, lp, ep) = (
         tx.amount.is_some(),
         tx.amount2.is_some(),
@@ -162,12 +163,12 @@ pub(super) fn amm_withdraw(tx: &AMMWithdraw) -> Result<(), CoreError> {
         tx.e_price.is_some(),
     );
     let fits = match mode {
-        W::TF_LP_TOKEN => lp && a == a2 && !ep,
-        W::TF_WITHDRAW_ALL => !a && !a2 && !lp && !ep,
-        W::TF_ONE_ASSET_WITHDRAW_ALL | W::TF_SINGLE_ASSET => a && !a2 && !lp && !ep,
-        W::TF_TWO_ASSET => a && a2 && !lp && !ep,
-        W::TF_ONE_ASSET_LP_TOKEN => a && lp && !a2 && !ep,
-        W::TF_LIMIT_LP_TOKEN => a && ep && !a2 && !lp,
+        W::LP_TOKEN => lp && a == a2 && !ep,
+        W::WITHDRAW_ALL => !a && !a2 && !lp && !ep,
+        W::ONE_ASSET_WITHDRAW_ALL | W::SINGLE_ASSET => a && !a2 && !lp && !ep,
+        W::TWO_ASSET => a && a2 && !lp && !ep,
+        W::ONE_ASSET_LP_TOKEN => a && lp && !a2 && !ep,
+        W::LIMIT_LP_TOKEN => a && ep && !a2 && !lp,
         _ => false,
     };
     if fits {
@@ -383,7 +384,7 @@ mod tests {
         let deposit = || AMMDeposit::new(A, xrp.clone(), token.clone());
         assert!(deposit()
             .with_amount(Amount::Xrp(5))
-            .with_flags(AMMDeposit::TF_SINGLE_ASSET)
+            .with_flags(AMMDepositFlags::SINGLE_ASSET)
             .validate()
             .is_ok());
         refused(
@@ -393,7 +394,7 @@ mod tests {
         refused(
             deposit()
                 .with_amount(Amount::Xrp(5))
-                .with_flags(AMMDeposit::TF_TWO_ASSET)
+                .with_flags(AMMDepositFlags::TWO_ASSET)
                 .validate(),
             "do not fit",
         );
@@ -401,20 +402,20 @@ mod tests {
             deposit()
                 .with_amount(Amount::Xrp(5))
                 .with_trading_fee(10u16)
-                .with_flags(AMMDeposit::TF_SINGLE_ASSET)
+                .with_flags(AMMDepositFlags::SINGLE_ASSET)
                 .validate(),
             "tfTwoAssetIfEmpty",
         );
 
         let withdraw = || AMMWithdraw::new(A, xrp.clone(), token.clone());
         assert!(withdraw()
-            .with_flags(AMMWithdraw::TF_WITHDRAW_ALL)
+            .with_flags(AMMWithdrawFlags::WITHDRAW_ALL)
             .validate()
             .is_ok());
         refused(
             withdraw()
                 .with_amount(Amount::Xrp(5))
-                .with_flags(AMMWithdraw::TF_WITHDRAW_ALL)
+                .with_flags(AMMWithdrawFlags::WITHDRAW_ALL)
                 .validate(),
             "do not fit",
         );

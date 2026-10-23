@@ -10,7 +10,7 @@
 )]
 
 use serde_json::json;
-use xrpl_sdk::models::{OfferCancel, OfferCreate, Payment, TrustSet};
+use xrpl_sdk::models::{OfferCancel, OfferCreate, OfferCreateFlags, Payment, TrustSet};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. The taker buys 20 USD for 10 XRP, now or not at all.
     let mut buy = OfferCreate::new(taker.classic_address(), usd("20")?, Amount::Xrp(10_000_000));
-    buy.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
+    buy.common.flags = Some(u32::from(OfferCreateFlags::IMMEDIATE_OR_CANCEL));
     let trade = send(&client, &taker, buy.to_json()?).await?;
     for account in utils::get_balance_changes(trade.meta.as_ref().ok_or("no metadata")?)? {
         let changes: Vec<String> = account

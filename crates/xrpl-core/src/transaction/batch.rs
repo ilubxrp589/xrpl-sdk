@@ -22,6 +22,7 @@
 //! use serde_json::json;
 //! use xrpl_core::crypto::{Keypair, Seed};
 //! use xrpl_core::transaction::batch::{self, Batch};
+//! use xrpl_core::transaction::models::BatchFlags;
 //!
 //! let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
 //! let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
@@ -32,7 +33,7 @@
 //!     "TransactionType": "Batch",
 //!     "Account": a,
 //!     "Sequence": 10,
-//!     "Flags": Batch::TF_ALL_OR_NOTHING,
+//!     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING),
 //!     "Fee": batch::batch_fee(10, 2, 1).to_string(),
 //!     "RawTransactions": [
 //!         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
@@ -47,7 +48,11 @@
 //! ```
 
 pub use super::models::Batch;
-use super::models::{BatchSigner, Signer, TF_INNER_BATCH_TXN};
+use super::models::{BatchSigner, Signer};
+
+/// `tfInnerBatchTxn` (`UniversalFlags::INNER_BATCH_TXN`): marks a transaction
+/// inside a `Batch`.
+const TF_INNER_BATCH_TXN: u32 = 0x4000_0000;
 use crate::address::decode_account_id;
 use crate::codec::encode::read_uint32;
 use crate::crypto::{verify_signing_data, Keypair};
@@ -481,6 +486,7 @@ pub fn batch_fee(base_fee_drops: u64, inner_transactions: usize, batch_signature
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::transaction::models::BatchFlags;
 
     /// Every `Batch` with `BatchSigners` in the recorded sample (mainnet and
     /// Testnet transactions `rippled` accepted): our signing data must make
@@ -528,7 +534,7 @@ mod tests {
             inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": from, "Destination": to, "Amount": "1", "Sequence": seq})).unwrap()
         };
         let mut tx = serde_json::json!({
-            "TransactionType": "Batch", "Account": a, "Sequence": 5, "Flags": Batch::TF_INDEPENDENT,
+            "TransactionType": "Batch", "Account": a, "Sequence": 5, "Flags": u32::from(BatchFlags::INDEPENDENT),
             "Fee": batch_fee(10, 3, 2).to_string(),
             "RawTransactions": [{"RawTransaction": pay(&a, &b, 6)}, {"RawTransaction": pay(&b, &c, 1)}, {"RawTransaction": pay(&c, &a, 1)}],
         });
@@ -582,7 +588,7 @@ mod tests {
                 "Amount": "1", "Sequence": seq})).unwrap()})
         };
         serde_json::json!({"TransactionType": "Batch", "Account": a, "Sequence": 5,
-            "Flags": Batch::TF_ALL_OR_NOTHING, "RawTransactions": [pay(a, b, 6), pay(b, a, 1)]})
+            "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "RawTransactions": [pay(a, b, 6), pay(b, a, 1)]})
     }
 
     /// rippled accepts exactly the required signers: none missing, none
@@ -641,7 +647,7 @@ mod tests {
         let b = keys("sp5fghtJtpUorTwvof1NpDXAzNwf5").classic_address();
         let numeric = two_party_batch(&a, &b);
         let mut text = numeric.clone();
-        text["Flags"] = serde_json::json!(Batch::TF_ALL_OR_NOTHING.to_string());
+        text["Flags"] = serde_json::json!(u32::from(BatchFlags::ALL_OR_NOTHING).to_string());
         text["Sequence"] = serde_json::json!("5");
         assert_eq!(
             batch_signing_data(&text).unwrap(),

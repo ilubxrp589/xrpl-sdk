@@ -7,12 +7,12 @@
 //! `with_…` sets an optional one (each type's own fields, and through
 //! [`TxModel`] the common ones: `with_fee`, `with_sequence`, `with_memo`, …),
 //! so a transaction reads as one expression. Flags are constants on the type
-//! (`Payment::TF_PARTIAL_PAYMENT`, `AccountSet::ASF_DEFAULT_RIPPLE`). The
+//! (`PaymentFlags::PARTIAL_PAYMENT`, `AccountSetFlag::DefaultRipple`). The
 //! fields stay public to read and change; the types are `#[non_exhaustive]`,
 //! so a field `rippled` adds later is not a breaking change.
 //!
 //! ```
-//! use xrpl_core::transaction::models::{Memo, Payment, Tx, TxModel};
+//! use xrpl_core::transaction::models::{Memo, Payment, PaymentFlags, Tx, TxModel};
 //! use xrpl_core::types::Amount;
 //!
 //! let pay = Payment::new(
@@ -21,7 +21,7 @@
 //!     Amount::Xrp(1_000_000),
 //! )
 //! .with_destination_tag(42u32)
-//! .with_flags(Payment::TF_PARTIAL_PAYMENT)
+//! .with_flags(PaymentFlags::PARTIAL_PAYMENT)
 //! .with_memo(Memo::text("invoice 17"));
 //!
 //! let json = pay.to_json()?; // rippled's JSON, `TransactionType` included
@@ -55,6 +55,9 @@ use std::collections::BTreeSet;
 pub trait TxModel: Serialize + Into<Tx> + Clone {
     /// The `TransactionType` (`"Payment"`, `"OfferCreate"`, …).
     const TRANSACTION_TYPE: &'static str;
+    /// The type's flags (`PaymentFlags`, …; [`UniversalFlags`] for a type
+    /// with none of its own).
+    type Flags: crate::flags::Flags;
     /// The fields every transaction has.
     fn common(&self) -> &Common;
     /// The common fields, to change.
@@ -133,11 +136,17 @@ pub trait TxModel: Serialize + Into<Tx> + Clone {
         self
     }
 
-    /// With `Flags` set (the type's `TF_` constants, combined with `|`).
+    /// With `Flags` set: the type's own flags type, combined with `|`
+    /// (`PaymentFlags::PARTIAL_PAYMENT | PaymentFlags::LIMIT_QUALITY`).
     #[must_use]
-    fn with_flags(mut self, flags: u32) -> Self {
-        self.common_mut().flags = Some(flags);
+    fn with_flags(mut self, flags: Self::Flags) -> Self {
+        self.common_mut().flags = Some(crate::flags::Flags::bits(flags));
         self
+    }
+
+    /// The `Flags` set, typed (none when the field is absent).
+    fn flags(&self) -> Self::Flags {
+        crate::flags::Flags::from_bits(self.common().flags.unwrap_or(0))
     }
 
     /// With `SourceTag` set.

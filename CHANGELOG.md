@@ -11,6 +11,23 @@ may break the API, and says so under "Changed (breaking)").
 below says how to update.
 
 ### Changed (breaking)
+- **Typed flags.** Each transaction type has its own flags type
+  (`PaymentFlags`, `OfferCreateFlags`, …; `UniversalFlags` for types with
+  none of their own, each including `FULLY_CANONICAL_SIG` and
+  `INNER_BATCH_TXN`), so a flag of one type cannot be set on another:
+  `TxModel::with_flags` takes it and `TxModel::flags()` reads it. Each ledger
+  entry type with flags has a typed `flags` field (`AccountRootFlags`,
+  `RippleStateFlags`, …). A flags type combines with `|`, has `contains`,
+  `ALL` and `unknown_bits` (the `xrpl_core::flags::Flags` trait), shows its
+  names in `Debug`, and is written as the `u32` `rippled` writes.
+  `AccountSet`'s `SetFlag` / `ClearFlag` values are the `AccountSetFlag`
+  enum. *Update:* `Payment::TF_PARTIAL_PAYMENT` →
+  `PaymentFlags::PARTIAL_PAYMENT` (`u32::from(…)` where a number is needed);
+  `AccountSet::ASF_DEFAULT_RIPPLE` → `AccountSetFlag::DefaultRipple`;
+  0.7's `AccountRoot::LSF_DEFAULT_RIPPLE` / `ALL_FLAGS` / `has_flag` →
+  `AccountRootFlags::DEFAULT_RIPPLE` / `ALL` / `entry.flags.contains(…)`;
+  the module constants `TF_FULLY_CANONICAL_SIG` / `TF_INNER_BATCH_TXN` →
+  `UniversalFlags::…`.
 - **One way to build a transaction: the typed models.** The 28 hand-written
   builders (`transaction::builders`, re-exported as `xrpl_sdk::transactions`,
   with the `Transaction` trait and `TxCommon`) are removed, and so are the

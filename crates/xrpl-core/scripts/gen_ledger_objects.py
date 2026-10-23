@@ -87,12 +87,13 @@ used = sorted({rust_ty(f["name"]).replace("Vec<", "").rstrip(">") for n in names
 crate_types = [t for t in used if t[0].isupper() and t != "Value" and t != "String"]
 out = ["// @generated from rippled 3.4.1's server_definitions (LEDGER_ENTRY_FORMATS) by",
        "// crates/xrpl-core/scripts/gen_ledger_objects.py: one struct per ledger entry type, its fields as",
-       "// rippled lists them, and its ledger entry flags (LEDGER_ENTRY_FLAGS) as LSF_ constants.",
+       "// rippled lists them, and each type's ledger entry flags (LEDGER_ENTRY_FLAGS) as a flags type.",
        "// Regenerate: python3 gen_ledger_objects.py <server_definitions.json> <this file>",
        "// Required fields are plain; optional and default ones (omitted from JSON at their default) are",
        "// Option. UInt64, Blob and Number stay the strings rippled writes; objects and arrays stay JSON.",
        "", "#![allow(clippy::upper_case_acronyms)]", "",
        "use crate::types::{" + ", ".join(crate_types) + "};",
+       "use crate::flags::flags_type;",
        "use serde::{Deserialize, Serialize};", "use serde_json::Value;", ""]
 for n in names:
     fields = [f for f in fmts[n] if f["name"] not in ("LedgerEntryType",)]
@@ -100,6 +101,17 @@ for n in names:
     for f in [{"name": c, "optionality": o} for c, o in [("Flags", 0), ("Sponsor", 1)]] + fields:
         if f["name"] in seen or f["name"] == "LedgerIndex": continue
         seen.add(f["name"]); fl.append(f)
+    flags = r.get("LEDGER_ENTRY_FLAGS", {}).get(FLAG_TABLE.get(n, n), {})
+    if flags:
+        out.append("flags_type!(")
+        out.append(f"    /// The flags of a [`{n}`] entry (`Flags`).")
+        out.append(f"    {n}Flags {{")
+        for flag, value in sorted(flags.items(), key=lambda kv: kv[1]):
+            out.append(f"        /// `{flag}`: {FLAG_DOCS[flag]}")
+            out.append(f"        {const_name(flag)[4:]} = 0x{value:08X},")
+        out.append("    }")
+        out.append(");")
+        out.append("")
     out.append(f"/// `{n}` ledger entry.")
     out.append("#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]")
     out.append("#[non_exhaustive]")
@@ -109,6 +121,8 @@ for n in names:
     out.append("    pub index: Option<Hash256>,")
     for f in fl:
         t = rust_ty(f["name"]); req = f["optionality"] == 0
+        if f["name"] == "Flags" and flags:
+            t = f"{n}Flags"
         out.append("    " + doc(f["name"], ftype.get(f["name"]), req))
         if req:
             out.append(f"    #[serde(rename = \"{f['name']}\")]")
@@ -118,23 +132,6 @@ for n in names:
             out.append(f"    pub {snake(f['name'])}: Option<{t}>,")
     out.append("}")
     out.append("")
-    flags = r.get("LEDGER_ENTRY_FLAGS", {}).get(FLAG_TABLE.get(n, n), {})
-    if flags:
-        out.append(f"impl {n} {{")
-        for flag, value in sorted(flags.items(), key=lambda kv: kv[1]):
-            out.append(f"    /// `{flag}`: {FLAG_DOCS[flag]}")
-            out.append(f"    pub const {const_name(flag)}: u32 = 0x{value:08X};")
-        out.append("    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it")
-        out.append("    /// is one this version does not know.")
-        out.append(f"    pub const ALL_FLAGS: u32 = 0x{sum(flags.values()):08X};")
-        out.append("")
-        out.append("    /// Whether `flag` (one of the `LSF_` constants above) is set.")
-        out.append("    #[must_use]")
-        out.append("    pub fn has_flag(&self, flag: u32) -> bool {")
-        out.append("        self.flags & flag == flag")
-        out.append("    }")
-        out.append("}")
-        out.append("")
 out.append("/// Every ledger entry type rippled 3.4.1 defines, by `LedgerEntryType`.")
 out.append("pub const NAMES: &[&str] = &[" + ", ".join(f'"{n}"' for n in names) + "];")
 out.append("")
