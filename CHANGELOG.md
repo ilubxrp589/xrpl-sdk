@@ -74,6 +74,11 @@ may break the API, and says so under "Changed (breaking)").
   page's ledger; `BlockingClient::pages` is the same as an iterator.
   `request_all` keeps its 50-page limit, and its error now points to
   `pages`.
+- **Ledger entry flags by name.** Each typed ledger entry with flags has
+  its `rippled` 3.4.1 flags as constants (`AccountRoot::LSF_DEFAULT_RIPPLE`,
+  `RippleState::LSF_LOW_FREEZE`, `Offer::LSF_SELL`, … 51 in all, from
+  `server_definitions`' `LEDGER_ENTRY_FLAGS`), `ALL_FLAGS`, and `has_flag`.
+  Every flag on the mainnet entries in the test sample is a named one.
 - **Standard traits.** `XrplHttpClient` is `Clone` (clones share one
   connection pool). The HTTP, WebSocket (native and wasm) and blocking
   clients are `Debug`, showing the server's host only, never a URL that may

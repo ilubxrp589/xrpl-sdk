@@ -1,6 +1,7 @@
 // @generated from rippled 3.4.1's server_definitions (LEDGER_ENTRY_FORMATS) by
 // crates/xrpl-core/scripts/gen_ledger_objects.py: one struct per ledger entry type, its fields as
-// rippled lists them. Regenerate: python3 gen_ledger_objects.py <server_definitions.json> <this file>
+// rippled lists them, and its ledger entry flags (LEDGER_ENTRY_FLAGS) as LSF_ constants.
+// Regenerate: python3 gen_ledger_objects.py <server_definitions.json> <this file>
 // Required fields are plain; optional and default ones (omitted from JSON at their default) are
 // Option. UInt64, Blob and Number stay the strings rippled writes; objects and arrays stay JSON.
 
@@ -222,6 +223,48 @@ pub struct AccountRoot {
     pub loan_broker_id: Option<Hash256>,
 }
 
+impl AccountRoot {
+    /// `lsfPasswordSpent`: The account has used its one free regular-key change (a SetRegularKey signed with the master key costs no fee until then).
+    pub const LSF_PASSWORD_SPENT: u32 = 0x00010000;
+    /// `lsfRequireDestTag`: Payments to the account must carry a DestinationTag (`asfRequireDest`).
+    pub const LSF_REQUIRE_DEST_TAG: u32 = 0x00020000;
+    /// `lsfRequireAuth`: The account must authorize each trust line that holds its tokens (`asfRequireAuth`).
+    pub const LSF_REQUIRE_AUTH: u32 = 0x00040000;
+    /// `lsfDisallowXRP`: The account asks not to be sent XRP (`asfDisallowXRP`; advisory, not enforced).
+    pub const LSF_DISALLOW_XRP: u32 = 0x00080000;
+    /// `lsfDisableMaster`: The master key cannot sign for the account (`asfDisableMaster`).
+    pub const LSF_DISABLE_MASTER: u32 = 0x00100000;
+    /// `lsfNoFreeze`: The account has given up freezing its tokens, for good (`asfNoFreeze`).
+    pub const LSF_NO_FREEZE: u32 = 0x00200000;
+    /// `lsfGlobalFreeze`: All tokens the account issues are frozen (`asfGlobalFreeze`).
+    pub const LSF_GLOBAL_FREEZE: u32 = 0x00400000;
+    /// `lsfDefaultRipple`: New trust lines to the account allow rippling by default (`asfDefaultRipple`).
+    pub const LSF_DEFAULT_RIPPLE: u32 = 0x00800000;
+    /// `lsfDepositAuth`: Only preauthorized accounts may send the account funds (`asfDepositAuth`).
+    pub const LSF_DEPOSIT_AUTH: u32 = 0x01000000;
+    /// `lsfDisallowIncomingNFTokenOffer`: Others may not make NFT offers to the account (`asfDisallowIncomingNFTokenOffer`).
+    pub const LSF_DISALLOW_INCOMING_NFTOKEN_OFFER: u32 = 0x04000000;
+    /// `lsfDisallowIncomingCheck`: Others may not create checks to the account (`asfDisallowIncomingCheck`).
+    pub const LSF_DISALLOW_INCOMING_CHECK: u32 = 0x08000000;
+    /// `lsfDisallowIncomingPayChan`: Others may not open payment channels to the account (`asfDisallowIncomingPayChan`).
+    pub const LSF_DISALLOW_INCOMING_PAY_CHAN: u32 = 0x10000000;
+    /// `lsfDisallowIncomingTrustline`: Others may not open trust lines to the account (`asfDisallowIncomingTrustline`).
+    pub const LSF_DISALLOW_INCOMING_TRUSTLINE: u32 = 0x20000000;
+    /// `lsfAllowTrustLineLocking`: The account's tokens may be locked in escrow (`asfAllowTrustLineLocking`).
+    pub const LSF_ALLOW_TRUST_LINE_LOCKING: u32 = 0x40000000;
+    /// `lsfAllowTrustLineClawback`: The account may claw back the tokens it issues (`asfAllowTrustLineClawback`).
+    pub const LSF_ALLOW_TRUST_LINE_CLAWBACK: u32 = 0x80000000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0xFDFF0000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
+}
+
 /// `Amendments` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Amendments {
@@ -417,6 +460,20 @@ pub struct Credential {
     /// The ledger of the last transaction that changed this entry (`PreviousTxnLgrSeq`: a number). Required.
     #[serde(rename = "PreviousTxnLgrSeq")]
     pub previous_txn_lgr_seq: u32,
+}
+
+impl Credential {
+    /// `lsfAccepted`: The subject has accepted the credential.
+    pub const LSF_ACCEPTED: u32 = 0x00010000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00010000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `DID` ledger entry.
@@ -633,6 +690,22 @@ pub struct DirectoryNode {
     /// A permissioned domain's ID (`DomainID`: 256 bits, hex). Optional.
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
+}
+
+impl DirectoryNode {
+    /// `lsfNFTokenBuyOffers`: The directory lists buy offers for an NFT.
+    pub const LSF_NFTOKEN_BUY_OFFERS: u32 = 0x00000001;
+    /// `lsfNFTokenSellOffers`: The directory lists sell offers for an NFT.
+    pub const LSF_NFTOKEN_SELL_OFFERS: u32 = 0x00000002;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00000003;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `Escrow` ledger entry.
@@ -981,6 +1054,24 @@ pub struct Loan {
     pub loan_scale: Option<i32>,
 }
 
+impl Loan {
+    /// `lsfLoanDefault`: The loan has defaulted.
+    pub const LSF_LOAN_DEFAULT: u32 = 0x00010000;
+    /// `lsfLoanImpaired`: The loan is impaired.
+    pub const LSF_LOAN_IMPAIRED: u32 = 0x00020000;
+    /// `lsfLoanOverpayment`: The loan accepts overpayments.
+    pub const LSF_LOAN_OVERPAYMENT: u32 = 0x00040000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00070000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
+}
+
 /// `LoanBroker` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LoanBroker {
@@ -1151,6 +1242,24 @@ pub struct MPToken {
     pub holder_encryption_key: Option<String>,
 }
 
+impl MPToken {
+    /// `lsfMPTLocked`: Locked: the tokens cannot move.
+    pub const LSF_MPT_LOCKED: u32 = 0x00000001;
+    /// `lsfMPTAuthorized`: The issuer has authorized the holder.
+    pub const LSF_MPT_AUTHORIZED: u32 = 0x00000002;
+    /// `lsfMPTAMM`: The holder is an AMM.
+    pub const LSF_MPTAMM: u32 = 0x00000004;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00000007;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
+}
+
 /// `MPTokenIssuance` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MPTokenIssuance {
@@ -1256,6 +1365,34 @@ pub struct MPTokenIssuance {
     pub confidential_outstanding_amount: Option<String>,
 }
 
+impl MPTokenIssuance {
+    /// `lsfMPTLocked`: Locked: the tokens cannot move.
+    pub const LSF_MPT_LOCKED: u32 = 0x00000001;
+    /// `lsfMPTCanLock`: The issuer may lock the tokens, for one holder or all.
+    pub const LSF_MPT_CAN_LOCK: u32 = 0x00000002;
+    /// `lsfMPTRequireAuth`: Holders must be authorized by the issuer.
+    pub const LSF_MPT_REQUIRE_AUTH: u32 = 0x00000004;
+    /// `lsfMPTCanEscrow`: The tokens may be put in escrow.
+    pub const LSF_MPT_CAN_ESCROW: u32 = 0x00000008;
+    /// `lsfMPTCanTrade`: The tokens may be traded on the DEX.
+    pub const LSF_MPT_CAN_TRADE: u32 = 0x00000010;
+    /// `lsfMPTCanTransfer`: The tokens may be sent between holders, not only to and from the issuer.
+    pub const LSF_MPT_CAN_TRANSFER: u32 = 0x00000020;
+    /// `lsfMPTCanClawback`: The issuer may claw the tokens back.
+    pub const LSF_MPT_CAN_CLAWBACK: u32 = 0x00000040;
+    /// `lsfMPTCanHoldConfidentialBalance`: Holders may keep confidential balances of the token.
+    pub const LSF_MPT_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000080;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x000000FF;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
+}
+
 /// `NFTokenOffer` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NFTokenOffer {
@@ -1303,6 +1440,20 @@ pub struct NFTokenOffer {
     /// The ledger of the last transaction that changed this entry (`PreviousTxnLgrSeq`: a number). Required.
     #[serde(rename = "PreviousTxnLgrSeq")]
     pub previous_txn_lgr_seq: u32,
+}
+
+impl NFTokenOffer {
+    /// `lsfSellNFToken`: The offer sells the NFT (otherwise it is a buy offer).
+    pub const LSF_SELL_NFTOKEN: u32 = 0x00000001;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00000001;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `NFTokenPage` ledger entry.
@@ -1447,6 +1598,24 @@ pub struct Offer {
         skip_serializing_if = "Option::is_none"
     )]
     pub additional_books: Option<Vec<Value>>,
+}
+
+impl Offer {
+    /// `lsfPassive`: A passive offer: it does not consume offers that match it exactly.
+    pub const LSF_PASSIVE: u32 = 0x00010000;
+    /// `lsfSell`: A sell offer: it exchanges all of TakerGets, even for more than TakerPays.
+    pub const LSF_SELL: u32 = 0x00020000;
+    /// `lsfHybrid`: A hybrid offer: it trades in a permissioned domain's book and the open one.
+    pub const LSF_HYBRID: u32 = 0x00040000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00070000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `Oracle` ledger entry.
@@ -1681,6 +1850,40 @@ pub struct RippleState {
     pub low_sponsor: Option<AccountId>,
 }
 
+impl RippleState {
+    /// `lsfLowReserve`: The trust line counts toward the low account's owner reserve.
+    pub const LSF_LOW_RESERVE: u32 = 0x00010000;
+    /// `lsfHighReserve`: The trust line counts toward the high account's owner reserve.
+    pub const LSF_HIGH_RESERVE: u32 = 0x00020000;
+    /// `lsfLowAuth`: The low account has authorized the high account to hold its tokens.
+    pub const LSF_LOW_AUTH: u32 = 0x00040000;
+    /// `lsfHighAuth`: The high account has authorized the low account to hold its tokens.
+    pub const LSF_HIGH_AUTH: u32 = 0x00080000;
+    /// `lsfLowNoRipple`: The low account has disabled rippling through this line.
+    pub const LSF_LOW_NO_RIPPLE: u32 = 0x00100000;
+    /// `lsfHighNoRipple`: The high account has disabled rippling through this line.
+    pub const LSF_HIGH_NO_RIPPLE: u32 = 0x00200000;
+    /// `lsfLowFreeze`: The low account has frozen the line.
+    pub const LSF_LOW_FREEZE: u32 = 0x00400000;
+    /// `lsfHighFreeze`: The high account has frozen the line.
+    pub const LSF_HIGH_FREEZE: u32 = 0x00800000;
+    /// `lsfAMMNode`: The trust line belongs to an AMM.
+    pub const LSF_AMM_NODE: u32 = 0x01000000;
+    /// `lsfLowDeepFreeze`: The low account has deep-frozen the line.
+    pub const LSF_LOW_DEEP_FREEZE: u32 = 0x02000000;
+    /// `lsfHighDeepFreeze`: The high account has deep-frozen the line.
+    pub const LSF_HIGH_DEEP_FREEZE: u32 = 0x04000000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x07FF0000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
+}
+
 /// `SignerList` ledger entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SignerList {
@@ -1714,6 +1917,20 @@ pub struct SignerList {
     /// The ledger of the last transaction that changed this entry (`PreviousTxnLgrSeq`: a number). Required.
     #[serde(rename = "PreviousTxnLgrSeq")]
     pub previous_txn_lgr_seq: u32,
+}
+
+impl SignerList {
+    /// `lsfOneOwnerCount`: The signer list counts as one entry toward the owner reserve.
+    pub const LSF_ONE_OWNER_COUNT: u32 = 0x00010000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00010000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `Sponsorship` ledger entry.
@@ -1759,6 +1976,22 @@ pub struct Sponsorship {
     /// `SponseeNode`: a 64-bit number as rippled writes it (hex; base 10 for MPT amounts). Required.
     #[serde(rename = "SponseeNode")]
     pub sponsee_node: String,
+}
+
+impl Sponsorship {
+    /// `lsfSponsorshipRequireSignForFee`: The sponsor must sign each transaction whose fee it pays.
+    pub const LSF_SPONSORSHIP_REQUIRE_SIGN_FOR_FEE: u32 = 0x00010000;
+    /// `lsfSponsorshipRequireSignForReserve`: The sponsor must sign each transaction whose reserve it covers.
+    pub const LSF_SPONSORSHIP_REQUIRE_SIGN_FOR_RESERVE: u32 = 0x00020000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00030000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `Ticket` ledger entry.
@@ -1883,6 +2116,20 @@ pub struct Vault {
         skip_serializing_if = "Option::is_none"
     )]
     pub redemption_date: Option<u32>,
+}
+
+impl Vault {
+    /// `lsfVaultPrivate`: A private vault: only authorized accounts may deposit.
+    pub const LSF_VAULT_PRIVATE: u32 = 0x00010000;
+    /// Every flag `rippled` 3.4.1 defines for this entry: a bit outside it
+    /// is one this version does not know.
+    pub const ALL_FLAGS: u32 = 0x00010000;
+
+    /// Whether `flag` (one of the `LSF_` constants above) is set.
+    #[must_use]
+    pub fn has_flag(&self, flag: u32) -> bool {
+        self.flags & flag == flag
+    }
 }
 
 /// `XChainOwnedClaimID` ledger entry.

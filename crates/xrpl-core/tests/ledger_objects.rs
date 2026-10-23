@@ -75,3 +75,34 @@ fn an_entry_with_an_unknown_field_is_unparsed_not_other() {
     assert_eq!(lenient.entry_type(), v["LedgerEntryType"].as_str().unwrap());
     assert_eq!(lenient.to_value().unwrap(), v);
 }
+
+/// Every flag set on a mainnet entry in the sample is one of the `LSF_`
+/// constants of its type, and `has_flag` reads it.
+#[test]
+fn mainnet_flags_are_named() {
+    use xrpl_core::types::ledger_object::{AccountRoot, Offer, RippleState};
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/mainnet_ledger_objects.jsonl"
+    );
+    let mut checked = 0;
+    for line in std::fs::read_to_string(path).unwrap().lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        let (flags, all) = match LedgerObject::from_value(v).unwrap() {
+            LedgerObject::AccountRoot(a) => (a.flags, AccountRoot::ALL_FLAGS),
+            LedgerObject::RippleState(r) => {
+                assert_eq!(
+                    r.has_flag(RippleState::LSF_LOW_RESERVE),
+                    r.flags & 0x0001_0000 != 0
+                );
+                (r.flags, RippleState::ALL_FLAGS)
+            }
+            LedgerObject::Offer(o) => (o.flags, Offer::ALL_FLAGS),
+            _ => continue,
+        };
+        assert_eq!(flags & !all, 0, "unknown flag bits {:#010X}", flags & !all);
+        checked += 1;
+    }
+    assert!(checked > 3, "{checked}");
+    assert_eq!(AccountRoot::LSF_DEFAULT_RIPPLE, 0x0080_0000);
+}
