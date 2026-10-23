@@ -59,7 +59,9 @@ pub enum WsEvent {
     /// [`WsEvent::Reconnected`] are not seen.
     Disconnected,
     /// The connection was re-established and every subscription asked for
-    /// again (a refused one is a [`WsEvent::ResubscribeFailed`] first).
+    /// again (a refused one is a [`WsEvent::ResubscribeFailed`] first). A
+    /// restored stream's first events can arrive just before this event, as
+    /// the server may send them as soon as it has taken the subscription.
     Reconnected,
     /// After a reconnect, the server refused to restore this subscription.
     ResubscribeFailed {

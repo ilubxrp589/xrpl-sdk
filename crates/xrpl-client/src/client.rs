@@ -950,6 +950,42 @@ pub trait Client {
         Ok(amounts)
     }
 
+    /// A ledger with its transactions, checked against its hash: the header
+    /// hashes to the ledger hash the server names, and the transactions
+    /// rebuild the header's transaction tree, so they are exactly that
+    /// ledger's (see [`xrpl_core::ledger`]). Compare the returned `hash`
+    /// with one from a source you trust (another server, or trusted
+    /// validators) to know the ledger is the network's.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let ledger = client.verified_ledger(&LedgerIndex::Validated).await?;
+    /// println!("ledger {} ({}): {} transactions", ledger.header.ledger_index, ledger.hash, ledger.transactions.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Core`] with a `ValidationError` when the answer does
+    /// not check out (a transaction missing, added or changed, or a header
+    /// that does not hash to the named ledger hash), and a [`ClientError`]
+    /// when the request fails.
+    async fn verified_ledger(
+        &self,
+        ledger: &LedgerIndex,
+    ) -> Result<xrpl_core::ledger::VerifiedLedger, ClientError> {
+        let result = self
+            .raw_request(
+                "ledger",
+                json!({"ledger_index": ledger, "transactions": true, "expand": true, "binary": true}),
+            )
+            .await?;
+        Ok(xrpl_core::ledger::verify_ledger_response(&result)?)
+    }
+
     /// All trust lines of an account, following the marker.
     async fn account_lines_all(
         &self,

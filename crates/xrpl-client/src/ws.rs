@@ -706,14 +706,18 @@ mod tests {
         assert_eq!(host_of("wss://s1.ripple.com/"), "s1.ripple.com");
     }
 
-    /// A local server: answers `subscribe` and `ping`, then sends `events`.
-    async fn server(events: Vec<Value>) -> (String, tokio::task::JoinHandle<()>) {
+    /// A local server: answers every request, and after the `subscribes`-th
+    /// `subscribe` sends `events`.
+    async fn server_after(
+        subscribes: usize,
+        events: Vec<Value>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("ws://{}", listener.local_addr().unwrap());
         let handle = tokio::spawn(async move {
             let (tcp, _) = listener.accept().await.unwrap();
             let mut ws = tokio_tungstenite::accept_async(tcp).await.unwrap();
-            let mut sent = false;
+            let mut seen = 0;
             while let Some(Ok(message)) = ws.next().await {
                 let Message::Text(text) = message else {
                     if matches!(message, Message::Close(_)) {
@@ -726,8 +730,10 @@ mod tests {
                 ws.send(Message::Text(reply.to_string().into()))
                     .await
                     .unwrap();
-                if request["command"] == "subscribe" && !sent {
-                    sent = true;
+                if request["command"] == "subscribe" {
+                    seen += 1;
+                }
+                if request["command"] == "subscribe" && seen == subscribes {
                     for event in &events {
                         ws.send(Message::Text(event.to_string().into()))
                             .await
@@ -737,6 +743,11 @@ mod tests {
             }
         });
         (url, handle)
+    }
+
+    /// A local server that sends `events` after the first `subscribe`.
+    async fn server(events: Vec<Value>) -> (String, tokio::task::JoinHandle<()>) {
+        server_after(1, events).await
     }
 
     async fn next(s: &mut Subscription) -> WsEvent {
@@ -763,7 +774,9 @@ mod tests {
         let c = "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1";
         let ledger = json!({"type": "ledgerClosed", "ledger_index": 6, "ledger_hash": "AB",
             "ledger_time": 1, "fee_base": 10, "reserve_base": 1, "reserve_inc": 1, "txn_count": 0});
-        let (url, _server) = server(vec![payment(b, c), ledger, payment(a, c)]).await;
+        // The events come after both subscriptions exist: one made after
+        // they were sent would not hear them.
+        let (url, _server) = server_after(2, vec![payment(b, c), ledger, payment(a, c)]).await;
         let ws = XrplWsClient::connect(&url).await.unwrap();
         let mut all = ws.events();
         let mut account = ws.subscribe_account(a).await.unwrap();
@@ -876,9 +889,17 @@ mod tests {
         let ws = XrplWsClient::connect(&url).await.unwrap();
         let mut ledgers = ws.subscribe_ledger().await.unwrap();
         assert!(matches!(next(&mut ledgers).await, WsEvent::Disconnected));
-        assert!(matches!(next(&mut ledgers).await, WsEvent::Reconnected));
+        // Then the restored stream's ledger and the Reconnected marker, in
+        // either order: the server sends the ledger as soon as it has taken
+        // the subscription, while the client is still announcing it.
+        let (a, b) = (next(&mut ledgers).await, next(&mut ledgers).await);
         assert!(resubscribed.load(Ordering::Relaxed));
-        assert!(matches!(next(&mut ledgers).await, WsEvent::Ledger(l) if l.ledger_index == 7));
+        let reconnected = |e: &WsEvent| matches!(e, WsEvent::Reconnected);
+        let ledger = |e: &WsEvent| matches!(e, WsEvent::Ledger(l) if l.ledger_index == 7);
+        assert!(
+            (reconnected(&a) && ledger(&b)) || (ledger(&a) && reconnected(&b)),
+            "{a:?} then {b:?}"
+        );
     }
 
     /// A receiver that falls behind is told how much it missed, and keeps going.

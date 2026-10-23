@@ -11,6 +11,10 @@ may break the API, and says so under "Changed (breaking)").
 - `KeyType::Ed25519`'s documentation called it `rippled`'s default for new
   keys; `wallet_propose` defaults to secp256k1. (`Wallet::generate` and
   xrpl.js default to Ed25519.)
+- `WsEvent::Reconnected`'s documentation now says a restored stream's first
+  events can arrive just before it. Two WebSocket tests assumed one order of
+  events that only Linux happened to give; they failed on macOS and Windows,
+  now in CI.
 - docs/PARITY.md said the 6 recorded batches with `BatchSigners` were on
   Testnet; they are on Devnet.
 - **`BlockingClient` has every `Client` method**, as its documentation
@@ -74,6 +78,14 @@ may break the API, and says so under "Changed (breaking)").
   page's ledger; `BlockingClient::pages` is the same as an iterator.
   `request_all` keeps its 50-page limit, and its error now points to
   `pages`.
+- **Check a ledger against its hash.** `xrpl_core::ledger`: `LedgerHeader`
+  (from bytes or `rippled`'s JSON) and its `hash`, `transaction_tree_hash`
+  and `state_tree_hash` (the SHAMap roots), and `verify_ledger_response`.
+  `Client::verified_ledger(ledger)` fetches a ledger with its transactions
+  and checks that the header hashes to the ledger hash and the transactions
+  rebuild the header's transaction tree, so they are exactly that ledger's.
+  Checked on mainnet ledger 107852951 (34 transactions): a transaction
+  removed, a metadata byte changed or a wrong ledger hash is caught.
 - **Ledger entry flags by name.** Each typed ledger entry with flags has
   its `rippled` 3.4.1 flags as constants (`AccountRoot::LSF_DEFAULT_RIPPLE`,
   `RippleState::LSF_LOW_FREEZE`, `Offer::LSF_SELL`, … 51 in all, from

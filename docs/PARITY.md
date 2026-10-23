@@ -197,6 +197,13 @@ refused without the sequence).
   shows.
 - **NFT and MPT IDs.** `NFTokenID` matches `rippled`'s on a mainnet mint and
   on Testnet; `MPTokenIssuanceID` on Testnet.
+- **Ledger hashes.** Mainnet ledger 107852951's header, read from
+  `rippled`'s JSON, hashes to its `ledger_hash` and serializes to the
+  `ledger_data` its binary answer holds; its 34 transactions and their
+  metadata rebuild the header's `transaction_hash` (the transaction SHAMap),
+  in any order. The state tree uses the same tree with `rippled`'s state
+  leaf; no whole ledger state is in the tests (mainnet's has tens of
+  millions of entries).
 - **Transaction cost.** `transaction::cost` follows `rippled` 3.4.1's
   `calculateBaseFee` for every type that overrides it (owner reserve for
   `AccountDelete`, `AMMCreate` and `LedgerStateFix`; 32 + *n*/16 extra base

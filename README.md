@@ -211,6 +211,8 @@ assert_eq!(json["TransactionType"], "Payment");
   type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, `bridge`,
   `book_directory`, …), each matching the index rippled computes
 - Payment channel claims: sign and verify
+- Ledger hashes: a header's hash and the transaction and state tree roots (SHAMap), to check that
+  a ledger's transactions are exactly the ones its hash covers (`Client::verified_ledger`)
 - Key backups from other wallets: BIP-39 recovery phrases with BIP-32 paths (`m/44'/144'/0'/0/0`, as
   Ledger and xrpl.js), Xaman's secret numbers (XLS-12) and RFC 1751 keys (`wallet_propose`'s
   `master_key`), checked against the BIP-39 and BIP-32 reference vectors, xrpl.js and rippled

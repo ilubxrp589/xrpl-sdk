@@ -183,6 +183,8 @@ pub mod crypto;
 pub mod error;
 #[cfg(feature = "std")]
 pub mod hashes;
+#[cfg(feature = "std")]
+pub mod ledger;
 mod number_text;
 pub mod transaction;
 pub mod types;

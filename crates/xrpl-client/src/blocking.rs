@@ -214,6 +214,15 @@ impl<C: Client> BlockingClient<C> {
         self.call(|c| c.autofill_batch(tx, outer, open_ledger_fee, outer_signers))
     }
 
+    /// [`Client::verified_ledger`]: a ledger with its transactions, checked
+    /// against its hash.
+    pub fn verified_ledger(
+        &self,
+        ledger: &LedgerIndex,
+    ) -> Result<xrpl_core::ledger::VerifiedLedger, ClientError> {
+        self.call(|c| c.verified_ledger(ledger))
+    }
+
     /// [`Client::validated_ledger_index`].
     pub fn validated_ledger_index(&self) -> Result<u32, ClientError> {
         self.call(|c| c.validated_ledger_index())
@@ -452,7 +461,8 @@ mod tests {
     /// kept: each async method of the trait has a blocking one here.
     #[test]
     fn every_client_method_has_a_blocking_one() {
-        let client = include_str!("client.rs");
+        // A Windows checkout may have CRLF line ends.
+        let client = include_str!("client.rs").replace("\r\n", "\n");
         let start = client.find("pub trait Client {").unwrap();
         let end = start + client[start..].find("\n}\n").unwrap();
         let blocking = include_str!("blocking.rs");
