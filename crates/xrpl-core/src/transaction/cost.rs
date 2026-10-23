@@ -26,6 +26,17 @@ use crate::CoreError;
 use serde_json::Value;
 
 /// A transaction's base cost: so many base fees and so many owner reserves.
+///
+/// ```
+/// use xrpl_core::transaction::cost::{transaction_cost, TransactionCost};
+///
+/// let delete = serde_json::json!({"TransactionType": "AccountDelete", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"});
+/// let cost = transaction_cost(&delete, 0)?;
+/// assert_eq!(cost, TransactionCost { base_fees: 0, owner_reserves: 1 });
+/// // At 10 drops per base fee and 200,000 per owner reserve:
+/// assert_eq!(cost.drops(10, 200_000), 200_000);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct TransactionCost {
     /// Base fees (`FeeSettings.BaseFeeDrops`; the reference transaction costs one).

@@ -12,12 +12,30 @@ use crate::CoreError;
 /// An offer's quality (TakerPays per TakerGets) when both sides are XRP
 /// amounts in drops, as an approximation; `None` when `taker_gets_drops`
 /// is 0.
+///
+/// ```
+/// use xrpl_core::utils::dex::offer_quality_xrp;
+///
+/// assert_eq!(offer_quality_xrp(1_500_000, 1_000_000), Some(1.5));
+/// assert_eq!(offer_quality_xrp(5, 0), None);
+/// ```
 pub fn offer_quality_xrp(taker_pays_drops: u64, taker_gets_drops: u64) -> Option<f64> {
     (taker_gets_drops != 0).then(|| taker_pays_drops as f64 / taker_gets_drops as f64)
 }
 
 /// An amount as an approximate `f64`, for display: XRP (a string of drops)
 /// in XRP, a token in its value. Not for amounts you sign.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::utils::dex::amount_to_f64;
+///
+/// assert_eq!(amount_to_f64(&json!("1500000"))?, 1.5); // drops, shown in XRP
+/// let usd = json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "0.25"});
+/// assert_eq!(amount_to_f64(&usd)?, 0.25);
+/// assert!(amount_to_f64(&json!(5)).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -48,12 +66,25 @@ pub fn amount_to_f64(amount: &serde_json::Value) -> Result<f64, CoreError> {
 }
 
 /// The midpoint of the best bid and ask (approximate).
+///
+/// ```
+/// use xrpl_core::utils::dex::midpoint_price;
+///
+/// assert_eq!(midpoint_price(0.5, 0.75), 0.625);
+/// ```
 pub fn midpoint_price(best_bid: f64, best_ask: f64) -> f64 {
     (best_bid + best_ask) / 2.0
 }
 
 /// The spread as a percentage of the best bid (approximate); `None` when
 /// the bid is not positive.
+///
+/// ```
+/// use xrpl_core::utils::dex::spread_percent;
+///
+/// assert_eq!(spread_percent(0.5, 0.75), Some(50.0));
+/// assert_eq!(spread_percent(0.0, 0.75), None);
+/// ```
 pub fn spread_percent(best_bid: f64, best_ask: f64) -> Option<f64> {
     (best_bid > 0.0).then(|| ((best_ask - best_bid) / best_bid) * 100.0)
 }
@@ -80,6 +111,21 @@ fn amount_decimal(amount: &serde_json::Value) -> Result<Decimal, CoreError> {
 /// `max_quality` is in the same units as their `quality` (TakerPays per
 /// TakerGets, drops for an XRP side). An offer counts what its owner can
 /// fund (`taker_gets_funded`, when the server sent it), not what it names.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::utils::dex::liquidity_at_price;
+///
+/// let usd = |value: &str| json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": value});
+/// // `book_offers` entries giving USD for XRP; quality is drops per USD.
+/// let offers = [
+///     json!({"quality": "500000", "taker_gets": usd("0.1")}),
+///     json!({"quality": "500000", "taker_gets": usd("10"), "taker_gets_funded": usd("0.2")}),
+///     json!({"quality": "600000", "taker_gets": usd("99")}),
+/// ];
+/// assert_eq!(liquidity_at_price(&offers, "550000")?, "0.3");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

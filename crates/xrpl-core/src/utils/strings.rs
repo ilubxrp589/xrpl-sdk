@@ -4,11 +4,28 @@
 use crate::CoreError;
 
 /// UTF-8 text → upper-case hex (`"example.com"` → `"6578616D706C652E636F6D"`).
+///
+/// ```
+/// use xrpl_core::utils::strings::str_to_hex;
+///
+/// // An AccountSet's Domain.
+/// assert_eq!(str_to_hex("example.com"), "6578616D706C652E636F6D");
+/// assert_eq!(str_to_hex("你好"), "E4BDA0E5A5BD");
+/// ```
 pub fn str_to_hex(text: &str) -> String {
     hex::encode_upper(text.as_bytes())
 }
 
 /// Hex → UTF-8 text. Errors on bad hex or bytes that are not UTF-8.
+///
+/// ```
+/// use xrpl_core::utils::strings::hex_to_str;
+///
+/// assert_eq!(hex_to_str("6578616D706C652E636F6D")?, "example.com");
+/// assert!(hex_to_str("FF").is_err()); // not UTF-8
+/// assert!(hex_to_str("ZZ").is_err()); // not hex
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

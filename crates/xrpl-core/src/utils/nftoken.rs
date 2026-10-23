@@ -7,17 +7,76 @@ use serde_json::{Map, Value};
 use std::collections::HashSet;
 
 /// `tfBurnable`: the issuer may burn the token.
+///
+/// ```
+/// use xrpl_core::transaction::models::NFTokenMintFlags;
+/// use xrpl_core::utils::nftoken::{parse_nftoken_id, NFT_FLAG_BURNABLE};
+///
+/// // The bit NFTokenMint's tfBurnable sets in the token's flags.
+/// assert_eq!(u32::from(NFT_FLAG_BURNABLE), u32::from(NFTokenMintFlags::BURNABLE));
+/// let token = parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?;
+/// assert_ne!(token.flags & NFT_FLAG_BURNABLE, 0);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const NFT_FLAG_BURNABLE: u16 = 0x0001;
 /// `tfOnlyXRP`: offers for the token must be in XRP.
+///
+/// ```
+/// use xrpl_core::transaction::models::NFTokenMintFlags;
+/// use xrpl_core::utils::nftoken::{parse_nftoken_id, NFT_FLAG_ONLY_XRP};
+///
+/// assert_eq!(u32::from(NFT_FLAG_ONLY_XRP), u32::from(NFTokenMintFlags::ONLY_XRP));
+/// let token = parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?;
+/// assert_ne!(token.flags & NFT_FLAG_ONLY_XRP, 0);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const NFT_FLAG_ONLY_XRP: u16 = 0x0002;
 /// `tfTrustLine` (no longer honoured by rippled).
+///
+/// ```
+/// use xrpl_core::utils::nftoken::{parse_nftoken_id, NFT_FLAG_TRUSTLINE};
+///
+/// let token = parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?;
+/// assert_eq!(token.flags & NFT_FLAG_TRUSTLINE, 0); // flags 0x000B: not set
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const NFT_FLAG_TRUSTLINE: u16 = 0x0004;
 /// `tfTransferable`: holders other than the issuer may transfer it.
+///
+/// ```
+/// use xrpl_core::transaction::models::NFTokenMintFlags;
+/// use xrpl_core::utils::nftoken::{parse_nftoken_id, NFT_FLAG_TRANSFERABLE};
+///
+/// assert_eq!(u32::from(NFT_FLAG_TRANSFERABLE), u32::from(NFTokenMintFlags::TRANSFERABLE));
+/// let token = parse_nftoken_id("00081388BE9E48FA0E6C95A3E970EB9503E3D3967E8DF95041FED82604D933AB")?;
+/// assert_eq!(token.flags, NFT_FLAG_TRANSFERABLE);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const NFT_FLAG_TRANSFERABLE: u16 = 0x0008;
 /// `tfMutable`: the issuer may change its URI (DynamicNFT).
+///
+/// ```
+/// use xrpl_core::transaction::models::NFTokenMintFlags;
+/// use xrpl_core::utils::nftoken::{parse_nftoken_id, NFT_FLAG_MUTABLE};
+///
+/// assert_eq!(u32::from(NFT_FLAG_MUTABLE), u32::from(NFTokenMintFlags::MUTABLE));
+/// let token = parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?;
+/// assert_eq!(token.flags & NFT_FLAG_MUTABLE, 0); // flags 0x000B: not set
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const NFT_FLAG_MUTABLE: u16 = 0x0010;
 
 /// The fields packed into an NFTokenID.
+///
+/// ```
+/// use xrpl_core::utils::nftoken::parse_nftoken_id;
+///
+/// let token = parse_nftoken_id("00081388be9e48fa0e6c95a3e970eb9503e3d3967e8df95041fed82604d933ab")?;
+/// assert_eq!(token.nftoken_id, "00081388BE9E48FA0E6C95A3E970EB9503E3D3967E8DF95041FED82604D933AB");
+/// assert_eq!(token.transfer_fee, 5000); // 5% of each secondary sale
+/// assert!(token.is_transferable() && !token.is_burnable());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NFTokenIdParts {
     /// The ID as given, in upper case.
@@ -36,18 +95,52 @@ pub struct NFTokenIdParts {
 
 impl NFTokenIdParts {
     /// Whether the issuer may burn it (`tfBurnable`).
+    ///
+    /// ```
+    /// use xrpl_core::utils::nftoken::parse_nftoken_id;
+    ///
+    /// assert!(parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?.is_burnable()); // flags 0x000B
+    /// assert!(!parse_nftoken_id("00081388BE9E48FA0E6C95A3E970EB9503E3D3967E8DF95041FED82604D933AB")?.is_burnable()); // flags 0x0008
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_burnable(&self) -> bool {
         self.flags & NFT_FLAG_BURNABLE != 0
     }
     /// Whether offers must be in XRP (`tfOnlyXRP`).
+    ///
+    /// ```
+    /// use xrpl_core::utils::nftoken::parse_nftoken_id;
+    ///
+    /// assert!(parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?.is_only_xrp()); // flags 0x000B
+    /// assert!(!parse_nftoken_id("00081388BE9E48FA0E6C95A3E970EB9503E3D3967E8DF95041FED82604D933AB")?.is_only_xrp()); // flags 0x0008
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_only_xrp(&self) -> bool {
         self.flags & NFT_FLAG_ONLY_XRP != 0
     }
     /// Whether holders may transfer it (`tfTransferable`).
+    ///
+    /// ```
+    /// use xrpl_core::utils::nftoken::parse_nftoken_id;
+    ///
+    /// assert!(parse_nftoken_id("00081388BE9E48FA0E6C95A3E970EB9503E3D3967E8DF95041FED82604D933AB")?.is_transferable()); // flags 0x0008
+    /// assert!(!parse_nftoken_id("000000005EC8BC31F0415E5DD4A8AAAC3718249F8F27323C2EEE87B80000001E")?.is_transferable()); // flags 0
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_transferable(&self) -> bool {
         self.flags & NFT_FLAG_TRANSFERABLE != 0
     }
     /// Whether the issuer may change its URI (`tfMutable`).
+    ///
+    /// ```
+    /// use xrpl_core::utils::nftoken::{parse_nftoken_id, NFTokenIdParts, NFT_FLAG_MUTABLE};
+    ///
+    /// let token = parse_nftoken_id("000B0539C35B55AA096BA6D87A6E6C965A6534150DC56E5E12C5D09E0000000C")?;
+    /// assert!(!token.is_mutable()); // flags 0x000B
+    /// let mutable = NFTokenIdParts { flags: token.flags | NFT_FLAG_MUTABLE, ..token };
+    /// assert!(mutable.is_mutable());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_mutable(&self) -> bool {
         self.flags & NFT_FLAG_MUTABLE != 0
     }
@@ -103,6 +196,26 @@ fn taxon_cipher(sequence: u32) -> u32 {
 /// (older servers, or metadata decoded from binary) it is worked out the way
 /// xrpl.js's `getNFTokenID` does: the token in an `NFTokenPage` after the
 /// transaction that was not in it before. `None` if no token was added.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::transaction::TransactionMetadata;
+/// use xrpl_core::utils::nftoken::get_nftoken_id;
+///
+/// let token = |id: &str| json!({"NFToken": {"NFTokenID": id}});
+/// let held = "0000000047D6BDCD766717B67A937E83CFEF22B1760537E30B759CB90644143E";
+/// let minted = "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3EE0FC28306441448";
+/// // A mainnet NFTokenMint's metadata, trimmed: the issuer's page gained a token.
+/// let meta: TransactionMetadata = serde_json::from_value(json!({
+///     "TransactionResult": "tesSUCCESS", "TransactionIndex": 0,
+///     "AffectedNodes": [{"ModifiedNode": {"LedgerEntryType": "NFTokenPage",
+///         "LedgerIndex": "47D6BDCD766717B67A937E83CFEF22B1760537E3FFFFFFFFFFFFFFFFFFFFFFFF",
+///         "PreviousFields": {"NFTokens": [token(held)]},
+///         "FinalFields": {"NFTokens": [token(held), token(minted)]}}}]
+/// }))?;
+/// assert_eq!(get_nftoken_id(&meta).as_deref(), Some(minted));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 pub fn get_nftoken_id(meta: &TransactionMetadata) -> Option<String> {
     if let Some(id) = &meta.nftoken_id {
         return Some(id.clone());

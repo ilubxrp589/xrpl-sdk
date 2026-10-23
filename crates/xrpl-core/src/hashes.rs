@@ -21,6 +21,21 @@ const PSEUDO_TRANSACTIONS: &[&str] = &["EnableAmendment", "SetFee", "UNLModify"]
 
 /// The ID of a serialized transaction: SHA-512Half("TXN\0" ‖ blob). The blob
 /// must be the signed transaction exactly as submitted.
+///
+/// ```
+/// use xrpl_core::codec::encode_transaction_json;
+/// use xrpl_core::hashes::transaction_id;
+///
+/// // An EnableAmendment pseudo-transaction: validators add it, nobody signs it.
+/// let blob = encode_transaction_json(&serde_json::json!({
+///     "TransactionType": "EnableAmendment", "Account": "rrrrrrrrrrrrrrrrrrrrrhoLvTp",
+///     "Amendment": "AE35ABDEFBDE520372B31C957020B34A7A4A9DC3115A69803A44016477C84D6E",
+///     "Fee": "0", "LedgerSequence": 84206081, "Sequence": 0, "SigningPubKey": ""
+/// }))?;
+/// assert_eq!(transaction_id(&blob).to_string(),
+///     "CA4562711E4679FE9317DD767871E90A404C7A8B84FAFD35EC2CF0231F1F6DAF");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub fn transaction_id(blob: &[u8]) -> Hash256 {
     let mut data = Vec::with_capacity(PREFIX_TRANSACTION_ID.len() + blob.len());
     data.extend_from_slice(&PREFIX_TRANSACTION_ID);
@@ -59,6 +74,17 @@ pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
 /// order and forms), not the bytes it was sent, so this does the same: a
 /// blob whose fields someone reordered on the way still has the ID the
 /// ledger will show.
+///
+/// ```
+/// use xrpl_core::hashes::hash_signed_tx_blob;
+///
+/// # let tx_blob = "120000220000000024000000016140000000000F424068400000000000000C7321030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D43574473045022100BC95504DC72DDBDAA0F5EAA973EC07E057FD9A3E7500AC3CF07454C68219985E02200B0992C47857A867F5664BB6F74E62F086A59A0C31848E0FB3819127E8EC0A1281148049717CC948789F32F267ADC2582484E3DFA6988314B5F762798A53D543A014CAF8B297CFF8F2F937E8";
+/// // `tx_blob`: a Payment `rippled` 3.4.1 signed, and the hash it gave it.
+/// assert_eq!(hash_signed_tx_blob(tx_blob)?.to_string(),
+///     "4A37F580F84306C73D3E38D9EB7C183A39154223CB173ACDD18BBB5C06BDD62C");
+/// assert!(hash_signed_tx_blob("not hex").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -147,6 +173,15 @@ pub mod keylet {
 
     /// `AccountRoot`.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // rHb9…'s AccountRoot on mainnet.
+    /// let id = keylet::account("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(id.to_string(), "2B6AC232AA4C4BE41BF49D2459FA4A0347E1B543A4C92FCEE0821C0201E2E9A8");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -157,6 +192,15 @@ pub mod keylet {
 
     /// An account's owner directory (its first page).
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // rHb9…'s owner directory on mainnet.
+    /// let root = keylet::owner_dir("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(root.to_string(), "D8120FC732737A2CF2E9968FDF3797A43B457F2A81AA06D2653171A1EA635204");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -166,6 +210,17 @@ pub mod keylet {
     }
 
     /// Page `page` of the directory whose first page is `root` (page 0 is `root`).
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The second page of rHb9…'s owner directory on mainnet.
+    /// let root = keylet::owner_dir("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(keylet::dir_page(&root, 0), root);
+    /// assert_eq!(keylet::dir_page(&root, 1).to_string(),
+    ///     "B001E91B2C4405A56F0BD0F6770A0B3230832C472667DFE9754933CA7F49A4F7");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn dir_page(root: &Hash256, page: u64) -> Hash256 {
         if page == 0 {
             return *root;
@@ -174,6 +229,16 @@ pub mod keylet {
     }
 
     /// `RippleState`: the trust line between two accounts (in either order).
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let (a, b) = ("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rB5TihdPbKgMrkFqrqUC3yLdE8hhv4BdeY");
+    /// let id = keylet::trust_line(a, b, "USD")?;
+    /// assert_eq!(id.to_string(), "C683B5BB928F025F1E860D9D69D6C554C2202DE0D45877ADB3077DA4CB9E125C");
+    /// assert_eq!(keylet::trust_line(b, a, "USD")?, id);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -193,6 +258,14 @@ pub mod keylet {
 
     /// `Offer`, by the sequence of the OfferCreate that placed it.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let id = keylet::offer("r32UufnaCGL82HubijgJGDmdE5hac7ZvLw", 137)?;
+    /// assert_eq!(id.to_string(), "03F0AED09DEEE74CEF85CD57A0429D6113507CF759C597BABB4ADB752F734CE3");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -202,6 +275,15 @@ pub mod keylet {
     }
 
     /// `Check`, by the sequence of its CheckCreate.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // A mainnet Check.
+    /// let id = keylet::check("rMzKB1K6v5cjs6A9AVYX5UpKzce184TjYw", 98748328)?;
+    /// assert_eq!(id.to_string(), "5500034F12C4319A1D93AC2684DED262F372D24F0BFF649C34BCAB8F73C3BF6B");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -213,6 +295,14 @@ pub mod keylet {
 
     /// `Escrow`, by the sequence of its EscrowCreate.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let id = keylet::escrow("rDx69ebzbowuqztksVDmZXjizTd12BVr4x", 84)?;
+    /// assert_eq!(id.to_string(), "61E8E8ED53FA2CEBE192B23897071E9A75217BF5A410E9CB5B45AAB7AECA567A");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -222,6 +312,15 @@ pub mod keylet {
     }
 
     /// `PayChannel`, by source, destination and the PaymentChannelCreate's sequence.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let (source, destination) = ("rDx69ebzbowuqztksVDmZXjizTd12BVr4x", "rLFtVprxUEfsH54eCWKsZrEQzMDsx1wqso");
+    /// let id = keylet::payment_channel(source, destination, 82)?;
+    /// assert_eq!(id.to_string(), "E35708503B3C3143FB522D749AAFCC296E8060F0FB371A9A56FAE0B1ED127366");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -240,6 +339,15 @@ pub mod keylet {
 
     /// `Ticket`, by its TicketSequence.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // A mainnet Ticket.
+    /// let id = keylet::ticket("rs2a4RFPjW6P7zLJhKUwxBMMhGxNYMEU4M", 68747193)?;
+    /// assert_eq!(id.to_string(), "2A000DC511A7ED1F5BC863AFBE6C4A93EDE052BC32318DF066B59C17AE6270F1");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -249,6 +357,15 @@ pub mod keylet {
     }
 
     /// `SignerList` (rippled only ever uses list 0).
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // A mainnet SignerList.
+    /// let id = keylet::signer_list("rLdhU5DKrpztzVPnQmtzAbHfiHR8LPYtaX")?;
+    /// assert_eq!(id.to_string(), "00008A294610EB3882BA12E9439210C8ACC800C03D0DD6A978DA78E2C5AF34F0");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -260,6 +377,15 @@ pub mod keylet {
 
     /// `DepositPreauth` of one account by an owner.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::deposit_preauth("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// assert_eq!(id.to_string(), "FC26823605E3BF58DB0AED272882ABBFC118ED09BE8C8727D81F6C4AA1016B33");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -269,6 +395,15 @@ pub mod keylet {
     }
 
     /// `NFTokenOffer`, by the sequence of its NFTokenCreateOffer.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // A mainnet NFTokenOffer: r3zyqf6…'s NFTokenCreateOffer with Sequence 102661093.
+    /// let id = keylet::nftoken_offer("r3zyqf6efQgSDBR1XfKhd92Z2xrGHvkuCF", 102661093)?;
+    /// assert_eq!(id.to_string(), "D50098E60016DC7BABD8EF75DB3F73AF3E158D0FCD4E27AE8033212BF17C99AD");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -280,6 +415,15 @@ pub mod keylet {
 
     /// The directory of buy offers for an NFToken.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // A mainnet NFT's buy-offer directory.
+    /// let id = keylet::nftoken_buy_offers("000803E88ACAA32313BB87F729EF7DA56BD13C57BE46E3C837604C0104811B77")?;
+    /// assert_eq!(id.to_string(), "4188B72989D6593D7041917D9C17864FF9F6995BDB839D7D860DB9F53ED53A10");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidHex`] if `nftoken_id` is not 32 bytes in hex.
@@ -288,6 +432,15 @@ pub mod keylet {
     }
 
     /// The directory of sell offers for an NFToken.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // A mainnet NFT's sell-offer directory.
+    /// let id = keylet::nftoken_sell_offers("0008138882D0F98C64A1A0E6D15053589771AD08B8C13D53DBC09EAF00001213")?;
+    /// assert_eq!(id.to_string(), "0DDD4641F43EF151BE3613C61030E66EEE7B109A4D1E163CBABBFC8A8CE7CD1D");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -334,6 +487,15 @@ pub mod keylet {
 
     /// `DID`.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::did("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(id.to_string(), "5D71AD4469C5444C5FBAAFCF6DAE6E625D32F74995098F4FEF3E0B0F7B36B8F9");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -343,6 +505,15 @@ pub mod keylet {
     }
 
     /// `Oracle`, by owner and OracleDocumentID.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::oracle("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1)?;
+    /// assert_eq!(id.to_string(), "08198EB44C3FEABCC015AE1C1DB979CF3B057DB25D72F0C65372873F30242C27");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -354,6 +525,15 @@ pub mod keylet {
 
     /// An MPT issuance's ID (MPTokenIssuanceID): the issuing transaction's
     /// sequence, then the issuer.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // rHb9… is account ID B5F76279…; sequence 1 is 00000001.
+    /// let id = keylet::mpt_issuance_id(1, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(id.to_string(), "00000001B5F762798A53D543A014CAF8B297CFF8F2F937E8");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -369,6 +549,15 @@ pub mod keylet {
 
     /// `MPTokenIssuance`, by MPTokenIssuanceID (48 hex digits).
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::mpt_issuance("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// assert_eq!(id.to_string(), "354FD62545655A3D64E6503D4DC4554D63F4ECB52ABCD94AE857DDD209DFDC41");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidHex`] if `mpt_issuance_id` is not 24 bytes in hex.
@@ -377,6 +566,16 @@ pub mod keylet {
     }
 
     /// `MPToken`: a holder's balance of an MPT issuance.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let mpt = "000004C463C52827307480341125DA0577DEFC38405B0E3E";
+    /// let id = keylet::mptoken(mpt, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(id.to_string(), "654428B1615D49B23D549306B3F326963C4299B3E4F523C8FBBB1956D4C5D0F9");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -391,6 +590,16 @@ pub mod keylet {
     }
 
     /// `Credential`, by subject, issuer and CredentialType (hex, as in the transaction).
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives ("4B5943" is "KYC").
+    /// let (subject, issuer) = ("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// let id = keylet::credential(subject, issuer, "4B5943")?;
+    /// assert_eq!(id.to_string(), "EAE038707C2706638B6B5BC9B4B9562691558023EE99D7B47FEE2B1EA83677B8");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -408,6 +617,15 @@ pub mod keylet {
 
     /// `Delegate`: the permissions `account` gave `authorized`.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::delegate("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// assert_eq!(id.to_string(), "0482B042D3E6F399BD2723FB6119FBAF953FB76CDF2C90EE9A7063749A27E025");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -417,6 +635,15 @@ pub mod keylet {
     }
 
     /// `PermissionedDomain`, by owner and the PermissionedDomainSet's sequence.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::permissioned_domain("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 5)?;
+    /// assert_eq!(id.to_string(), "5480A41DE4C33469BE429E3B8442DA30DE8EF8CF21C5DA7970C1CBFE589B0DD8");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -428,6 +655,14 @@ pub mod keylet {
 
     /// `Vault`, by owner and the VaultCreate's sequence.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let id = keylet::vault("rDcMtA1XpH5DGwiaqFif2cYCvgk5vxHraS", 18)?;
+    /// assert_eq!(id.to_string(), "9C3208D7F99E5644643542518859401A96C93D80CC5F757AF0DF1781046C0A6A");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -438,6 +673,14 @@ pub mod keylet {
 
     /// `LoanBroker`, by owner and the LoanBrokerSet's sequence.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let id = keylet::loan_broker("rNTrjogemt4dZD13PaqphezBWSmiApNH4K", 84)?;
+    /// assert_eq!(id.to_string(), "E799B84AC949CE2D8F27435C784F15C72E6A23ACA6841BA6D2F37A1E5DA4110F");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -447,6 +690,15 @@ pub mod keylet {
     }
 
     /// `Loan`, by its LoanBroker's ID and the loan's sequence there.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let broker = "AEB642A65066A6E6F03D312713475D958E0B320B74AD1A76B5B2EABB752E52AA";
+    /// let id = keylet::loan(broker, 1)?;
+    /// assert_eq!(id.to_string(), "E93874AB62125DF2E86FB6C724B261F8E654E0334715C4D7160C0F148CDC9B47");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -467,6 +719,22 @@ pub mod keylet {
 
     /// `Bridge`, as the ledger of `door` (one of the bridge's two doors)
     /// holds it: the door and its chain's currency.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::transaction::models::XChainBridge;
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let (a, b) = ("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// let bridge = XChainBridge::new(a, Asset::xrp(), b, Asset::xrp());
+    /// // The IDs rippled's ledger_entry gives, one for each door.
+    /// assert_eq!(keylet::bridge(&bridge, a)?.to_string(),
+    ///     "20C736B81A2632BE6A0FCE130FC3649334A041B79C6017896709F39B6059DB92");
+    /// assert_eq!(keylet::bridge(&bridge, b)?.to_string(),
+    ///     "5CE45F9906FC077A90654A76C4B60302CC2F75ACE80F8DC8BCA7482AE782EA74");
+    /// assert!(keylet::bridge(&bridge, "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1").is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -506,6 +774,19 @@ pub mod keylet {
 
     /// `XChainOwnedClaimID`: the bridge and the claim ID.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::transaction::models::XChainBridge;
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let (a, b, c) = ("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// let bridge = XChainBridge::new(a, Asset::token("USD", c)?, b, Asset::token("USD", b)?);
+    /// // The ID rippled's ledger_entry gives.
+    /// assert_eq!(keylet::xchain_owned_claim_id(&bridge, 5)?.to_string(),
+    ///     "9A2056C0B047D9BA8E00A0171AF1746B6CDCCDB028D56F3BEDF7298F752B003D");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -519,6 +800,19 @@ pub mod keylet {
     }
 
     /// `XChainOwnedCreateAccountClaimID`: the bridge and the account-create count.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::transaction::models::XChainBridge;
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let (a, b) = ("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// let bridge = XChainBridge::new(a, Asset::xrp(), b, Asset::xrp());
+    /// // The ID rippled's ledger_entry gives.
+    /// assert_eq!(keylet::xchain_owned_create_account_claim_id(&bridge, 7)?.to_string(),
+    ///     "AB149AE49054FE238765E056A93DB965828BAA245BC8B09F4491E097743A5B5A");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -535,6 +829,18 @@ pub mod keylet {
     /// `DepositPreauth` by credentials: the owner and the credentials it
     /// accepts, each `(issuer, credential type in hex)`, in any order (they
     /// are sorted and de-duplicated as rippled's set does).
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let owner = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+    /// let (b, c) = ("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// // The ID rippled's ledger_entry gives, for the credentials in either order.
+    /// let id = keylet::deposit_preauth_credentials(owner, &[(c, "AA"), (b, "4B5943")])?;
+    /// assert_eq!(id.to_string(), "3769E2AD8BC6BCD48242A1FF7DBFE667A5CD78376B9704A0E4744BD3D81DB382");
+    /// assert_eq!(keylet::deposit_preauth_credentials(owner, &[(b, "4B5943"), (c, "AA")])?, id);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -577,6 +883,15 @@ pub mod keylet {
     }
 
     /// `Sponsorship`: the sponsor and the sponsored account.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The ID rippled's ledger_entry gives.
+    /// let id = keylet::sponsorship("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// assert_eq!(id.to_string(), "2AACE00AD0C7A845AF761136F6CC1D2269652F556DC1B558D352CBE52198556F");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -637,6 +952,18 @@ pub mod keylet {
     /// The order-book directory for `quality` (a `DirectoryNode`'s
     /// `ExchangeRate`, as a number): the book base with the quality in its
     /// last eight bytes.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::types::{AccountId, Asset, Hash160};
+    ///
+    /// // A mainnet book directory: TakerPays BGHOUSE (issuer DF6685E3…), TakerGets XRP.
+    /// let issuer = AccountId(Hash160::from_hex("DF6685E310BE8A909B2175A5CD82C57468C760A4")?.0);
+    /// let bghouse = Asset::token("BGHOUSE", &issuer.to_address())?;
+    /// let dir = keylet::book_directory(&bghouse, &Asset::xrp(), None, 0x5903_8D7E_A4C6_8000);
+    /// assert_eq!(dir.to_string(), "D5003567ADA05825B4AB518BE95CBF342E1C6EA658FC570559038D7EA4C68000");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn book_directory(
         taker_pays: &Asset,
         taker_gets: &Asset,
@@ -656,6 +983,15 @@ pub mod keylet {
     /// The lowest `NFTokenPage` ID an account's pages can have (its
     /// AccountID, then 12 zero bytes).
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let min = keylet::nftoken_page_min("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// // rHb9…'s account ID, then 24 zero digits.
+    /// assert_eq!(min.to_string(), format!("B5F762798A53D543A014CAF8B297CFF8F2F937E8{}", "0".repeat(24)));
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -669,6 +1005,16 @@ pub mod keylet {
     /// The highest `NFTokenPage` ID an account's pages can have (its
     /// AccountID, then 12 bytes of 0xFF): its last page.
     ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// let owner = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+    /// let max = keylet::nftoken_page_max(owner)?;
+    /// assert!(max.to_string().ends_with(&"F".repeat(24)));
+    /// assert!(keylet::nftoken_page_min(owner)? < max);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
@@ -680,27 +1026,64 @@ pub mod keylet {
     }
 
     /// The `Amendments` singleton.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// assert_eq!(keylet::amendments().to_string(),
+    ///     "7DB0788C020F02780A673DC74757F23823FA3014C1866E72CC4CD8B226CD6EF4");
+    /// ```
     pub fn amendments() -> Hash256 {
         index_hash(b'f', &[])
     }
 
     /// The `FeeSettings` singleton.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// assert_eq!(keylet::fee_settings().to_string(),
+    ///     "4BC50C9B0D8515D3EAAE1E74B29A95804346C491EE1A95BF25E4AAB854A6A651");
+    /// ```
     pub fn fee_settings() -> Hash256 {
         index_hash(b'e', &[])
     }
 
     /// The `NegativeUNL` singleton.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// assert_eq!(keylet::negative_unl().to_string(),
+    ///     "2E8A59AA9D3B5B186B0B9E0F62E6C02587CA74A4D778938E957B6357D364B244");
+    /// ```
     pub fn negative_unl() -> Hash256 {
         index_hash(b'N', &[])
     }
 
     /// The `LedgerHashes` entry holding the last 256 ledger hashes.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// assert_eq!(keylet::ledger_hashes().to_string(),
+    ///     "B4979A36CDC7F3D3D5C31A4EAE2AC7D7209DDA877588B9AFC66799692AB0D66B");
+    /// ```
     pub fn ledger_hashes() -> Hash256 {
         index_hash(b's', &[])
     }
 
     /// The `LedgerHashes` entry holding every 256th hash for the 65,536
     /// ledgers around `ledger_sequence`.
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // The mainnet entry for ledgers 107,806,720 to 107,872,255.
+    /// let id = keylet::ledger_hashes_for(107_852_951);
+    /// assert_eq!(id.to_string(), "A309AF6148BEC21C4D6EB30AAD988053F19B071B4D3E540D3CD62010247E7944");
+    /// assert_eq!(keylet::ledger_hashes_for(107_806_720), id);
+    /// ```
     pub fn ledger_hashes_for(ledger_sequence: u32) -> Hash256 {
         index_hash(b's', &[&(ledger_sequence >> 16).to_be_bytes()])
     }

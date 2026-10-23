@@ -66,12 +66,36 @@ use serde_json::Value;
 const PREFIX_BATCH: [u8; 4] = *b"BCH\0";
 
 /// The most inner transactions a batch may hold (`kMaxBatchTxCount`).
+///
+/// ```
+/// use xrpl_core::transaction::batch::{MAX_INNER_TRANSACTIONS, MIN_INNER_TRANSACTIONS};
+///
+/// let inner = 3; // the transactions you want to batch
+/// assert!((MIN_INNER_TRANSACTIONS..=MAX_INNER_TRANSACTIONS).contains(&inner));
+/// assert_eq!(MAX_INNER_TRANSACTIONS, 8);
+/// ```
 pub const MAX_INNER_TRANSACTIONS: usize = 8;
 
 /// The fewest inner transactions a batch may hold.
+///
+/// ```
+/// use xrpl_core::transaction::batch::{MAX_INNER_TRANSACTIONS, MIN_INNER_TRANSACTIONS};
+///
+/// let inner = 1; // one transaction is not a batch
+/// assert!(!(MIN_INNER_TRANSACTIONS..=MAX_INNER_TRANSACTIONS).contains(&inner));
+/// assert_eq!(MIN_INNER_TRANSACTIONS, 2);
+/// ```
 pub const MIN_INNER_TRANSACTIONS: usize = 2;
 
 /// The most signers a multi-signed `BatchSigner` may hold (`kMaxMultiSigners`).
+///
+/// ```
+/// use xrpl_core::transaction::batch::{multisigned_batch_signer, MAX_NESTED_SIGNERS};
+///
+/// assert_eq!(MAX_NESTED_SIGNERS, 32);
+/// // From 1 to MAX_NESTED_SIGNERS signers: none is refused.
+/// assert!(multisigned_batch_signer("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", vec![]).is_err());
+/// ```
 pub const MAX_NESTED_SIGNERS: usize = 32;
 
 /// Make `tx` an inner transaction: set `tfInnerBatchTxn`, `Fee` to `"0"` and
@@ -79,6 +103,20 @@ pub const MAX_NESTED_SIGNERS: usize = 32;
 /// `TicketSequence`, with `Sequence` 0) must be set by the caller: the outer
 /// `Batch` uses its account's next sequence, so an inner transaction from the
 /// same account uses the one after.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::transaction::batch::inner_transaction;
+///
+/// let payment = json!({"TransactionType": "Payment", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+///     "Destination": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "Amount": "5000000", "Sequence": 11, "Fee": "12"});
+/// let inner = inner_transaction(&payment)?;
+/// assert_eq!(inner["Flags"], 0x4000_0000); // tfInnerBatchTxn
+/// assert_eq!(inner["Fee"], "0");
+/// assert_eq!(inner["SigningPubKey"], "");
+/// assert_eq!(inner["Sequence"], 11); // kept
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -105,6 +143,31 @@ pub fn inner_transaction(tx: &Value) -> Result<Value, CoreError> {
 
 /// The inner transactions of a batch, in order.
 ///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// let inner = batch::inner_transactions(&tx)?;
+/// assert_eq!(inner.len(), 2);
+/// assert_eq!(inner[1]["Account"], b);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::ValidationError`] if `batch` has no `RawTransactions` array, or
@@ -126,6 +189,33 @@ pub fn inner_transactions(batch: &Value) -> Result<Vec<&Value>, CoreError> {
 /// The IDs of the inner transactions, in order: what the batch signatures
 /// cover, and the hashes the inner transactions get on the ledger.
 ///
+/// ```
+/// use xrpl_core::hashes::hash_signed_tx;
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// let ids = batch::inner_transaction_ids(&tx)?;
+/// let inner = batch::inner_transactions(&tx)?;
+/// assert_eq!(ids.len(), 2);
+/// assert_eq!(ids[0], hash_signed_tx(inner[0])?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// The errors of [`inner_transactions`]; [`CoreError::ValidationError`] for an
@@ -143,6 +233,32 @@ pub fn inner_transaction_ids(batch: &Value) -> Result<Vec<Hash256>, CoreError> {
 /// "BCH\0", the outer account, its sequence (or ticket), the outer flags, the
 /// number of inner transactions and their IDs. Each signer then appends its
 /// account ID.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// let data = batch::batch_signing_data(&tx)?;
+/// assert_eq!(&data[..4], b"BCH\0");
+/// // The prefix, the account, its sequence, the flags, the count, two IDs.
+/// assert_eq!(data.len(), 4 + 20 + 4 + 4 + 4 + 2 * 32);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -196,6 +312,32 @@ pub fn batch_signing_data(batch: &Value) -> Result<Vec<u8>, CoreError> {
 /// master key; for an account that signs with a regular key, use
 /// [`sign_batch_as`]. For a remote key, [`sign_batch_async`].
 ///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// let signer = batch::sign_batch(&tx, &bob)?;
+/// assert_eq!(signer.account, b);
+/// batch::add_batch_signers(&mut tx, vec![signer])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// The errors of [`batch_signing_data`], and the key's own
@@ -210,6 +352,44 @@ pub fn sign_batch<K: SigningKey + ?Sized>(
 
 /// [`sign_batch`] with an [`AsyncSigningKey`] (a remote key), whose
 /// signature is checked against its public key.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # async fn run() -> Result<(), xrpl_core::CoreError> {
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // `bob` stands in for a remote key: every Keypair is an AsyncSigningKey too.
+/// let signer = batch::sign_batch_async(&tx, &bob).await?;
+/// batch::add_batch_signers(&mut tx, vec![signer])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
 ///
 /// # Errors
 ///
@@ -234,6 +414,34 @@ fn master_account(public_key: &[u8]) -> Result<String, CoreError> {
 /// (`rippled` appends the signing account, not the key's address, to the
 /// data each batch signature covers.)
 ///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // Bob signs with his regular key (the key he set with SetRegularKey).
+/// let regular = Keypair::from_seed(&Seed::generate())?;
+/// let signer = batch::sign_batch_as(&tx, &b, &regular)?;
+/// assert_eq!(signer.account, b);
+/// batch::add_batch_signers(&mut tx, vec![signer])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// The errors of [`batch_signing_data`], an address error
@@ -255,6 +463,45 @@ pub fn sign_batch_as<K: SigningKey + ?Sized>(
 
 /// [`sign_batch_as`] with an [`AsyncSigningKey`] (a remote key), whose
 /// signature is checked against its public key.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # async fn run() -> Result<(), xrpl_core::CoreError> {
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // Bob's regular key; a Keypair stands in for a remote key here.
+/// let regular = Keypair::from_seed(&Seed::generate())?;
+/// let signer = batch::sign_batch_as_async(&tx, &b, &regular).await?;
+/// batch::add_batch_signers(&mut tx, vec![signer])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
 ///
 /// # Errors
 ///
@@ -295,6 +542,35 @@ fn single_batch_signer(account: &str, public_key: &[u8], signature: &[u8]) -> Ba
 /// master key or regular key): one of the `Signers` of `batch_signer`'s
 /// `BatchSigner` (combine them with [`multisigned_batch_signer`]).
 ///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // Bob approves through his signer list, which has Carol on it.
+/// let carol = Keypair::from_seed(&Seed::generate())?;
+/// let carol_signs = batch::sign_batch_for(&tx, &b, &carol.classic_address(), &carol)?;
+/// assert_eq!(carol_signs.account, carol.classic_address());
+/// let for_bob = batch::multisigned_batch_signer(&b, vec![carol_signs])?;
+/// batch::add_batch_signers(&mut tx, vec![for_bob])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// The errors of [`batch_signing_data`], an address error
@@ -318,6 +594,46 @@ pub fn sign_batch_for<K: SigningKey + ?Sized>(
 
 /// [`sign_batch_for`] with an [`AsyncSigningKey`] (a remote key), whose
 /// signature is checked against its public key.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # async fn run() -> Result<(), xrpl_core::CoreError> {
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // Carol, on Bob's signer list; a Keypair stands in for a remote key here.
+/// let carol = Keypair::from_seed(&Seed::generate())?;
+/// let carol_signs = batch::sign_batch_for_async(&tx, &b, &carol.classic_address(), &carol).await?;
+/// let for_bob = batch::multisigned_batch_signer(&b, vec![carol_signs])?;
+/// batch::add_batch_signers(&mut tx, vec![for_bob])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
 ///
 /// # Errors
 ///
@@ -353,6 +669,41 @@ fn nested_signer_data(
 /// A multi-signed `BatchSigner` for `batch_signer` from its signers'
 /// signatures ([`sign_batch_for`]), sorted by account ID as `rippled` requires;
 /// 1 to 32 signers, each once.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+/// use xrpl_core::types::AccountId;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // Carol and Dave, both on Bob's signer list, sign for him.
+/// let (carol, dave) = (Keypair::from_seed(&Seed::generate())?, Keypair::from_seed(&Seed::generate())?);
+/// let signers = vec![
+///     batch::sign_batch_for(&tx, &b, &carol.classic_address(), &carol)?,
+///     batch::sign_batch_for(&tx, &b, &dave.classic_address(), &dave)?,
+/// ];
+/// let for_bob = batch::multisigned_batch_signer(&b, signers)?;
+/// let nested = for_bob.signers.as_ref().unwrap();
+/// let (first, second): (AccountId, AccountId) = (nested[0].account.parse()?, nested[1].account.parse()?);
+/// assert!(first < second); // in account-ID order
+/// batch::add_batch_signers(&mut tx, vec![for_bob])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -391,6 +742,32 @@ pub fn multisigned_batch_signer(
 /// Put `signers` into the batch's `BatchSigners`, in ascending account-ID
 /// order (as `rippled` requires; base58 text order differs). Signers already
 /// there are kept; an account may appear only once.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// let signer = batch::sign_batch(&tx, &bob)?;
+/// batch::add_batch_signers(&mut tx, vec![signer.clone()])?;
+/// assert_eq!(tx["BatchSigners"][0]["BatchSigner"]["Account"], b);
+/// assert!(batch::add_batch_signers(&mut tx, vec![signer]).is_err()); // Bob twice
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -440,6 +817,30 @@ pub fn add_batch_signers(batch: &mut Value, signers: Vec<BatchSigner>) -> Result
 /// leaving out the batch's own account; in ascending account-ID order, each
 /// once.
 ///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// // Alice sends the batch; only Bob signs it as a BatchSigner.
+/// assert_eq!(batch::required_batch_signers(&tx)?, vec![b]);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::ValidationError`] if `batch` has no `Account`, its
@@ -487,6 +888,34 @@ pub fn required_batch_signers(batch: &Value) -> Result<Vec<String>, CoreError> {
 ///
 /// `rippled` also checks each key against the account (master key, regular
 /// key or signer list), which needs the ledger; this does not.
+///
+/// ```
+/// use xrpl_core::transaction::batch;
+///
+/// # use serde_json::json;
+/// # use xrpl_core::crypto::{Keypair, Seed};
+/// # use xrpl_core::transaction::models::BatchFlags;
+/// # let alice = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// # let bob = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// # let (a, b) = (alice.classic_address(), bob.classic_address());
+/// # let mut tx = json!({
+/// #     "TransactionType": "Batch", "Account": a, "Sequence": 10,
+/// #     "Flags": u32::from(BatchFlags::ALL_OR_NOTHING), "Fee": batch::batch_fee(10, 2, 1).to_string(),
+/// #     "RawTransactions": [
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+/// #         {"RawTransaction": batch::inner_transaction(&json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+/// #     ],
+/// # });
+/// // `tx`: the Batch of the module example: Alice (`a`) pays Bob (`b`, keys
+/// // `bob`) and Bob pays Alice, all or nothing.
+/// assert!(!batch::verify_batch_signers(&tx)?); // Bob has not signed yet
+/// let signer = batch::sign_batch(&tx, &bob)?;
+/// batch::add_batch_signers(&mut tx, vec![signer])?;
+/// assert!(batch::verify_batch_signers(&tx)?);
+/// tx["Flags"] = u32::from(BatchFlags::ONLY_ONE).into(); // changed after Bob signed
+/// assert!(!batch::verify_batch_signers(&tx)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -575,6 +1004,14 @@ fn verify(public_key_hex: &str, data: &[u8], signature_hex: &str) -> Result<bool
 /// their own (AccountDelete, AMMCreate, EscrowFinish with a fulfillment, …)
 /// add their extra: [`cost::transaction_cost`](super::cost::transaction_cost)
 /// prices a batch with every rule. Saturates instead of overflowing.
+///
+/// ```
+/// use xrpl_core::transaction::batch::batch_fee;
+///
+/// // Two inner transactions and one BatchSigner at 10 drops: 10 × (2 + 2 + 1).
+/// assert_eq!(batch_fee(10, 2, 1), 50);
+/// assert_eq!(batch_fee(u64::MAX, 2, 1), u64::MAX); // saturates
+/// ```
 pub fn batch_fee(base_fee_drops: u64, inner_transactions: usize, batch_signatures: usize) -> u64 {
     let units = 2u64
         .saturating_add(u64::try_from(inner_transactions).unwrap_or(u64::MAX))

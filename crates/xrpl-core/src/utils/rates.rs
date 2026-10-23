@@ -9,6 +9,15 @@ const BILLION: u64 = 1_000_000_000;
 
 /// `"1%"` → 1_010_000_000. `"0%"` is 0 (no fee). The fee must be 0–100%.
 ///
+/// ```
+/// use xrpl_core::utils::rates::percent_to_transfer_rate;
+///
+/// assert_eq!(percent_to_transfer_rate("1%")?, 1_010_000_000);
+/// assert_eq!(percent_to_transfer_rate("0%")?, 0);
+/// assert!(percent_to_transfer_rate("101%").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::ValidationError`] if `percent` does not end with `%`, is not a
@@ -18,6 +27,15 @@ pub fn percent_to_transfer_rate(percent: &str) -> Result<u32, CoreError> {
 }
 
 /// `"0.01"` → 1_010_000_000. `"0"` is 0 (no fee). The fee must be 0–1.
+///
+/// ```
+/// use xrpl_core::utils::rates::decimal_to_transfer_rate;
+///
+/// assert_eq!(decimal_to_transfer_rate("0.01")?, 1_010_000_000);
+/// assert_eq!(decimal_to_transfer_rate("0")?, 0);
+/// assert!(decimal_to_transfer_rate("1.01").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -36,6 +54,15 @@ pub fn decimal_to_transfer_rate(decimal: &str) -> Result<u32, CoreError> {
 
 /// 1_010_000_000 → `"0.01"`; 0 (no fee) → `"0"`. A rate rippled would refuse
 /// (between 1 and 999,999,999, or over 2,000,000,000) is an error.
+///
+/// ```
+/// use xrpl_core::utils::rates::transfer_rate_to_decimal;
+///
+/// assert_eq!(transfer_rate_to_decimal(1_010_000_000)?, "0.01");
+/// assert_eq!(transfer_rate_to_decimal(0)?, "0");
+/// assert!(transfer_rate_to_decimal(999_999_999).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -56,6 +83,15 @@ pub fn transfer_rate_to_decimal(rate: u32) -> Result<String, CoreError> {
 
 /// `"101%"` → 1_010_000_000; `"100%"` → 0 (rippled's default, 1:1).
 ///
+/// ```
+/// use xrpl_core::utils::rates::percent_to_quality;
+///
+/// assert_eq!(percent_to_quality("101%")?, 1_010_000_000);
+/// assert_eq!(percent_to_quality("99%")?, 990_000_000);
+/// assert_eq!(percent_to_quality("100%")?, 0);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::ValidationError`] if `percent` does not end with `%`, is not a
@@ -66,6 +102,15 @@ pub fn percent_to_quality(percent: &str) -> Result<u32, CoreError> {
 }
 
 /// `"1.01"` → 1_010_000_000; `"1"` → 0 (rippled's default, 1:1).
+///
+/// ```
+/// use xrpl_core::utils::rates::decimal_to_quality;
+///
+/// assert_eq!(decimal_to_quality("1.01")?, 1_010_000_000);
+/// assert_eq!(decimal_to_quality("1")?, 0);
+/// assert!(decimal_to_quality("5").is_err()); // above 4.294967295
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -82,6 +127,14 @@ pub fn decimal_to_quality(decimal: &str) -> Result<u32, CoreError> {
 }
 
 /// 1_010_000_000 → `"1.01"`; 0 → `"1"`.
+///
+/// ```
+/// use xrpl_core::utils::rates::quality_to_decimal;
+///
+/// assert_eq!(quality_to_decimal(1_010_000_000), "1.01");
+/// assert_eq!(quality_to_decimal(990_000_000), "0.99");
+/// assert_eq!(quality_to_decimal(0), "1");
+/// ```
 pub fn quality_to_decimal(quality: u32) -> String {
     if quality == 0 {
         return "1".into();
