@@ -57,6 +57,29 @@ impl Transaction for AccountSet {
     }
 
     fn validate(&self) -> Result<(), CoreError> {
+        let bad = |m: &str| super::invalid("AccountSet", m);
+        if self.set_flag.is_some() && self.set_flag == self.clear_flag {
+            return Err(bad("SetFlag and ClearFlag are the same flag"));
+        }
+        if let Some(t) = self.tick_size {
+            if t != 0 && !(3..=15).contains(&t) {
+                return Err(bad("TickSize is 0 (clear) or 3 to 15"));
+            }
+        }
+        if let Some(r) = self.transfer_rate {
+            if r != 0 && !(1_000_000_000..=2_000_000_000).contains(&r) {
+                return Err(bad(
+                    "TransferRate is 0 (none) or 1,000,000,000 to 2,000,000,000 (0% to 100%)",
+                ));
+            }
+        }
+        super::check_hex(self.domain.as_deref(), "Domain", 256)?;
+        super::check_hex(self.message_key.as_deref(), "MessageKey", 33)?;
+        if let Some(h) = &self.email_hash {
+            if h.len() != 32 || hex::decode(h).is_err() {
+                return Err(bad("EmailHash is 32 hex digits (an MD5 hash)"));
+            }
+        }
         Ok(())
     }
 }
@@ -140,7 +163,7 @@ impl AccountSetBuilder {
 
     /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<AccountSet, CoreError> {
-        Ok(AccountSet {
+        let tx = AccountSet {
             common: self.common,
             set_flag: self.set_flag,
             clear_flag: self.clear_flag,
@@ -149,7 +172,9 @@ impl AccountSetBuilder {
             message_key: self.message_key,
             transfer_rate: self.transfer_rate,
             tick_size: self.tick_size,
-        })
+        };
+        tx.validate()?;
+        Ok(tx)
     }
 }
 

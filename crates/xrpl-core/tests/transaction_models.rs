@@ -85,9 +85,16 @@ fn a_field_the_type_does_not_have_is_an_error() {
     tx["NFTokenTaxon"] = 1.into();
     let err = Tx::from_value(tx.clone()).unwrap_err().to_string();
     assert!(err.contains("NFTokenTaxon"), "{err}");
-    // Leniently, inside a larger value, it is kept as `Other`.
-    let lenient: Tx = serde_json::from_value(tx).unwrap();
-    assert!(matches!(lenient, Tx::Other(_)));
+    // Leniently, inside a larger value, it is kept as `Unparsed`, with the
+    // error: never as `Other`, which is for unknown transaction types.
+    let lenient: Tx = serde_json::from_value(tx.clone()).unwrap();
+    let kind = tx["TransactionType"].as_str().unwrap().to_string();
+    assert!(
+        matches!(&lenient, Tx::Unparsed { transaction_type, error, .. }
+            if *transaction_type == kind && error.contains("NFTokenTaxon")),
+        "{lenient:?}"
+    );
+    assert_eq!(lenient.transaction_type(), kind);
 }
 
 /// One example of each transaction type, with every field filled in, that

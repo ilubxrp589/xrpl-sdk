@@ -223,10 +223,13 @@ mod tests {
         let p = parse_nftoken_id(&rippled_id).unwrap();
         let issuer = tx.get("Issuer").unwrap_or(&tx["Account"]).as_str().unwrap();
         assert_eq!(p.issuer, issuer);
-        assert_eq!(p.taxon, tx["NFTokenTaxon"].as_u64().unwrap() as u32);
+        assert_eq!(
+            p.taxon,
+            u32::try_from(tx["NFTokenTaxon"].as_u64().unwrap()).unwrap()
+        );
         assert_eq!(
             u32::from(p.flags),
-            tx["Flags"].as_u64().unwrap_or(0) as u32 & 0xFFFF
+            u32::try_from(tx["Flags"].as_u64().unwrap_or(0)).unwrap() & 0xFFFF
         );
         assert_eq!(
             u64::from(p.transfer_fee),

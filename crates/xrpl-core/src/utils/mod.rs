@@ -1,4 +1,5 @@
-//! Everyday conversions, all exact (decimal arithmetic, never floating point):
+//! Everyday conversions, exact (decimal arithmetic, never floating point)
+//! except `dex`'s price helpers, which are `f64` approximations for display:
 //!
 //! | Module | Functions |
 //! |---|---|
@@ -8,8 +9,8 @@
 //! | [`rates`] | `TransferRate` and `QualityIn`/`QualityOut` ↔ decimal and percent |
 //! | [`nftoken`] | [`parse_nftoken_id`], [`get_nftoken_id`] |
 //! | [`balance_changes`] | [`get_balance_changes`]: every account's balance changes, from metadata |
-//! | [`reserve`] | account reserves and spendable balance |
-//! | [`dex`] | offer quality, midpoint, spread, liquidity |
+//! | [`reserve`] | account reserves and spendable balance, in drops |
+//! | [`dex`] | liquidity (exact); offer quality, midpoint, spread (approximate) |
 
 #[cfg(feature = "std")]
 pub mod balance_changes;
@@ -32,7 +33,7 @@ pub mod time;
 pub mod xrp;
 
 #[cfg(feature = "std")]
-pub use balance_changes::{get_balance_changes, AccountBalanceChanges, Balance};
+pub use balance_changes::{delivered_amount, get_balance_changes, AccountBalanceChanges, Balance};
 #[cfg(feature = "std")]
 pub use nftoken::{get_nftoken_id, parse_nftoken_id, NFTokenIdParts};
 #[cfg(feature = "std")]

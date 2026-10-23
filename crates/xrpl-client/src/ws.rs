@@ -1,17 +1,22 @@
 //! [`XrplWsClient`] for native targets: requests and subscriptions over one
 //! WebSocket, matched by request ID, with automatic reconnection that restores
 //! subscriptions.
+//!
+//! One supervisor task owns the connection: it writes requests, routes
+//! replies and stream messages, pings the server, and reconnects (with
+//! backoff) when the connection drops or goes silent. Dropping the client
+//! stops it and closes the socket.
 
 use crate::client::Client;
 use crate::error::ClientError;
-use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex, Notify};
+use std::time::{Duration, Instant};
+use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
 
@@ -19,377 +24,457 @@ type WsStream = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::Tc
 
 pub use crate::stream::*;
 
-type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, ClientError>>>>>;
+/// How long a request waits for its reply.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long opening a connection may take.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// How often the server is pinged.
+const PING_EVERY: Duration = Duration::from_secs(15);
+/// A connection that has said nothing for this long is taken as dead (a
+/// laptop that slept, a NAT that dropped it) and replaced.
+const SILENT_LIMIT: Duration = Duration::from_secs(45);
+/// The ping's request ID; its replies are not routed.
+const PING_ID: u64 = u64::MAX;
+/// Events buffered per receiver before the oldest are dropped (and reported
+/// as [`WsEvent::Missed`]).
+const EVENT_BUFFER: usize = 1024;
 
-/// WebSocket client for XRPL nodes with automatic reconnection.
-///
-/// On disconnect, the client will reconnect with exponential backoff
-/// and re-subscribe to all active subscriptions.
-pub struct XrplWsClient {
-    write_tx: Arc<Mutex<mpsc::Sender<String>>>,
-    pending: PendingMap,
-    id_counter: Arc<AtomicU64>,
+/// What the client and its supervisor task share.
+struct Shared {
+    pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, ClientError>>>>,
     event_tx: broadcast::Sender<WsEvent>,
-    url: String,
-    active_subs: Arc<Mutex<Vec<Value>>>,
-    connected: Arc<AtomicBool>,
-    /// Kept alive to signal reconnection loop (used by spawned tasks, not directly by self).
-    #[allow(dead_code)]
-    reconnect_notify: Arc<Notify>,
+    ids: AtomicU64,
+    connected: AtomicBool,
+    write_tx: Mutex<Option<mpsc::Sender<String>>>,
+    active_subs: Mutex<Vec<Value>>,
+    started: Instant,
+    /// Milliseconds since `started` when the server last said anything.
+    last_heard: AtomicU64,
+    /// The server's host, for logs (never the URL: it may carry a token).
+    host: String,
+    shutdown: watch::Receiver<bool>,
 }
 
-impl XrplWsClient {
-    /// Connect to an XRPL WebSocket endpoint with automatic reconnection.
-    pub async fn connect(url: &str) -> Result<Self, ClientError> {
-        let (ws_stream, _) = tokio_tungstenite::connect_async(url)
-            .await
-            .map_err(|e| ClientError::UnexpectedResponse(format!("WS connect failed: {e}")))?;
-
-        let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
-        let (event_tx, _) = broadcast::channel(256);
-        let (write_tx, write_rx) = mpsc::channel::<String>(64);
-        let connected = Arc::new(AtomicBool::new(true));
-        let reconnect_notify = Arc::new(Notify::new());
-        let active_subs: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
-
-        let (ws_write, ws_read) = futures::StreamExt::split(ws_stream);
-
-        // Spawn write loop
-        tokio::spawn(Self::write_loop(ws_write, write_rx));
-
-        // Spawn read loop — on disconnect triggers reconnect
-        let pending_read = pending.clone();
-        let event_tx_read = event_tx.clone();
-        let connected_read = connected.clone();
-        let reconnect_notify_read = reconnect_notify.clone();
-        tokio::spawn(async move {
-            Self::read_loop(ws_read, pending_read, event_tx_read).await;
-            connected_read.store(false, Ordering::Relaxed);
-            reconnect_notify_read.notify_one();
-        });
-
-        // Spawn keepalive
-        let write_tx_ping = write_tx.clone();
-        let connected_ping = connected.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
-            loop {
-                interval.tick().await;
-                if !connected_ping.load(Ordering::Relaxed) {
-                    break;
-                }
-                let ping = json!({"command": "ping", "id": u64::MAX}).to_string();
-                if write_tx_ping.send(ping).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        let write_tx = Arc::new(Mutex::new(write_tx));
-        let id_counter = Arc::new(AtomicU64::new(1));
-
-        let client = Self {
-            write_tx: write_tx.clone(),
-            pending: pending.clone(),
-            id_counter: id_counter.clone(),
-            event_tx: event_tx.clone(),
-            url: url.to_string(),
-            active_subs: active_subs.clone(),
-            connected: connected.clone(),
-            reconnect_notify: reconnect_notify.clone(),
-        };
-
-        // Spawn reconnection loop
-        let url_owned = url.to_string();
-        tokio::spawn(async move {
-            Self::reconnection_loop(
-                url_owned,
-                write_tx,
-                pending,
-                event_tx,
-                connected,
-                reconnect_notify,
-                active_subs,
-                id_counter,
-            )
-            .await;
-        });
-
-        Ok(client)
+impl Shared {
+    fn touch(&self) {
+        let now = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        self.last_heard.store(now, Ordering::Relaxed);
     }
 
-    /// Reconnection loop: waits for disconnect, then reconnects with exponential backoff.
-    #[allow(clippy::too_many_arguments)]
-    async fn reconnection_loop(
-        url: String,
-        write_tx: Arc<Mutex<mpsc::Sender<String>>>,
-        pending: PendingMap,
-        event_tx: broadcast::Sender<WsEvent>,
-        connected: Arc<AtomicBool>,
-        reconnect_notify: Arc<Notify>,
-        active_subs: Arc<Mutex<Vec<Value>>>,
-        id_counter: Arc<AtomicU64>,
-    ) {
-        loop {
-            // Wait for a disconnect signal
-            reconnect_notify.notified().await;
-
-            if connected.load(Ordering::Relaxed) {
-                continue;
-            }
-
-            let mut attempt = 0u32;
-            loop {
-                // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 60s
-                let delay = Duration::from_secs((1u64 << attempt).min(60));
-                tracing::warn!(attempt = attempt, url = %url, "WebSocket disconnected, attempting reconnect");
-                tokio::time::sleep(delay).await;
-                attempt += 1;
-
-                match tokio_tungstenite::connect_async(&url).await {
-                    Ok((ws_stream, _)) => {
-                        let (ws_write, ws_read) = futures::StreamExt::split(ws_stream);
-
-                        // Create new write channel
-                        let (new_write_tx, new_write_rx) = mpsc::channel::<String>(64);
-                        *write_tx.lock().await = new_write_tx.clone();
-
-                        connected.store(true, Ordering::Relaxed);
-
-                        // Spawn new write loop
-                        tokio::spawn(Self::write_loop(ws_write, new_write_rx));
-
-                        // Spawn new read loop
-                        let pending_read = pending.clone();
-                        let event_tx_read = event_tx.clone();
-                        let connected_read = connected.clone();
-                        let reconnect_notify_read = reconnect_notify.clone();
-                        tokio::spawn(async move {
-                            Self::read_loop(ws_read, pending_read, event_tx_read).await;
-                            connected_read.store(false, Ordering::Relaxed);
-                            reconnect_notify_read.notify_one();
-                        });
-
-                        // Spawn new keepalive
-                        let connected_ping = connected.clone();
-                        let write_tx_ping = new_write_tx;
-                        tokio::spawn(async move {
-                            let mut interval = tokio::time::interval(Duration::from_secs(30));
-                            loop {
-                                interval.tick().await;
-                                if !connected_ping.load(Ordering::Relaxed) {
-                                    break;
-                                }
-                                let ping = json!({"command": "ping", "id": u64::MAX}).to_string();
-                                if write_tx_ping.send(ping).await.is_err() {
-                                    break;
-                                }
-                            }
-                        });
-
-                        // Re-subscribe to all active subscriptions
-                        let subs = active_subs.lock().await.clone();
-                        for sub_params in &subs {
-                            let id = id_counter.fetch_add(1, Ordering::Relaxed);
-                            let mut msg = sub_params.clone();
-                            if let Some(obj) = msg.as_object_mut() {
-                                obj.insert("command".into(), Value::String("subscribe".into()));
-                                obj.insert("id".into(), Value::Number(id.into()));
-                            }
-                            let wtx = write_tx.lock().await;
-                            let _ = wtx.send(msg.to_string()).await;
-                        }
-
-                        // Notify subscribers of reconnection
-                        tracing::info!(url = %url, "WebSocket reconnected successfully");
-                        let _ = event_tx.send(WsEvent::Reconnected);
-                        break;
-                    }
-                    Err(_) => {
-                        tracing::error!(url = %url, "WebSocket reconnect attempt failed, retrying");
-                        continue;
-                    }
-                }
-            }
-        }
+    fn silent_for(&self) -> Duration {
+        let heard = Duration::from_millis(self.last_heard.load(Ordering::Relaxed));
+        self.started.elapsed().saturating_sub(heard)
     }
 
-    /// Write loop: sends messages from the mpsc channel to the WebSocket.
-    async fn write_loop(
-        mut ws_write: SplitSink<WsStream, Message>,
-        mut write_rx: mpsc::Receiver<String>,
-    ) {
-        while let Some(msg) = write_rx.recv().await {
-            if ws_write.send(Message::Text(msg.into())).await.is_err() {
-                break;
-            }
-        }
-    }
-
-    /// Read loop: routes responses to pending requests and events to subscribers.
-    async fn read_loop(
-        mut ws_read: SplitStream<WsStream>,
-        pending: PendingMap,
-        event_tx: broadcast::Sender<WsEvent>,
-    ) {
-        while let Some(msg_result) = ws_read.next().await {
-            let msg = match msg_result {
-                Ok(m) => m,
-                Err(_) => break,
-            };
-
-            let text = match msg {
-                Message::Text(t) => t.to_string(),
-                Message::Close(_) => break,
-                _ => continue,
-            };
-
-            let value: Value = match serde_json::from_str(&text) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            // Route based on whether this is a response (has "id") or stream event
-            if let Some(id) = value.get("id").and_then(|v| v.as_u64()) {
-                if id == u64::MAX {
-                    continue; // ping response, ignore
-                }
-                let mut map = pending.lock().await;
-                if let Some(sender) = map.remove(&id) {
-                    let result = if let Some(result) = value.get("result") {
-                        Ok(result.clone())
-                    } else if value.get("error").is_some() {
-                        let code = value
-                            .get("error")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown")
-                            .to_string();
-                        let message = value
-                            .get("error_message")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        Err(ClientError::RpcError { code, message })
-                    } else {
-                        Ok(value.clone())
-                    };
-                    let _ = sender.send(result);
-                }
-            } else if let Some(evt) = WsEvent::from_message(value) {
-                let _ = event_tx.send(evt);
-            }
-        }
-
-        // Connection closed — fail all pending requests
-        let mut map = pending.lock().await;
-        for (_, sender) in map.drain() {
+    async fn fail_pending(&self) {
+        for (_, sender) in self.pending.lock().await.drain() {
             let _ = sender.send(Err(ClientError::Disconnected));
         }
     }
 
-    /// Subscribe with any `subscribe` parameters (`streams`, `accounts`,
-    /// `accounts_proposed`, `books`, …), returning `rippled`'s reply (an order
-    /// book snapshot, for instance) and a receiver of every [`WsEvent`]. The
-    /// subscription is restored after a reconnect.
-    pub async fn subscribe(
+    /// Send a request and wait for its reply (waiting up to the request
+    /// timeout for a connection, while the supervisor reconnects).
+    async fn request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
+        let waited = Instant::now();
+        while !self.connected.load(Ordering::Relaxed) {
+            if *self.shutdown.borrow() || waited.elapsed() >= REQUEST_TIMEOUT {
+                return Err(ClientError::Disconnected);
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let id = self.ids.fetch_add(1, Ordering::Relaxed);
+        tracing::debug!(command, id, host = %self.host, "sending WS request");
+        let mut msg = match params {
+            Value::Object(obj) => obj,
+            _ => serde_json::Map::new(),
+        };
+        msg.insert("command".into(), Value::String(command.into()));
+        msg.insert("id".into(), Value::Number(id.into()));
+
+        let (tx, rx) = oneshot::channel();
+        self.pending.lock().await.insert(id, tx);
+        let writer = self.write_tx.lock().await.clone();
+        let sent = match writer {
+            Some(w) => w.send(Value::Object(msg).to_string()).await.is_ok(),
+            None => false,
+        };
+        if !sent {
+            self.pending.lock().await.remove(&id);
+            return Err(ClientError::Disconnected);
+        }
+
+        match tokio::time::timeout(REQUEST_TIMEOUT, rx).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(ClientError::Disconnected),
+            Err(_) => {
+                self.pending.lock().await.remove(&id);
+                Err(ClientError::Timeout(REQUEST_TIMEOUT))
+            }
+        }
+    }
+
+    /// A reply goes to its request; a stream message to the subscribers.
+    async fn route(&self, text: &str) {
+        let Ok(value) = serde_json::from_str::<Value>(text) else {
+            tracing::warn!(host = %self.host, "a WebSocket message that is not JSON");
+            return;
+        };
+        match value.get("id").and_then(Value::as_u64) {
+            Some(PING_ID) => {}
+            Some(id) => {
+                if let Some(sender) = self.pending.lock().await.remove(&id) {
+                    let _ = sender.send(crate::client::ws_response(&value));
+                }
+            }
+            None => {
+                if let Some(event) = WsEvent::from_message(value) {
+                    let _ = self.event_tx.send(event);
+                }
+            }
+        }
+    }
+}
+
+/// The host (and port) of a URL, without scheme, credentials, path or query.
+fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    authority.rsplit('@').next().unwrap_or("").to_string()
+}
+
+async fn open(url: &str) -> Result<WsStream, ClientError> {
+    match tokio::time::timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(url)).await {
+        Ok(Ok((stream, _))) => Ok(stream),
+        Ok(Err(e)) => Err(ClientError::UnexpectedResponse(format!(
+            "WebSocket connection to {} failed: {e}",
+            host_of(url)
+        ))),
+        Err(_) => Err(ClientError::Timeout(CONNECT_TIMEOUT)),
+    }
+}
+
+/// The supervisor: runs a connection until it ends, then reconnects with
+/// backoff (1 s doubling to 60 s), restoring subscriptions, until shutdown.
+async fn supervise(shared: Arc<Shared>, url: String, first: WsStream) {
+    let mut shutdown = shared.shutdown.clone();
+    let mut stream = Some(first);
+    let mut reconnect = false;
+    let mut attempt: u32 = 0;
+    loop {
+        if let Some(ws) = stream.take() {
+            attempt = 0;
+            run_connection(&shared, ws, &mut shutdown, reconnect).await;
+            shared.connected.store(false, Ordering::Relaxed);
+            *shared.write_tx.lock().await = None;
+            shared.fail_pending().await;
+            if *shutdown.borrow() {
+                return;
+            }
+            tracing::warn!(host = %shared.host, "WebSocket disconnected; reconnecting");
+            let _ = shared.event_tx.send(WsEvent::Disconnected);
+            reconnect = true;
+        }
+        let delay = Duration::from_secs(1u64 << attempt.min(6)).min(Duration::from_secs(60));
+        attempt = attempt.saturating_add(1);
+        tokio::select! {
+            _ = tokio::time::sleep(delay) => {}
+            _ = shutdown.changed() => return,
+        }
+        match open(&url).await {
+            Ok(ws) => stream = Some(ws),
+            Err(e) => {
+                tracing::warn!(host = %shared.host, attempt, error = %e, "WebSocket reconnect failed")
+            }
+        }
+    }
+}
+
+/// One connection's life: writes, reads, pings; returns when it ends, goes
+/// silent, or the client is dropped.
+async fn run_connection(
+    shared: &Arc<Shared>,
+    ws: WsStream,
+    shutdown: &mut watch::Receiver<bool>,
+    reconnect: bool,
+) {
+    let (mut sink, mut source) = ws.split();
+    let (write_tx, mut write_rx) = mpsc::channel::<String>(64);
+    *shared.write_tx.lock().await = Some(write_tx);
+    shared.touch();
+    shared.connected.store(true, Ordering::Relaxed);
+    if reconnect {
+        tokio::spawn(resubscribe(shared.clone()));
+    }
+    let mut ping = tokio::time::interval(PING_EVERY);
+    ping.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.changed() => {
+                let _ = sink.send(Message::Close(None)).await;
+                return;
+            }
+            Some(text) = write_rx.recv() => {
+                if sink.send(Message::Text(text.into())).await.is_err() {
+                    return;
+                }
+            }
+            _ = ping.tick() => {
+                if shared.silent_for() > SILENT_LIMIT {
+                    tracing::warn!(host = %shared.host, "WebSocket silent for {:?}; replacing it", SILENT_LIMIT);
+                    return;
+                }
+                let ping = json!({"command": "ping", "id": PING_ID}).to_string();
+                if sink.send(Message::Text(ping.into())).await.is_err() {
+                    return;
+                }
+            }
+            message = source.next() => match message {
+                Some(Ok(Message::Text(text))) => {
+                    shared.touch();
+                    shared.route(&text).await;
+                }
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return,
+                Some(Ok(_)) => shared.touch(),
+            },
+        }
+    }
+}
+
+/// After a reconnect: subscribe again to everything, then report it. A
+/// subscription the server refuses is reported, not skipped silently.
+async fn resubscribe(shared: Arc<Shared>) {
+    let subs = shared.active_subs.lock().await.clone();
+    let mut restored = true;
+    for params in subs {
+        if let Err(e) = shared.request("subscribe", params.clone()).await {
+            restored = false;
+            tracing::warn!(host = %shared.host, error = %e, "a subscription was not restored");
+            let _ = shared.event_tx.send(WsEvent::ResubscribeFailed {
+                subscription: params,
+                error: e.to_string(),
+            });
+        }
+    }
+    if restored {
+        tracing::info!(host = %shared.host, "WebSocket reconnected; subscriptions restored");
+    }
+    let _ = shared.event_tx.send(WsEvent::Reconnected);
+}
+
+/// WebSocket client for XRPL nodes with automatic reconnection.
+///
+/// On disconnect it sends [`WsEvent::Disconnected`], reconnects with
+/// exponential backoff, subscribes again to everything (a refusal is a
+/// [`WsEvent::ResubscribeFailed`]) and sends [`WsEvent::Reconnected`].
+/// Events between the two were not seen; catch up with `account_tx` or
+/// `ledger` if they matter. A connection that goes silent is replaced the
+/// same way. Dropping the client closes the connection and stops its task.
+pub struct XrplWsClient {
+    shared: Arc<Shared>,
+    url: String,
+    max_fee_drops: u64,
+    shutdown: watch::Sender<bool>,
+}
+
+impl Drop for XrplWsClient {
+    fn drop(&mut self) {
+        let _ = self.shutdown.send(true);
+    }
+}
+
+impl XrplWsClient {
+    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
+        self.max_fee_drops = drops;
+        self
+    }
+
+    /// Connect to an XRPL WebSocket endpoint (within 15 s) with automatic
+    /// reconnection.
+    pub async fn connect(url: &str) -> Result<Self, ClientError> {
+        let stream = open(url).await?;
+        let (event_tx, _) = broadcast::channel(EVENT_BUFFER);
+        let (shutdown, shutdown_rx) = watch::channel(false);
+        let shared = Arc::new(Shared {
+            pending: Mutex::new(HashMap::new()),
+            event_tx,
+            ids: AtomicU64::new(1),
+            connected: AtomicBool::new(false),
+            write_tx: Mutex::new(None),
+            active_subs: Mutex::new(Vec::new()),
+            started: Instant::now(),
+            last_heard: AtomicU64::new(0),
+            host: host_of(url),
+            shutdown: shutdown_rx,
+        });
+        tokio::spawn(supervise(shared.clone(), url.to_string(), stream));
+        // The supervisor marks the connection up before it reads; wait for it.
+        let waited = Instant::now();
+        while !shared.connected.load(Ordering::Relaxed) && waited.elapsed() < CONNECT_TIMEOUT {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        Ok(Self {
+            shared,
+            url: url.to_string(),
+            max_fee_drops: crate::client::DEFAULT_MAX_FEE_DROPS,
+            shutdown,
+        })
+    }
+
+    /// Close the connection and stop reconnecting (the same as dropping the
+    /// client). Requests in flight fail with [`ClientError::Disconnected`].
+    pub fn close(self) {}
+
+    fn subscription(
+        &self,
+        filter: impl Fn(&WsEvent) -> bool + Send + Sync + 'static,
+    ) -> Subscription {
+        Subscription {
+            rx: self.shared.event_tx.subscribe(),
+            filter: Box::new(filter),
+        }
+    }
+
+    async fn subscribe_with(
         &self,
         params: Value,
-    ) -> Result<(Value, broadcast::Receiver<WsEvent>), ClientError> {
-        let events = self.event_tx.subscribe();
-        let reply = self.raw_request("subscribe", params.clone()).await?;
-        let mut subs = self.active_subs.lock().await;
+        filter: impl Fn(&WsEvent) -> bool + Send + Sync + 'static,
+    ) -> Result<(Value, Subscription), ClientError> {
+        // Listen before asking, so no event between the reply and the
+        // receiver is lost.
+        let events = self.subscription(filter);
+        let reply = self.shared.request("subscribe", params.clone()).await?;
+        let mut subs = self.shared.active_subs.lock().await;
         if !subs.contains(&params) {
             subs.push(params);
         }
         Ok((reply, events))
     }
 
+    /// Subscribe with any `subscribe` parameters (`streams`, `accounts`,
+    /// `accounts_proposed`, `books`, …), returning `rippled`'s reply (an order
+    /// book snapshot, for instance) and a [`Subscription`] to **every** event
+    /// the connection carries (unfiltered: other subscriptions' too). The
+    /// subscription is restored after a reconnect.
+    pub async fn subscribe(&self, params: Value) -> Result<(Value, Subscription), ClientError> {
+        self.subscribe_with(params, |_| true).await
+    }
+
     /// Undo a [`XrplWsClient::subscribe`] with the same parameters.
     pub async fn unsubscribe(&self, params: Value) -> Result<(), ClientError> {
-        self.raw_request("unsubscribe", params.clone()).await?;
-        self.active_subs.lock().await.retain(|s| s != &params);
+        self.shared.request("unsubscribe", params.clone()).await?;
+        self.shared
+            .active_subs
+            .lock()
+            .await
+            .retain(|s| s != &params);
         Ok(())
     }
 
-    async fn subscribe_streams(
+    async fn subscribe_stream(
         &self,
-        streams: &[&str],
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        Ok(self.subscribe(json!({ "streams": streams })).await?.1)
+        stream: &str,
+        filter: impl Fn(&WsEvent) -> bool + Send + Sync + 'static,
+    ) -> Result<Subscription, ClientError> {
+        Ok(self
+            .subscribe_with(json!({ "streams": [stream] }), filter)
+            .await?
+            .1)
     }
 
-    /// Subscribe to ledger closes ([`WsEvent::Ledger`]).
-    pub async fn subscribe_ledger(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["ledger"]).await
+    /// Subscribe to ledger closes ([`WsEvent::Ledger`] only).
+    pub async fn subscribe_ledger(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("ledger", |e| matches!(e, WsEvent::Ledger(_)))
+            .await
     }
 
     /// Subscribe to validations from every validator the server hears
-    /// ([`WsEvent::Validation`]).
-    pub async fn subscribe_validations(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["validations"]).await
+    /// ([`WsEvent::Validation`] only).
+    pub async fn subscribe_validations(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("validations", |e| matches!(e, WsEvent::Validation(_)))
+            .await
     }
 
-    /// Subscribe to the server's load and fee changes ([`WsEvent::Server`]).
-    pub async fn subscribe_server(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["server"]).await
+    /// Subscribe to the server's load and fee changes ([`WsEvent::Server`] only).
+    pub async fn subscribe_server(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("server", |e| matches!(e, WsEvent::Server(_)))
+            .await
     }
 
-    /// Subscribe to consensus phase changes ([`WsEvent::Consensus`]).
-    pub async fn subscribe_consensus(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["consensus"]).await
+    /// Subscribe to consensus phase changes ([`WsEvent::Consensus`] only).
+    pub async fn subscribe_consensus(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("consensus", |e| matches!(e, WsEvent::Consensus(_)))
+            .await
     }
 
     /// Subscribe to each validated ledger's order-book trading
-    /// ([`WsEvent::BookChanges`]).
-    pub async fn subscribe_book_changes(
-        &self,
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["book_changes"]).await
+    /// ([`WsEvent::BookChanges`] only).
+    pub async fn subscribe_book_changes(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("book_changes", |e| matches!(e, WsEvent::BookChanges(_)))
+            .await
     }
 
-    /// Subscribe to validator manifests ([`WsEvent::Manifest`]).
-    pub async fn subscribe_manifests(&self) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["manifests"]).await
+    /// Subscribe to validator manifests ([`WsEvent::Manifest`] only).
+    pub async fn subscribe_manifests(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("manifests", |e| matches!(e, WsEvent::Manifest(_)))
+            .await
     }
 
-    /// Subscribe to an order book: every transaction that touches it
-    /// ([`WsEvent::Transaction`]). `taker_gets` / `taker_pays` are
-    /// `{"currency": "XRP"}` or `{"currency", "issuer"}`. With `snapshot`,
-    /// returns the book's current offers first (`both` adds the other side).
+    /// Subscribe to an order book: transactions ([`WsEvent::Transaction`];
+    /// the receiver does not tell this book's from another book
+    /// subscription's). `taker_gets` / `taker_pays` are `{"currency": "XRP"}`
+    /// or `{"currency", "issuer"}`. With `snapshot`, returns the book's
+    /// current offers first (`both` adds the other side).
     pub async fn subscribe_order_book(
         &self,
         taker_gets: Value,
         taker_pays: Value,
         snapshot: bool,
         both: bool,
-    ) -> Result<(OrderBookSnapshot, broadcast::Receiver<WsEvent>), ClientError> {
+    ) -> Result<(OrderBookSnapshot, Subscription), ClientError> {
         let book = json!({"taker_gets": taker_gets, "taker_pays": taker_pays, "snapshot": snapshot, "both": both});
-        let (reply, events) = self.subscribe(json!({ "books": [book] })).await?;
+        let (reply, events) = self
+            .subscribe_with(json!({ "books": [book] }), |e| {
+                matches!(e, WsEvent::Transaction(_))
+            })
+            .await?;
         Ok((serde_json::from_value(reply)?, events))
     }
 
     /// Subscribe to every validated transaction on the network
-    /// ([`WsEvent::Transaction`]).
-    pub async fn subscribe_transactions(
-        &self,
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["transactions"]).await
+    /// ([`WsEvent::Transaction`] with `validated: true` only).
+    pub async fn subscribe_transactions(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream(
+            "transactions",
+            |e| matches!(e, WsEvent::Transaction(t) if t.validated),
+        )
+        .await
     }
 
     /// Subscribe to transactions as they are proposed, before validation
-    /// (preliminary results; [`WsEvent::Transaction`] with `validated: false`).
-    pub async fn subscribe_transactions_proposed(
-        &self,
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        self.subscribe_streams(&["transactions_proposed"]).await
+    /// (preliminary results; [`WsEvent::Transaction`], `validated: false`).
+    pub async fn subscribe_transactions_proposed(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_stream("transactions_proposed", |e| {
+            matches!(e, WsEvent::Transaction(_))
+        })
+        .await
     }
 
-    /// Subscribe to the validated transactions that affect an account.
-    pub async fn subscribe_account(
-        &self,
-        account: &str,
-    ) -> Result<broadcast::Receiver<WsEvent>, ClientError> {
-        Ok(self.subscribe(json!({ "accounts": [account] })).await?.1)
+    /// Subscribe to the validated transactions that affect `account`: the
+    /// receiver gets only those ([`WsEvent::Transaction`] with
+    /// `validated: true` naming the account in the transaction or its
+    /// metadata), never another subscription's.
+    pub async fn subscribe_account(&self, account: &str) -> Result<Subscription, ClientError> {
+        let who = account.to_string();
+        Ok(self
+            .subscribe_with(
+                json!({ "accounts": [account] }),
+                move |e| matches!(e, WsEvent::Transaction(t) if t.validated && t.affects(&who)),
+            )
+            .await?
+            .1)
     }
 
     /// Unsubscribe from ledger closes.
@@ -397,14 +482,14 @@ impl XrplWsClient {
         self.unsubscribe(json!({"streams": ["ledger"]})).await
     }
 
-    /// Get a receiver for all subscription events.
-    pub fn events(&self) -> broadcast::Receiver<WsEvent> {
-        self.event_tx.subscribe()
+    /// Every event the connection carries, from now on.
+    pub fn events(&self) -> Subscription {
+        self.subscription(|_| true)
     }
 
     /// Returns true if the WebSocket is currently connected.
     pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed)
+        self.shared.connected.load(Ordering::Relaxed)
     }
 
     /// Get the URL this client is connected to.
@@ -413,54 +498,206 @@ impl XrplWsClient {
     }
 }
 
+/// The events of one subscription: only the kind it asked for (an account's
+/// transactions only for that account), plus the connection's
+/// [`WsEvent::Disconnected`], [`WsEvent::Reconnected`] and
+/// [`WsEvent::ResubscribeFailed`]. A receiver that falls more than 1,024
+/// events behind gets [`WsEvent::Missed`] with the count, instead of the
+/// stream ending.
+pub struct Subscription {
+    rx: broadcast::Receiver<WsEvent>,
+    filter: Box<dyn Fn(&WsEvent) -> bool + Send + Sync>,
+}
+
+impl Subscription {
+    /// The next event; `None` once the client is dropped.
+    pub async fn recv(&mut self) -> Option<WsEvent> {
+        loop {
+            match self.rx.recv().await {
+                Ok(event) if event.is_connection_event() || (self.filter)(&event) => {
+                    return Some(event)
+                }
+                Ok(_) => {}
+                Err(RecvError::Lagged(n)) => return Some(WsEvent::Missed(n)),
+                Err(RecvError::Closed) => return None,
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Subscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Subscription").finish_non_exhaustive()
+    }
+}
+
 impl Client for XrplWsClient {
+    fn max_fee_drops(&self) -> u64 {
+        self.max_fee_drops
+    }
+
     async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
-        let mut wait_iters = 0u32;
-        while !self.connected.load(Ordering::Relaxed) {
-            if wait_iters >= 300 {
-                return Err(ClientError::Disconnected);
+        self.shared.request(command, params).await
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::tungstenite::Message;
+
+    #[test]
+    fn logs_name_the_host_only() {
+        assert_eq!(
+            host_of("wss://user:token@node.example:443/ws?key=abc"),
+            "node.example:443"
+        );
+        assert_eq!(host_of("ws://127.0.0.1:6006"), "127.0.0.1:6006");
+        assert_eq!(host_of("wss://s1.ripple.com/"), "s1.ripple.com");
+    }
+
+    /// A local server: answers `subscribe` and `ping`, then sends `events`.
+    async fn server(events: Vec<Value>) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let handle = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(tcp).await.unwrap();
+            let mut sent = false;
+            while let Some(Ok(message)) = ws.next().await {
+                let Message::Text(text) = message else {
+                    if matches!(message, Message::Close(_)) {
+                        break;
+                    }
+                    continue;
+                };
+                let request: Value = serde_json::from_str(&text).unwrap();
+                let reply = json!({"id": request["id"], "result": {}, "status": "success", "type": "response"});
+                ws.send(Message::Text(reply.to_string().into()))
+                    .await
+                    .unwrap();
+                if request["command"] == "subscribe" && !sent {
+                    sent = true;
+                    for event in &events {
+                        ws.send(Message::Text(event.to_string().into()))
+                            .await
+                            .unwrap();
+                    }
+                }
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            wait_iters += 1;
+        });
+        (url, handle)
+    }
+
+    async fn next(s: &mut Subscription) -> WsEvent {
+        tokio::time::timeout(Duration::from_secs(5), s.recv())
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    fn payment(from: &str, to: &str) -> Value {
+        json!({"type": "transaction", "validated": true, "engine_result": "tesSUCCESS",
+            "engine_result_code": 0, "engine_result_message": "ok", "ledger_index": 5,
+            "transaction": {"TransactionType": "Payment", "Account": from, "Destination": to,
+                "Amount": "1", "Fee": "12", "Sequence": 1, "SigningPubKey": "", "Flags": 0},
+            "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": []}})
+    }
+
+    /// An account subscription hears that account's transactions only, and
+    /// a ledger subscription ledgers only, on one connection.
+    #[tokio::test]
+    async fn each_subscription_hears_only_its_own_events() {
+        let a = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+        let b = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        let c = "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1";
+        let ledger = json!({"type": "ledgerClosed", "ledger_index": 6, "ledger_hash": "AB",
+            "ledger_time": 1, "fee_base": 10, "reserve_base": 1, "reserve_inc": 1, "txn_count": 0});
+        let (url, _server) = server(vec![payment(b, c), ledger, payment(a, c)]).await;
+        let ws = XrplWsClient::connect(&url).await.unwrap();
+        let mut all = ws.events();
+        let mut account = ws.subscribe_account(a).await.unwrap();
+        let mut ledgers = ws.subscribe_ledger().await.unwrap();
+        match next(&mut account).await {
+            WsEvent::Transaction(t) => assert!(t.affects(a) && !t.affects(b)),
+            other => panic!("{other:?}"),
         }
-
-        let id = self.id_counter.fetch_add(1, Ordering::Relaxed);
-        tracing::debug!(command = command, id = id, "sending WS request");
-        let (tx, rx) = oneshot::channel();
-
-        {
-            let mut map = self.pending.lock().await;
-            map.insert(id, tx);
+        assert!(matches!(next(&mut ledgers).await, WsEvent::Ledger(_)));
+        for _ in 0..3 {
+            next(&mut all).await;
         }
+    }
 
-        let msg = if let Some(obj) = params.as_object() {
-            let mut m = serde_json::Map::new();
-            m.insert("command".into(), Value::String(command.into()));
-            m.insert("id".into(), Value::Number(id.into()));
-            for (k, v) in obj {
-                m.insert(k.clone(), v.clone());
+    /// Dropping the client closes the connection: the server sees it end.
+    #[tokio::test]
+    async fn dropping_the_client_closes_the_connection() {
+        let (url, server) = server(vec![]).await;
+        let ws = XrplWsClient::connect(&url).await.unwrap();
+        ws.subscribe_ledger().await.unwrap();
+        drop(ws);
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .expect("the server's connection did not end")
+            .unwrap();
+    }
+
+    /// The server drops the connection: the client says so, reconnects,
+    /// subscribes again, says so, and the subscription keeps hearing events.
+    #[tokio::test]
+    async fn a_dropped_connection_is_restored_with_its_subscriptions() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let resubscribed = Arc::new(AtomicBool::new(false));
+        let seen = resubscribed.clone();
+        tokio::spawn(async move {
+            for round in 0..2 {
+                let (tcp, _) = listener.accept().await.unwrap();
+                let mut ws = tokio_tungstenite::accept_async(tcp).await.unwrap();
+                while let Some(Ok(Message::Text(text))) = ws.next().await {
+                    let request: Value = serde_json::from_str(&text).unwrap();
+                    let reply = json!({"id": request["id"], "result": {}, "status": "success", "type": "response"});
+                    ws.send(Message::Text(reply.to_string().into()))
+                        .await
+                        .unwrap();
+                    if request["command"] == "subscribe" {
+                        if round == 0 {
+                            break; // drop the first connection after the subscribe
+                        }
+                        seen.store(true, Ordering::Relaxed);
+                        let ledger = json!({"type": "ledgerClosed", "ledger_index": 7});
+                        ws.send(Message::Text(ledger.to_string().into()))
+                            .await
+                            .unwrap();
+                    }
+                }
             }
-            Value::Object(m)
-        } else {
-            json!({"command": command, "id": id})
+        });
+        let ws = XrplWsClient::connect(&url).await.unwrap();
+        let mut ledgers = ws.subscribe_ledger().await.unwrap();
+        assert!(matches!(next(&mut ledgers).await, WsEvent::Disconnected));
+        assert!(matches!(next(&mut ledgers).await, WsEvent::Reconnected));
+        assert!(resubscribed.load(Ordering::Relaxed));
+        assert!(matches!(next(&mut ledgers).await, WsEvent::Ledger(l) if l.ledger_index == 7));
+    }
+
+    /// A receiver that falls behind is told how much it missed, and keeps going.
+    #[tokio::test]
+    async fn a_slow_receiver_is_told_what_it_missed() {
+        let (tx, rx) = broadcast::channel(2);
+        let mut sub = Subscription {
+            rx,
+            filter: Box::new(|_| true),
         };
-
-        {
-            let wtx = self.write_tx.lock().await;
-            wtx.send(msg.to_string())
-                .await
-                .map_err(|_| ClientError::Disconnected)?;
+        for _ in 0..5 {
+            tx.send(WsEvent::Reconnected).unwrap();
         }
-
-        match tokio::time::timeout(Duration::from_secs(30), rx).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(ClientError::Disconnected),
-            Err(_) => {
-                let mut map = self.pending.lock().await;
-                map.remove(&id);
-                Err(ClientError::Timeout(Duration::from_secs(30)))
-            }
-        }
+        assert!(matches!(sub.recv().await, Some(WsEvent::Missed(3))));
+        assert!(matches!(sub.recv().await, Some(WsEvent::Reconnected)));
+        drop(tx);
+        assert!(matches!(sub.recv().await, Some(WsEvent::Reconnected)));
+        assert!(sub.recv().await.is_none());
     }
 }
 

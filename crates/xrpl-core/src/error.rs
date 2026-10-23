@@ -3,8 +3,10 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-/// Everything a core function can fail with.
+/// Everything a core function can fail with. New variants may be added
+/// in minor releases (`#[non_exhaustive]`): match with a `_` arm.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum CoreError {
     /// Not valid base58.
     #[error("invalid base58: {0}")]
@@ -47,8 +49,8 @@ pub enum CoreError {
     #[error("signing failed: {0}")]
     SigningFailed(String),
 
-    /// A key of the wrong length.
-    #[error("invalid public key length: expected {expected}, got {got}")]
+    /// A key (public or secret) of the wrong length.
+    #[error("invalid key length: expected {expected} bytes, got {got}")]
     InvalidKeyLength {
         /// The length the key should have.
         expected: usize,

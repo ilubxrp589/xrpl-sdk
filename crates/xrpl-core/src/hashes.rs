@@ -47,10 +47,14 @@ pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
 }
 
 /// The ID of a signed transaction blob (hex, as `submit` takes it).
+///
+/// `rippled` hashes the transaction as it re-serializes it (canonical field
+/// order and forms), not the bytes it was sent, so this does the same: a
+/// blob whose fields someone reordered on the way still has the ID the
+/// ledger will show.
 pub fn hash_signed_tx_blob(tx_blob: &str) -> Result<Hash256, CoreError> {
     let blob = hex::decode(tx_blob).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-    require_signed(&decode_transaction_binary(&blob)?)?;
-    Ok(transaction_id(&blob))
+    hash_signed_tx(&decode_transaction_binary(&blob)?)
 }
 
 fn require_signed(tx: &Value) -> Result<(), CoreError> {
@@ -63,8 +67,10 @@ fn require_signed(tx: &Value) -> Result<(), CoreError> {
         .get("TransactionType")
         .and_then(Value::as_str)
         .is_some_and(|t| PSEUDO_TRANSACTIONS.contains(&t));
-    let inner_batch =
-        tx.get("Flags").and_then(Value::as_u64).unwrap_or(0) & TF_INNER_BATCH_TXN != 0;
+    let inner_batch = tx
+        .get("Flags")
+        .and_then(crate::codec::encode::read_uint32)
+        .is_some_and(|f| u64::from(f) & TF_INNER_BATCH_TXN != 0);
     if has("TxnSignature") || has("Signers") || pseudo || inner_batch {
         Ok(())
     } else {
@@ -74,9 +80,12 @@ fn require_signed(tx: &Value) -> Result<(), CoreError> {
     }
 }
 
-/// Ledger entry IDs ("keylets"), as rippled computes them: SHA-512Half of a
-/// two-byte namespace and the entry's identifying fields. Addresses are
-/// classic addresses; IDs are hex.
+/// Ledger entry IDs ("keylets"), as rippled computes them (`Indexes.cpp`):
+/// SHA-512Half of a two-byte namespace and the entry's identifying fields.
+/// Addresses are classic addresses; IDs are hex. Every ledger entry type
+/// `rippled` 3.4.1 has can be found from these, except an `NFTokenPage`,
+/// which is looked up from a range ([`keylet::nftoken_page_min`] /
+/// [`keylet::nftoken_page_max`], or `account_nfts`).
 ///
 /// ```
 /// use xrpl_core::hashes::keylet;
@@ -86,7 +95,7 @@ fn require_signed(tx: &Value) -> Result<(), CoreError> {
 pub mod keylet {
     use super::*;
 
-    /// One side of an AMM pool.
+    /// An asset: one side of an AMM pool, an order book or a bridge.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Issue<'a> {
         /// XRP.
@@ -117,13 +126,21 @@ pub mod keylet {
         Ok(Hash256::from_hex(hex_id)?.0)
     }
 
+    /// A currency code as [`Currency::from_code`] reads it ("USD", "RLUSD",
+    /// 40 hex digits; "XRP" is XRP's all-zero code, as in `rippled`).
     fn currency(code: &str) -> Result<[u8; 20], CoreError> {
-        let c = if code.len() == 40 {
-            Currency::from_hex(code)?
-        } else {
-            Currency::from_ascii(code)?
-        };
-        Ok(c.to_bytes())
+        Ok(Currency::from_code(code)?.to_bytes())
+    }
+
+    /// An Issue as rippled hashes one: currency, then issuer (both all zero for XRP).
+    fn issue_bytes(issue: Issue<'_>) -> Result<([u8; 20], [u8; 20]), CoreError> {
+        match issue {
+            Issue::Xrp => Ok(([0; 20], [0; 20])),
+            Issue::Token {
+                currency: c,
+                issuer,
+            } => Ok((currency(c)?, id(issuer)?)),
+        }
     }
 
     fn account_seq(space: u8, account: &str, seq: u32) -> Result<Hash256, CoreError> {
@@ -304,6 +321,158 @@ pub mod keylet {
         ))
     }
 
+    /// A cross-chain bridge (`XChainBridge`): each chain's door account and
+    /// asset.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Bridge<'a> {
+        /// The door account on the locking chain.
+        pub locking_chain_door: &'a str,
+        /// The asset on the locking chain.
+        pub locking_chain_issue: Issue<'a>,
+        /// The door account on the issuing chain.
+        pub issuing_chain_door: &'a str,
+        /// The asset on the issuing chain.
+        pub issuing_chain_issue: Issue<'a>,
+    }
+
+    /// `Bridge`, as the ledger of `door` (one of the bridge's two doors)
+    /// holds it: the door and its chain's currency.
+    pub fn bridge(bridge: &Bridge<'_>, door: &str) -> Result<Hash256, CoreError> {
+        let issue = if door == bridge.locking_chain_door {
+            bridge.locking_chain_issue
+        } else if door == bridge.issuing_chain_door {
+            bridge.issuing_chain_issue
+        } else {
+            return Err(CoreError::ValidationError(format!(
+                "{door} is neither of the bridge's doors"
+            )));
+        };
+        let (currency, _) = issue_bytes(issue)?;
+        Ok(index_hash(b'H', &[&id(door)?, &currency]))
+    }
+
+    fn bridge_claim(space: u8, bridge: &Bridge<'_>, sequence: u64) -> Result<Hash256, CoreError> {
+        let (lc, li) = issue_bytes(bridge.locking_chain_issue)?;
+        let (ic, ii) = issue_bytes(bridge.issuing_chain_issue)?;
+        Ok(index_hash(
+            space,
+            &[
+                &id(bridge.locking_chain_door)?,
+                &lc,
+                &li,
+                &id(bridge.issuing_chain_door)?,
+                &ic,
+                &ii,
+                &sequence.to_be_bytes(),
+            ],
+        ))
+    }
+
+    /// `XChainOwnedClaimID`: the bridge and the claim ID.
+    pub fn xchain_owned_claim_id(bridge: &Bridge<'_>, claim_id: u64) -> Result<Hash256, CoreError> {
+        bridge_claim(b'Q', bridge, claim_id)
+    }
+
+    /// `XChainOwnedCreateAccountClaimID`: the bridge and the account-create count.
+    pub fn xchain_owned_create_account_claim_id(
+        bridge: &Bridge<'_>,
+        create_count: u64,
+    ) -> Result<Hash256, CoreError> {
+        bridge_claim(b'K', bridge, create_count)
+    }
+
+    /// `DepositPreauth` by credentials: the owner and the credentials it
+    /// accepts, each `(issuer, credential type in hex)`, in any order (they
+    /// are sorted and de-duplicated as rippled's set does).
+    pub fn deposit_preauth_credentials(
+        owner: &str,
+        credentials: &[(&str, &str)],
+    ) -> Result<Hash256, CoreError> {
+        let mut creds = credentials
+            .iter()
+            .map(|(issuer, kind)| {
+                Ok((
+                    id(issuer)?,
+                    hex::decode(kind).map_err(|e| CoreError::InvalidHex(e.to_string()))?,
+                ))
+            })
+            .collect::<Result<Vec<_>, CoreError>>()?;
+        creds.sort();
+        creds.dedup();
+        let hashes: Vec<[u8; 32]> = creds
+            .iter()
+            .map(|(issuer, kind)| {
+                let mut data = issuer.to_vec();
+                data.extend_from_slice(kind);
+                sha512_half(&data)
+            })
+            .collect();
+        let count = u64::try_from(hashes.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes();
+        let mut parts: Vec<&[u8]> = Vec::with_capacity(hashes.len() + 2);
+        let owner = id(owner)?;
+        parts.push(&owner);
+        parts.extend(hashes.iter().map(|h| &h[..]));
+        // beast's hash_append of a vector ends with its length.
+        parts.push(&count);
+        Ok(index_hash(b'P', &parts))
+    }
+
+    /// `Sponsorship`: the sponsor and the sponsored account.
+    pub fn sponsorship(sponsor: &str, sponsee: &str) -> Result<Hash256, CoreError> {
+        Ok(index_hash(b'>', &[&id(sponsor)?, &id(sponsee)?]))
+    }
+
+    /// An order book's first directory (`getBookBase`): offers that take
+    /// `taker_pays` and give `taker_gets`, with quality 0. Offers at a given
+    /// quality are in [`book_directory`].
+    pub fn book_base(taker_pays: Issue<'_>, taker_gets: Issue<'_>) -> Result<Hash256, CoreError> {
+        let (pc, pi) = issue_bytes(taker_pays)?;
+        let (gc, gi) = issue_bytes(taker_gets)?;
+        Ok(book_directory_at(
+            index_hash(b'B', &[&pc, &gc, &pi, &gi]),
+            0,
+        ))
+    }
+
+    /// The order-book directory for `quality` (a `DirectoryNode`'s
+    /// `ExchangeRate`, as a number): the book base with the quality in its
+    /// last eight bytes.
+    pub fn book_directory(
+        taker_pays: Issue<'_>,
+        taker_gets: Issue<'_>,
+        quality: u64,
+    ) -> Result<Hash256, CoreError> {
+        Ok(book_directory_at(
+            book_base(taker_pays, taker_gets)?,
+            quality,
+        ))
+    }
+
+    fn book_directory_at(base: Hash256, quality: u64) -> Hash256 {
+        let mut key = base.0;
+        let (_, last) = key.split_at_mut(24);
+        last.copy_from_slice(&quality.to_be_bytes());
+        Hash256(key)
+    }
+
+    /// The lowest `NFTokenPage` ID an account's pages can have (its
+    /// AccountID, then 12 zero bytes).
+    pub fn nftoken_page_min(owner: &str) -> Result<Hash256, CoreError> {
+        let mut key = [0u8; 32];
+        key[..20].copy_from_slice(&id(owner)?);
+        Ok(Hash256(key))
+    }
+
+    /// The highest `NFTokenPage` ID an account's pages can have (its
+    /// AccountID, then 12 bytes of 0xFF): its last page.
+    pub fn nftoken_page_max(owner: &str) -> Result<Hash256, CoreError> {
+        let mut key = [0xFFu8; 32];
+        key[..20].copy_from_slice(&id(owner)?);
+        Ok(Hash256(key))
+    }
+
     /// The `Amendments` singleton.
     pub fn amendments() -> Hash256 {
         index_hash(b'f', &[])
@@ -432,7 +601,7 @@ mod tests {
         for line in std::fs::read_to_string(path).unwrap().lines() {
             let o: Value = serde_json::from_str(line).unwrap();
             let str_of = |k: &str| o[k].as_str().unwrap();
-            let u32_of = |k: &str| o[k].as_u64().unwrap() as u32;
+            let u32_of = |k: &str| u32::try_from(o[k].as_u64().unwrap()).unwrap();
             let ty = str_of("LedgerEntryType");
             let computed = match ty {
                 "AccountRoot" => keylet::account(str_of("Account")).unwrap(),
@@ -532,5 +701,118 @@ mod tests {
             )
             .unwrap()
         );
+    }
+
+    /// rippled's ID is the hash of its own re-serialization: a signed blob
+    /// with two fields swapped (which rippled still reads) has the ID of the
+    /// canonical one, not the hash of the bytes as sent.
+    #[test]
+    fn a_reordered_blob_has_the_canonical_id() {
+        let canonical = "120000220000000024000000016140000000000F424068400000000000000C7321030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D43574473045022100BC95504DC72DDBDAA0F5EAA973EC07E057FD9A3E7500AC3CF07454C68219985E02200B0992C47857A867F5664BB6F74E62F086A59A0C31848E0FB3819127E8EC0A1281148049717CC948789F32F267ADC2582484E3DFA6988314B5F762798A53D543A014CAF8B297CFF8F2F937E8";
+        let reordered = canonical.replacen(
+            "1200002200000000240000000161",
+            "1200002400000001220000000061",
+            1,
+        );
+        assert_ne!(reordered, canonical);
+        let id = hash_signed_tx_blob(canonical).unwrap();
+        assert_eq!(id, transaction_id(&hex::decode(canonical).unwrap()));
+        assert_eq!(hash_signed_tx_blob(&reordered).unwrap(), id);
+        assert_ne!(transaction_id(&hex::decode(&reordered).unwrap()), id);
+    }
+
+    /// rippled 3.4.1 `ledger_entry` answers (entryNotFound carries the index
+    /// it computed), 2026-10-23, and a mainnet order-book directory.
+    #[test]
+    fn new_keylets_match_rippled() {
+        const A: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+        const B: &str = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        const C: &str = "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1";
+        assert_eq!(
+            s(keylet::deposit_preauth_credentials(A, &[(B, "4B5943")]).unwrap()),
+            "1FAD74A795A2148FE7FD370F37DBFD2D7D33A20236182B7450E37EE5368BC698"
+        );
+        for creds in [[(C, "AA"), (B, "4B5943")], [(B, "4B5943"), (C, "AA")]] {
+            assert_eq!(
+                s(keylet::deposit_preauth_credentials(A, &creds).unwrap()),
+                "3769E2AD8BC6BCD48242A1FF7DBFE667A5CD78376B9704A0E4744BD3D81DB382"
+            );
+        }
+        let xrp_bridge = keylet::Bridge {
+            locking_chain_door: A,
+            locking_chain_issue: Issue::Xrp,
+            issuing_chain_door: B,
+            issuing_chain_issue: Issue::Xrp,
+        };
+        assert_eq!(
+            s(keylet::bridge(&xrp_bridge, A).unwrap()),
+            "20C736B81A2632BE6A0FCE130FC3649334A041B79C6017896709F39B6059DB92"
+        );
+        assert_eq!(
+            s(keylet::bridge(&xrp_bridge, B).unwrap()),
+            "5CE45F9906FC077A90654A76C4B60302CC2F75ACE80F8DC8BCA7482AE782EA74"
+        );
+        assert!(keylet::bridge(&xrp_bridge, C).is_err());
+        let token_bridge = keylet::Bridge {
+            locking_chain_door: A,
+            locking_chain_issue: Issue::Token {
+                currency: "USD",
+                issuer: C,
+            },
+            issuing_chain_door: B,
+            issuing_chain_issue: Issue::Token {
+                currency: "USD",
+                issuer: B,
+            },
+        };
+        assert_eq!(
+            s(keylet::bridge(&token_bridge, A).unwrap()),
+            "75705E90AEF08673970F9A5D1F7CB2EFA26426CAEACB3AB7DBB04724E2CAED04"
+        );
+        assert_eq!(
+            s(keylet::xchain_owned_claim_id(&token_bridge, 5).unwrap()),
+            "9A2056C0B047D9BA8E00A0171AF1746B6CDCCDB028D56F3BEDF7298F752B003D"
+        );
+        assert_eq!(
+            s(keylet::xchain_owned_create_account_claim_id(&xrp_bridge, 7).unwrap()),
+            "AB149AE49054FE238765E056A93DB965828BAA245BC8B09F4491E097743A5B5A"
+        );
+        assert_eq!(
+            s(keylet::sponsorship(A, B).unwrap()),
+            "2AACE00AD0C7A845AF761136F6CC1D2269652F556DC1B558D352CBE52198556F"
+        );
+        // Mainnet DirectoryNode (tests/fixtures/mainnet_ledger_objects.jsonl):
+        // TakerPays BGHOUSE, TakerGets XRP, ExchangeRate 59038d7ea4c68000.
+        let line = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/mainnet_ledger_objects.jsonl"
+        ))
+        .unwrap();
+        let dir: Value = line
+            .lines()
+            .map(|l| serde_json::from_str::<Value>(l).unwrap())
+            .find(|v| {
+                v["LedgerEntryType"] == "DirectoryNode" && v.get("TakerPaysCurrency").is_some()
+            })
+            .unwrap();
+        let issuer = crate::address::encode_account_id(
+            &<[u8; 20]>::try_from(hex::decode(dir["TakerPaysIssuer"].as_str().unwrap()).unwrap())
+                .unwrap(),
+        );
+        let quality = u64::from_str_radix(dir["ExchangeRate"].as_str().unwrap(), 16).unwrap();
+        assert_eq!(
+            s(keylet::book_directory(
+                Issue::Token {
+                    currency: dir["TakerPaysCurrency"].as_str().unwrap(),
+                    issuer: &issuer
+                },
+                Issue::Xrp,
+                quality
+            )
+            .unwrap()),
+            dir["RootIndex"].as_str().unwrap()
+        );
+        assert!(s(keylet::nftoken_page_min(A).unwrap()).ends_with(&"0".repeat(24)));
+        assert!(s(keylet::nftoken_page_max(A).unwrap()).ends_with(&"F".repeat(24)));
     }
 }

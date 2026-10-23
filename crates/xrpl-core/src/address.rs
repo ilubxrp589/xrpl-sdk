@@ -20,7 +20,11 @@ const XRPL_ALPHABET: &[u8; 58] = b"rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm
 /// SAFETY: All bytes in XRPL_ALPHABET are ASCII (< 128), so indexing into a [u8; 128] is safe.
 /// The index `i` ranges 0..58, so XRPL_ALPHABET[i] is always in bounds.
 /// This runs in a const context where `.get()` is not available.
-#[allow(clippy::indexing_slicing)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    reason = "const context: i < 58 and every alphabet byte < 128"
+)]
 const DECODE_TABLE: [u8; 128] = {
     let mut table = [255u8; 128];
     let mut i = 0;
@@ -80,9 +84,20 @@ fn base58_encode(data: &[u8]) -> String {
 }
 
 /// Base58-decode string to raw bytes.
+/// The longest base58 string decoded (every XRPL base58 value — address,
+/// X-address, seed, public key — is far shorter). Decoding takes time
+/// quadratic in the length, so a server cannot make an "address" in a
+/// response cost minutes of CPU.
+const MAX_BASE58_LEN: usize = 128;
+
 fn base58_decode(s: &str) -> Result<Vec<u8>, CoreError> {
     if s.is_empty() {
         return Ok(Vec::new());
+    }
+    if s.len() > MAX_BASE58_LEN {
+        return Err(CoreError::InvalidBase58(format!(
+            "longer than {MAX_BASE58_LEN} characters"
+        )));
     }
 
     // Count leading 'r' (base58 zero character)
@@ -274,7 +289,8 @@ pub fn encode_seed(bytes: &[u8; 16], key_type: KeyType) -> String {
         KeyType::Secp256k1 => &[0x21],
     };
 
-    let mut payload = Vec::with_capacity(prefix.len() + 16 + 4);
+    // The payload holds the seed: wiped when done.
+    let mut payload = zeroize::Zeroizing::new(Vec::with_capacity(prefix.len() + 16 + 4));
     payload.extend_from_slice(prefix);
     payload.extend_from_slice(bytes);
     let cksum = checksum(&payload);
@@ -283,8 +299,25 @@ pub fn encode_seed(bytes: &[u8; 16], key_type: KeyType) -> String {
 }
 
 /// Decode a base58check seed string to 16 raw bytes + key type.
+///
+/// Errors say only what kind of mistake the string has: never a character
+/// of it or a checksum computed from it, which would put part of a secret
+/// into a log.
 pub fn decode_seed(seed: &str) -> Result<([u8; 16], KeyType), CoreError> {
-    let decoded = base58_decode(seed)?;
+    decode_seed_bytes(seed).map_err(|e| {
+        CoreError::InvalidSeed(
+            match e {
+                CoreError::InvalidBase58(_) => "not base58 (a character outside the XRPL alphabet)",
+                CoreError::InvalidChecksum { .. } => "the checksum does not match (a typo?)",
+                _ => "not a seed (wrong length or prefix)",
+            }
+            .to_string(),
+        )
+    })
+}
+
+fn decode_seed_bytes(seed: &str) -> Result<([u8; 16], KeyType), CoreError> {
+    let decoded = zeroize::Zeroizing::new(base58_decode(seed)?);
 
     // Try Ed25519 prefix first (3 bytes + 16 bytes + 4 bytes = 23)
     if let Ok(d) = <[u8; 23]>::try_from(decoded.as_slice()) {
@@ -618,5 +651,31 @@ mod tests {
         let ed_encoded = encode_seed(&bytes, KeyType::Ed25519);
         let (_, kt) = decode_seed(&ed_encoded).unwrap();
         assert_eq!(kt, KeyType::Ed25519);
+    }
+
+    /// A seed with a typo or a stray character is refused without its
+    /// characters, or a checksum computed from it, in the message.
+    #[test]
+    fn seed_errors_carry_no_part_of_the_seed() {
+        for (bad, why) in [
+            ("sp5fghtJtpUorTwvof1NpDXAzNwf6", "checksum"),
+            ("sp5fghtJtpUorTwvof1NpDXAzNwf0", "base58"),
+            ("sp5fghtJtpUorTwvof1NpDXAz", "not a seed"),
+        ] {
+            let message = decode_seed(bad).unwrap_err().to_string();
+            assert!(message.contains(why), "{message}");
+            assert!(
+                !message.contains("sp5f") && !message.contains('[') && !message.contains('0'),
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_huge_string_is_refused_before_decoding() {
+        let huge = "p".repeat(200_000);
+        let started = std::time::Instant::now();
+        assert!(decode_account_id(&huge).is_err());
+        assert!(started.elapsed() < std::time::Duration::from_millis(50));
     }
 }

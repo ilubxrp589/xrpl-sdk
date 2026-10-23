@@ -54,7 +54,7 @@
 //!     for account in utils::get_balance_changes(meta)? {
 //!         println!("{}: {:?}", account.account, account.balances);
 //!     }
-//!     println!("keep this seed to reuse the wallet: {}", wallet.seed().unwrap());
+//!     println!("keep this seed to reuse the wallet: {}", wallet.seed().unwrap().as_str());
 //!     Ok(())
 //! }
 //! ```
@@ -68,7 +68,9 @@
 //! `rippled` does by default; [`Wallet::generate_with_type`] makes secp256k1
 //! ones. [`Wallet::from_seed`] restores a wallet from its seed (`s…`), and
 //! [`Wallet::seed`] gives the seed of a wallet made from one. Private keys and
-//! seeds are wiped from memory when dropped.
+//! seeds are wiped from memory when dropped and never shown by `Debug` (the
+//! limits of that, and what is signed how, are in
+//! [docs/CRYPTO.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/CRYPTO.md)).
 //!
 //! Signing needs no network. This example signs a payment and checks the
 //! result against `rippled` 3.4.1, which signed the same transaction with the
@@ -192,8 +194,7 @@
 //! let approval = bob.sign_batch(&tx)?;                       // Bob approves
 //! batch::add_batch_signers(&mut tx, vec![approval])?;
 //! let blob = alice.sign_and_encode(&tx)?;                   // Alice signs the batch
-//! let last = tx["LastLedgerSequence"].as_u64().unwrap() as u32;
-//! client.submit_and_wait(&blob, last).await?;
+//! client.submit_and_wait(&blob).await?;
 //! for id in batch::inner_transaction_ids(&tx)? {
 //!     println!("inner transaction {id}");                  // each is on the ledger under this ID
 //! }
@@ -204,23 +205,31 @@
 //!
 //! | Function | What it does |
 //! |---|---|
-//! | [`submit_transaction`] | autofill, sign, submit, wait for validation |
+//! | [`submit_transaction`] | autofill, sign, submit, wait for the final outcome |
 //! | [`autofill_and_sign`] | autofill and sign; returns the blob |
-//! | [`Client::autofill`] | fill `Sequence`, `Fee`, `LastLedgerSequence` where missing |
-//! | [`Client::submit`] | submit a signed blob once |
-//! | [`Client::submit_and_wait`] | submit, resubmit on a retry result, wait until validated or expired |
+//! | [`Client::autofill`] | fill `Sequence`, `Fee` (capped), `LastLedgerSequence` and `NetworkID` where missing |
+//! | [`Client::autofill_for_multisigning`] | the same, with the fee for a number of signers |
+//! | [`Client::submit`] | submit a signed blob once; the answer is preliminary |
+//! | [`Client::submit_and_wait`] | submit, then wait until it is validated or provably in no ledger |
 //!
-//! [`Client::submit`] sorts the engine result into a [`ClientError`]:
+//! [`Client::submit_and_wait`], and so [`submit_transaction`], answers only
+//! with a final outcome:
 //!
-//! | Result | Error | Meaning |
+//! | Outcome | Meaning | Sign a replacement? |
 //! |---|---|---|
-//! | `tes…` | none | applied (still check the validated result) |
-//! | `tec…` | [`ClientError::TransactionClaimed`] | failed, but the fee was charged |
-//! | `tem…`, `tef…`, most `tel…` | [`ClientError::TransactionFailed`] | refused; never reaches a ledger |
-//! | `ter…`, `telINSUF_FEE_P`, `telCAN_NOT_QUEUE…` | [`ClientError::TransactionRetry`] | may succeed if submitted again |
+//! | `Ok(result)` | validated with `tesSUCCESS` | no need |
+//! | [`ClientError::TransactionClaimed`] | validated with a `tec`: failed, fee charged (`result` holds the transaction) | yes |
+//! | [`ClientError::TransactionFailed`] | malformed (`tem`), or refused (`tef`, `tel`) and in no ledger | yes |
+//! | [`ClientError::TransactionExpired`] | its `LastLedgerSequence` is validated and no ledger holds it | yes |
+//! | [`ClientError::OutcomeUnknown`] | sent, but the outcome could not be learned | **not yet**: look it up by `hash` first |
+//! | [`ClientError::FeeTooHigh`] (from autofill) | the fee would pass the client's cap (2 XRP unless set with `with_max_fee_drops`) | nothing was sent |
 //!
-//! [`Client::submit_and_wait`] returns [`ClientError::TransactionExpired`] if
-//! `LastLedgerSequence` passes without the transaction being validated.
+//! [`Client::submit`] sorts the server's *preliminary* result into a
+//! [`ClientError`] (`tec` → [`ClientError::TransactionClaimed`], `tem`/`tef`/most
+//! `tel` → [`ClientError::TransactionFailed`], `ter`/`telINSUF_FEE_P`/`telCAN_NOT_QUEUE…`
+//! → [`ClientError::TransactionRetry`]). Only a `tem` is final there: a
+//! transaction that got `tec` or `terQUEUED` can still succeed, so never sign
+//! a replacement on a preliminary result alone.
 //!
 //! ## Querying the ledger
 //!
@@ -294,7 +303,7 @@
 //! # async fn run() -> Result<(), ClientError> {
 //! let ws = XrplWsClient::connect("wss://xrplcluster.com").await?;
 //! let mut ledgers = ws.subscribe_ledger().await?;
-//! while let Ok(event) = ledgers.recv().await {
+//! while let Some(event) = ledgers.recv().await {
 //!     match event {
 //!         WsEvent::Ledger(l) => println!("ledger {} closed with {:?} transactions", l.ledger_index, l.txn_count),
 //!         WsEvent::Reconnected => println!("reconnected; subscriptions restored"),
@@ -304,9 +313,16 @@
 //! # Ok(()) }
 //! ```
 //!
-//! The WebSocket client reconnects on its own and resubscribes. Every
-//! `rippled` stream arrives as a typed [`WsEvent`] (checked against messages
-//! recorded from mainnet): subscribe with `subscribe_ledger`,
+//! Each `subscribe_*` receiver ([`Subscription`]) hears only its own stream
+//! (`subscribe_account` only that account's validated transactions);
+//! `events()` hears everything. A receiver that falls behind gets
+//! [`WsEvent::Missed`] instead of an error that ends the loop. When the
+//! connection drops or goes silent, the client sends [`WsEvent::Disconnected`],
+//! reconnects, subscribes again to everything (a refusal is
+//! [`WsEvent::ResubscribeFailed`]) and sends [`WsEvent::Reconnected`];
+//! dropping the client closes the connection. Every `rippled` stream arrives
+//! as a typed [`WsEvent`] (checked against messages recorded from mainnet):
+//! subscribe with `subscribe_ledger`,
 //! `subscribe_transactions` (each transaction a typed [`Tx`]),
 //! `subscribe_transactions_proposed`, `subscribe_account`,
 //! `subscribe_validations`, `subscribe_server`, `subscribe_consensus`,
@@ -469,9 +485,13 @@
 //!   every ID, hash and balance change must be what the network recorded, and
 //!   the typed queries for what they made (channels, NFT offers, oracle prices,
 //!   MPT holders through Clio) must parse the answers.
-//! - **Edge cases of the format** (`Number`, amounts, payment paths): each was
-//!   put to `rippled` 3.4.1 itself, and the codec reads, writes and refuses
-//!   exactly what `rippled` does.
+//! - **Edge cases of the format** (`Number`, amounts, token values, payment
+//!   paths): each was put to `rippled` 3.4.1 itself, and the codec reads,
+//!   writes and refuses what `rippled` does (the deliberate differences are in
+//!   the parity report).
+//! - **Ledger entry IDs**: every kind, including bridges, credential
+//!   preauthorizations and order-book directories, matches the index
+//!   `rippled` 3.4.1 computes.
 //! - **Robustness**: eight fuzz targets, seeded with all of the above, run in
 //!   CI on every change: nothing panics, and decode → encode → decode is stable.
 //!
@@ -531,7 +551,7 @@ pub use xrpl_client::Client;
 pub use xrpl_client::XrplWsClient;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use xrpl_client::ws::{LedgerEvent, TransactionEvent, WsEvent};
+pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
 
 pub use wallet::Wallet;
 
@@ -540,7 +560,7 @@ pub use wallet::Wallet;
 /// address leaves this machine; keep the seed with [`Wallet::seed`].
 pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, ClientError> {
     let wallet = Wallet::generate();
-    faucet::fund_and_wait(network, &wallet.address).await?;
+    faucet::fund_and_wait(network, wallet.classic_address()).await?;
     Ok(wallet)
 }
 
@@ -555,16 +575,16 @@ pub async fn autofill_and_sign(
     Ok(blob)
 }
 
-/// Autofill, sign, submit, and wait for validation. All-in-one transaction submission.
+/// Autofill, sign, submit, and wait for the final outcome: `Ok` only for a
+/// transaction validated with `tesSUCCESS`. Every other ending is an error;
+/// see [`Client::submit_and_wait`] for which ones are final and which
+/// ([`ClientError::OutcomeUnknown`]) mean "look it up before replacing it".
 pub async fn submit_transaction(
     client: &impl Client,
     tx: &mut serde_json::Value,
     wallet: &Wallet,
 ) -> Result<TxResult, ClientError> {
     client.autofill(tx).await?;
-    let last_ledger_sequence = tx["LastLedgerSequence"].as_u64().ok_or_else(|| {
-        ClientError::UnexpectedResponse("autofill did not set LastLedgerSequence".into())
-    })? as u32;
     let blob = wallet.sign_and_encode(tx).map_err(ClientError::Core)?;
-    client.submit_and_wait(&blob, last_ledger_sequence).await
+    client.submit_and_wait(&blob).await
 }

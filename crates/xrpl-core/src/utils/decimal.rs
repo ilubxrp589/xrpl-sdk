@@ -208,14 +208,15 @@ impl fmt::Display for Decimal {
         let digits: String = self.digits.iter().map(|d| char::from(b'0' + d)).collect();
         if self.exp >= 0 {
             f.write_str(&digits)?;
-            return f.write_str(&"0".repeat(self.exp as usize));
+            return f.write_str(&"0".repeat(usize::try_from(self.exp).map_err(|_| fmt::Error)?));
         }
         let point = digits.len() as i64 + i64::from(self.exp);
         if point > 0 {
-            let (int, frac) = digits.split_at(point as usize);
+            let (int, frac) = digits.split_at(usize::try_from(point).map_err(|_| fmt::Error)?);
             write!(f, "{int}.{frac}")
         } else {
-            write!(f, "0.{}{digits}", "0".repeat((-point) as usize))
+            let zeros = usize::try_from(-point).map_err(|_| fmt::Error)?;
+            write!(f, "0.{}{digits}", "0".repeat(zeros))
         }
     }
 }

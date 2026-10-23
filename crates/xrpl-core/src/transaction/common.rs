@@ -1,3 +1,6 @@
+// The deprecated legacy type and its own implementation.
+#![allow(deprecated)]
+
 use super::TransactionType;
 use crate::types::{AccountId, Amount, Blob, Hash256};
 #[cfg(feature = "std")]
@@ -8,6 +11,10 @@ use serde::Serialize;
 use alloc::string::{String, ToString};
 
 /// Fields present on all XRPL transactions.
+#[deprecated(
+    since = "0.6.0",
+    note = "use transaction::models::Common, generated from rippled's definitions"
+)]
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "std", derive(Deserialize))]
 #[serde(rename_all = "PascalCase")]
@@ -30,7 +37,7 @@ pub struct CommonFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_tag: Option<u32>,
     /// Valid only if the account's last transaction had this hash (`AccountTxnID`).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "AccountTxnID", skip_serializing_if = "Option::is_none")]
     pub account_txn_id: Option<Hash256>,
     /// The signing public key, hex; empty when multi-signed (`SigningPubKey`).
     #[serde(skip_serializing_if = "Option::is_none")]

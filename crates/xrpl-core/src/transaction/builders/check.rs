@@ -9,9 +9,9 @@ pub struct CheckCreate {
     pub common: TxCommon,
     /// The account that receives it (`Destination`).
     pub destination: String,
-    /// The most the sender will spend, in any currency (`SendMax`).
+    /// The most the sender will spend, in any currency (`SendMax`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub send_max: Value,
-    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
+    /// When it expires (`Expiration`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub expiration: Option<u32>,
     /// A tag the destination uses to tell its senders apart (`DestinationTag`).
     pub destination_tag: Option<u32>,
@@ -136,9 +136,9 @@ pub struct CheckCash {
     pub common: TxCommon,
     /// The check's ID (`CheckID`).
     pub check_id: String,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: Option<Value>,
-    /// The least a partial payment must deliver (`DeliverMin`).
+    /// The least a partial payment must deliver (`DeliverMin`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub deliver_min: Option<Value>,
 }
 impl Transaction for CheckCash {

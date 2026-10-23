@@ -17,6 +17,9 @@ unsafe_code = "forbid"
 unwrap_used = "deny"
 expect_used = "deny"
 indexing_slicing = "deny"
+# A narrowing `as` cast wraps silently: DestinationTag 2^32+12345 was once
+# signed as 12345. Convert with try_from, or say why the value fits.
+cast_possible_truncation = "deny"
 
 [workspace.dependencies]
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }

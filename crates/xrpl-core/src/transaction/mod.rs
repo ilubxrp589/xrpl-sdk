@@ -20,5 +20,7 @@ mod types;
 
 #[cfg(feature = "std")]
 pub use builders::*;
+#[allow(deprecated)]
 pub use common::CommonFields;
+#[allow(deprecated)]
 pub use types::TransactionType;

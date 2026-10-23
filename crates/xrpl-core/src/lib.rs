@@ -59,7 +59,7 @@
 //!
 //! // A public test seed (never fund it on mainnet).
 //! let seed = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
-//! assert_eq!(seed.key_type, KeyType::Secp256k1);
+//! assert_eq!(seed.key_type(), KeyType::Secp256k1);
 //! let keys = Keypair::from_seed(&seed)?;
 //! assert_eq!(keys.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
 //!
@@ -78,7 +78,10 @@
 //! [`LedgerObject`] parses any entry `rippled` returns (from `ledger_entry`,
 //! `account_objects` or `ledger_data`) into a struct for its type, and
 //! serializes back to exactly `rippled`'s JSON. Types this crate does not
-//! know stay available as [`LedgerObject::Other`].
+//! know stay available as [`LedgerObject::Other`]; an entry of a known type
+//! that does not fit it (a field a newer `rippled` added) is
+//! [`LedgerObject::Unparsed`], with the error, inside a response, and an
+//! error from [`LedgerObject::from_value`].
 //!
 //! ```
 //! use xrpl_core::types::{Amount, LedgerObject};
@@ -151,8 +154,11 @@
 //! signatures verify against real batches `rippled` accepted. Ledger entry IDs match real mainnet entries
 //! and a live Testnet run. The utilities pass xrpl.js's own fixtures.
 //!
-//! Where the format has edge cases (`Number`, amounts, payment paths), each case was put to
-//! `rippled` 3.4.1 itself, and the codec reads, writes and refuses exactly what `rippled` does.
+//! Where the format has edge cases (`Number`, amounts, token values, payment paths), each case
+//! was put to `rippled` 3.4.1 itself, and the codec reads, writes and refuses what `rippled`
+//! does; the few deliberate differences (each safer than `rippled`'s JSON reader) are listed in
+//! the parity report. A field name `rippled` does not define, or an integer too large for its
+//! field, is an error, never dropped or wrapped.
 //! Eight fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
 //! it, is in the [parity report](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md);
 //! speed against xrpl-rust is in the
@@ -175,6 +181,7 @@ pub mod crypto;
 pub mod error;
 #[cfg(feature = "std")]
 pub mod hashes;
+mod number_text;
 pub mod transaction;
 pub mod types;
 pub mod utils;

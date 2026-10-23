@@ -11,9 +11,11 @@ and how to repeat it.
 in October 2026. The SDK embeds that release's `server_definitions` (82
 transaction types, 31 ledger entry types, 357 fields, 195 result codes), so
 the codec knows exactly the fields `rippled` 3.4.1 knows: an unknown field is
-an error here, as it is there.
+an error here, as it is there, both when reading bytes and when writing JSON
+(a misspelt `DestinationTag` is refused, never dropped from what is signed),
+and an integer too large for its field is refused, never wrapped.
 
-**Last full run:** 2026-10-22, halcyon-xrpl-* 0.4.x, Rust 1.96.0, Linux x86-64.
+**Last full run:** 2026-10-23, halcyon-xrpl-* 0.6.0, Rust 1.96.0, Linux x86-64.
 `cargo test --workspace` runs everything below except the live Testnet test
 and the fuzzers, offline, in well under a minute.
 
@@ -27,13 +29,14 @@ and the fuzzers, offline, in well under a minute.
 | Codec both ways (JSON → bytes → JSON) | XRPLF codec fixtures (also used by xrpl.js) | 34 transactions + 261 ledger entries | `crates/xrpl-core/tests/codec_fixtures.rs` |
 | `Number` (`STNumber`) reading and writing | `rippled` 3.4.1 `simulate` | 37 byte forms, 27 written values, 25 refusals | `crates/xrpl-core/src/codec/number.rs` |
 | Amounts: XRP, tokens, MPTs | `rippled` 3.4.1 `simulate` | 27 byte forms, 18 JSON values | `codec/amount.rs`, `codec/encode.rs`, `codec/decode.rs` |
+| Token values from JSON: syntax, rounding, range | `rippled` 3.4.1 `simulate` | 26 values, 16 refusals | `types/amount.rs` (`reads_token_values_as_rippled_does`) |
 | Payment paths, including MPT steps | `rippled` 3.4.1 `simulate` | 13 byte forms, 10 JSON values | `codec/decode.rs`, `codec/encode.rs` |
 | Objects and arrays: markers, duplicates, element types | `rippled` 3.4.1 `simulate` | 11 transactions | `codec/decode.rs` |
 | `Issue` (vault and AMM assets): XRP, token, MPT | `rippled` 3.4.1 `simulate` | 6 byte forms | `codec/decode.rs` |
 | Signatures (secp256k1 and Ed25519) | `rippled` 3.4.1 `sign` and `sign_for` | Byte for byte, both key types | `crypto/signing.rs`, `xrpl-sdk/src/wallet.rs` |
 | Payment channel claims | `rippled` 3.4.1 `channel_authorize` | Byte for byte | `crypto/channel.rs` |
 | Batch signing data | Batches `rippled` accepted | 6 of 6 verify; tampering fails | `transaction/batch.rs` |
-| Ledger entry IDs (keylets) | Mainnet entries' `index` | 14 entries, 12 types | `hashes.rs` |
+| Ledger entry IDs (keylets) | Mainnet entries' `index`, and `rippled` 3.4.1 `ledger_entry` | 14 entries, 12 types; 9 more IDs of 6 more kinds | `hashes.rs` |
 | Ledger entries: typed and back | Mainnet ledger #107827070 | 20 entries, 15 types, exact JSON | `crates/xrpl-core/tests/ledger_objects.rs` |
 | Every typed response | Recorded `rippled` 3.4.1 and Clio responses | 44 methods, no field lost | `crates/xrpl-client/tests/rippled_responses.rs` |
 | Every stream event | Recorded `rippled` 3.4.1 stream messages | 9 messages, one of each kind | `crates/xrpl-client/tests/stream_events.rs` |
@@ -67,6 +70,17 @@ are multi-signed, 9 are batches.
 **Every type.** Between the two sets, all 82 transaction types in `rippled`
 3.4.1's definitions are covered; a test fails if a future definitions update
 adds a type no fixture exercises.
+
+**What the encoder refuses**, as `rippled`'s JSON parser refuses it (tests in
+`codec/encode.rs`): a field name it does not define (at the top level, inside
+inner objects, and as an array element's name; the keys `rippled` adds to its
+responses, such as `hash` and `meta`, are skipped); an integer too large for
+its UInt8, UInt16 or UInt32 field; an array element that is not exactly one
+inner object; a token amount in XRP's currency code; an `Issue` with a field
+its kind does not have; and a Payment whose `DeliverMax` differs from its
+`Amount` (alone, `DeliverMax` is the `Amount`, as in `rippled`). Inner
+objects are signed whole, as `STObject::add` writes them; only the top level
+leaves out the fields that are not signed.
 
 **The XRPLF codec fixtures.** `tests/vectors/codec-fixtures.json`, the shared
 vectors the xrpl.js codec is tested against: 34 transactions and 261 ledger
@@ -166,6 +180,16 @@ refused without the sequence).
   AccountRoot, AMM, Amendments, Check, Delegate, DirectoryNode (owner root),
   FeeSettings, LedgerHashes, Offer, RippleState, SignerList and Ticket. On
   Testnet, every entry the live test creates is checked the same way (below).
+- **The other kinds.** For entries no sample holds, `rippled` 3.4.1's
+  `ledger_entry` reports the index it computes even when the entry does not
+  exist; the SDK's IDs match it for `Bridge` (from either door, XRP and token
+  bridges), `XChainOwnedClaimID`, `XChainOwnedCreateAccountClaimID`,
+  `DepositPreauth` by credentials (one and two credentials, in either order)
+  and `Sponsorship`. An order-book directory's ID matches a mainnet
+  `DirectoryNode`'s `RootIndex`.
+- **A blob's ID** is the hash of `rippled`'s own re-serialization: a signed
+  blob whose fields were reordered on the way still has the ID the ledger
+  shows.
 - **NFT and MPT IDs.** `NFTokenID` matches `rippled`'s on a mainnet mint and
   on Testnet; `MPTokenIssuanceID` on Testnet.
 
@@ -288,8 +312,9 @@ decoder had silently overwritten. Objects and arrays now follow `rippled`
 
 ## 7. Deliberate differences, and what is not checked
 
-Four places where the SDK deliberately does not do what `rippled` does are
-marked below. The rest are places this report makes no claim.
+Six places where the SDK deliberately does not do what `rippled` does are
+marked below; each refuses or keeps more than `rippled` would, never less.
+The rest are places this report makes no claim.
 
 - **Transaction rules beyond the format.** The SDK encodes any well-formed
   transaction. Rules `rippled` applies when it checks a transaction
@@ -319,6 +344,15 @@ marked below. The rest are places this report makes no claim.
 - **Path steps' `type` field.** `rippled` adds a derived `type` to each path
   step it shows; the SDK's decoder leaves it out, as the XRPL codec fixtures
   (and xrpl.js) do, and the encoder ignores it, as `rippled` does.
+- **Long token values (deliberate difference).** `rippled`'s JSON reader
+  takes a token value's digits as one 64-bit integer, so it refuses a value
+  with more digits than that. The SDK reads any number of digits exactly and
+  rounds past the sixteenth as `rippled` rounds (to nearest, ties to even);
+  for every value `rippled` reads, the bytes are the same.
+- **Ed25519 verification (deliberate difference).** The SDK verifies strictly
+  (`verify_strict`), which also refuses small-order public keys and `R`
+  values; it can refuse a signature `rippled` would accept from such a key,
+  never accept one `rippled` refuses.
 - **Other JSON amount forms (deliberate difference).** `rippled` also reads amounts written as
   `"10/USD/rIssuer"` strings or as arrays. The SDK reads the standard forms:
   a drops string for XRP, and an object for tokens and MPTs.

@@ -118,6 +118,10 @@ impl FieldId {
     }
 
     /// Encode field header to 1, 2, or 3 bytes per XRPL spec.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "only serialized fields are encoded; their codes are all below 256 (test every_code_fits_a_byte)"
+    )]
     pub fn encode(&self) -> Vec<u8> {
         let tc = self.type_code;
         let fc = self.field_code;
@@ -138,7 +142,20 @@ impl FieldId {
     }
 
     /// Decode field header from bytes. Returns (FieldId, bytes_consumed).
+    ///
+    /// Only the shortest header for each code is read, as `rippled`'s
+    /// `SerialIter::getFieldID` requires: a type or name byte in a longer
+    /// header must be 16 or more ("uncommon type/name out of range").
     pub fn decode(buf: &[u8]) -> Result<(Self, usize), CoreError> {
+        let uncommon = |b: u8, what: &str| -> Result<u16, CoreError> {
+            if b < 16 {
+                Err(CoreError::CodecError(format!(
+                    "non-canonical field header: {what} {b} fits in the first byte"
+                )))
+            } else {
+                Ok(u16::from(b))
+            }
+        };
         let &byte0 = buf
             .first()
             .ok_or_else(|| CoreError::CodecError("empty buffer for field header".to_string()))?;
@@ -154,54 +171,64 @@ impl FieldId {
                 let &b2 = buf.get(2).ok_or_else(|| {
                     CoreError::CodecError("need 3 bytes for field header".to_string())
                 })?;
-                Ok((Self::new(b1 as u16, b2 as u16), 3))
+                Ok((Self::new(uncommon(b1, "type")?, uncommon(b2, "name")?), 3))
             }
             (0, fc) => {
                 // 2-byte: type > 15, field fits in nibble
                 let &b1 = buf.get(1).ok_or_else(|| {
                     CoreError::CodecError("need 2 bytes for field header".to_string())
                 })?;
-                Ok((Self::new(b1 as u16, fc as u16), 2))
+                Ok((Self::new(uncommon(b1, "type")?, u16::from(fc)), 2))
             }
             (tc, 0) => {
                 // 2-byte: type fits, field > 15
                 let &b1 = buf.get(1).ok_or_else(|| {
                     CoreError::CodecError("need 2 bytes for field header".to_string())
                 })?;
-                Ok((Self::new(tc as u16, b1 as u16), 2))
+                Ok((Self::new(u16::from(tc), uncommon(b1, "name")?), 2))
             }
             (tc, fc) => {
                 // 1-byte header
-                Ok((Self::new(tc as u16, fc as u16), 1))
+                Ok((Self::new(u16::from(tc), u16::from(fc)), 1))
             }
         }
     }
 }
 
-/// Encode variable-length prefix.
-/// Returns 1, 2, or 3 bytes depending on the length.
+/// The longest length a VL prefix can carry (`Serializer::addEncoded`).
+pub const MAX_VL_LENGTH: usize = 918_744;
+
+/// The variable-length prefix for `len` bytes: 1, 2 or 3 bytes, as
+/// `rippled`'s `Serializer::addEncoded` writes it.
 ///
 /// # Errors
-/// Returns `CoreError::CodecError` if `len` exceeds the maximum VL-encodable size (918744).
-pub fn encode_vl(len: usize) -> Vec<u8> {
-    // Note: This function cannot return Result without a large API change.
-    // VL lengths > 918744 are invalid per the XRPL spec and never occur in practice.
-    // We saturate to the maximum 3-byte encoding rather than panicking.
+///
+/// [`CoreError::CodecError`] when `len` is over [`MAX_VL_LENGTH`]: no prefix
+/// can say it, and writing a shorter one would let the bytes after it be
+/// read as other fields.
+pub fn encode_vl(len: usize) -> Result<Vec<u8>, CoreError> {
+    let byte = |n: usize| u8::try_from(n).map_err(|_| too_long(len));
     if len <= 192 {
-        vec![len as u8]
-    } else if len <= 12480 {
+        Ok(vec![byte(len)?])
+    } else if len <= 12_480 {
         let adjusted = len - 193;
-        vec![(adjusted / 256 + 193) as u8, (adjusted % 256) as u8]
+        Ok(vec![byte(adjusted / 256 + 193)?, byte(adjusted % 256)?])
+    } else if len <= MAX_VL_LENGTH {
+        let adjusted = len - 12_481;
+        Ok(vec![
+            byte(241 + (adjusted >> 16))?,
+            byte((adjusted >> 8) & 0xFF)?,
+            byte(adjusted & 0xFF)?,
+        ])
     } else {
-        // Clamp to 918744 max to avoid panic
-        let clamped = len.min(918744);
-        let adjusted = clamped - 12481;
-        vec![
-            (241 + (adjusted >> 16)) as u8,
-            ((adjusted >> 8) & 0xFF) as u8,
-            (adjusted & 0xFF) as u8,
-        ]
+        Err(too_long(len))
     }
+}
+
+fn too_long(len: usize) -> CoreError {
+    CoreError::CodecError(format!(
+        "a variable-length field holds at most {MAX_VL_LENGTH} bytes, got {len}"
+    ))
 }
 
 /// Decode variable-length prefix. Returns (length, bytes_consumed).
@@ -280,14 +307,14 @@ mod tests {
 
     #[test]
     fn vl_encode_short() {
-        assert_eq!(encode_vl(0), vec![0]);
-        assert_eq!(encode_vl(10), vec![10]);
-        assert_eq!(encode_vl(192), vec![192]);
+        assert_eq!(encode_vl(0).unwrap(), vec![0]);
+        assert_eq!(encode_vl(10).unwrap(), vec![10]);
+        assert_eq!(encode_vl(192).unwrap(), vec![192]);
     }
 
     #[test]
     fn vl_encode_medium() {
-        let encoded = encode_vl(193);
+        let encoded = encode_vl(193).unwrap();
         let (decoded, consumed) = decode_vl(&encoded).unwrap();
         assert_eq!(decoded, 193);
         assert_eq!(consumed, 2);
@@ -295,10 +322,73 @@ mod tests {
 
     #[test]
     fn vl_roundtrip() {
-        for len in [0, 1, 100, 192, 193, 500, 1000, 12480, 12481, 50000] {
-            let encoded = encode_vl(len);
+        for len in [
+            0,
+            1,
+            100,
+            192,
+            193,
+            500,
+            1000,
+            12480,
+            12481,
+            50000,
+            MAX_VL_LENGTH,
+        ] {
+            let encoded = encode_vl(len).unwrap();
             let (decoded, _) = decode_vl(&encoded).unwrap();
             assert_eq!(decoded, len, "roundtrip failed for len={len}");
+        }
+    }
+
+    #[test]
+    fn vl_refuses_a_length_no_prefix_can_say() {
+        assert!(encode_vl(MAX_VL_LENGTH + 1).is_err());
+        assert!(encode_vl(usize::MAX).is_err());
+    }
+
+    /// A longer header than the code needs is refused, as rippled refuses it.
+    #[test]
+    fn only_the_shortest_header_is_read() {
+        // Sequence (UInt32 = 2, field 4) is 0x24; the same in longer forms:
+        for long in [&[0x00, 0x02, 0x04][..], &[0x04, 0x02], &[0x20, 0x04]] {
+            assert!(FieldId::decode(long).is_err(), "{long:02X?}");
+        }
+        assert_eq!(FieldId::decode(&[0x24]).unwrap(), (FieldId::new(2, 4), 1));
+        // Uncommon codes keep their long forms.
+        assert_eq!(
+            FieldId::decode(&[0x01, 0x10]).unwrap(),
+            (FieldId::new(16, 1), 2)
+        );
+        assert_eq!(
+            FieldId::decode(&[0x20, 0x1B]).unwrap(),
+            (FieldId::new(2, 27), 2)
+        );
+        assert_eq!(
+            FieldId::decode(&[0x00, 0x10, 0x10]).unwrap(),
+            (FieldId::new(16, 16), 3)
+        );
+    }
+
+    /// FieldId::encode writes each code in a byte.
+    #[test]
+    fn every_code_fits_a_byte() {
+        let defs: serde_json::Value =
+            serde_json::from_str(crate::codec::definitions::DEFINITIONS_JSON).unwrap();
+        for (name, def) in defs["FIELDS"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| (&f[0], &f[1]))
+        {
+            // Only serialized fields are written (hash, index, … are not).
+            if def["isSerialized"] == true {
+                assert!(def["nth"].as_i64().unwrap() < 256, "{name}");
+            }
+        }
+        for code in defs["TYPES"].as_object().unwrap().values() {
+            let code = code.as_i64().unwrap();
+            assert!(!(256..10_000).contains(&code), "{code}");
         }
     }
 }

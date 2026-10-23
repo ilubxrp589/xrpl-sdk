@@ -27,11 +27,36 @@ pub struct AccountBalanceChanges {
     pub balances: Vec<Balance>,
 }
 
+/// What a transaction actually delivered, from its metadata: `rippled`'s
+/// `delivered_amount` (or the stored `DeliveredAmount`). Use it, never the
+/// Payment's `Amount`, to see what arrived: a partial payment
+/// (`tfPartialPayment`) can deliver far less than its `Amount`. `None` when
+/// the metadata has neither, or says `"unavailable"` (ledgers from before
+/// 2014).
+///
+/// ```
+/// use xrpl_core::utils::delivered_amount;
+/// let meta = serde_json::json!({"TransactionResult": "tesSUCCESS", "delivered_amount": "15"});
+/// assert_eq!(delivered_amount(&meta), Some(xrpl_core::types::Amount::Xrp(15)));
+/// ```
+pub fn delivered_amount(meta: &Value) -> Option<crate::types::Amount> {
+    meta.get("delivered_amount")
+        .or_else(|| meta.get("DeliveredAmount"))
+        .filter(|v| v.as_str() != Some("unavailable"))
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+}
+
 /// The balance changes a transaction made, per account, from its metadata:
 /// XRP from each `AccountRoot`, tokens from each `RippleState` (listed for both
 /// accounts on the trust line, each from its own side). The same result as
 /// xrpl.js's `getBalanceChanges`, in the same order, but exact: values are
 /// computed in decimal, never in floating point.
+///
+/// Not included: MPT balances (`MPToken` and `MPTokenIssuance` entries), and
+/// XRP held in escrows, payment channels and checks (they are not account
+/// balances). For what a Payment delivered, read `delivered_amount` in the
+/// metadata, never the transaction's `Amount` (a partial payment delivers
+/// less).
 pub fn get_balance_changes(meta: &Value) -> Result<Vec<AccountBalanceChanges>, CoreError> {
     let nodes = meta
         .get("AffectedNodes")
@@ -211,5 +236,28 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    /// A partial payment's delivered amount, not its Amount; "unavailable"
+    /// and absent are None.
+    #[test]
+    fn delivered_amount_is_what_arrived() {
+        let token = serde_json::json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "0.5"});
+        let meta =
+            serde_json::json!({"TransactionResult": "tesSUCCESS", "delivered_amount": token});
+        assert_eq!(
+            delivered_amount(&meta),
+            Some(serde_json::from_value(token).unwrap())
+        );
+        let stored = serde_json::json!({"DeliveredAmount": "7"});
+        assert_eq!(
+            delivered_amount(&stored),
+            Some(crate::types::Amount::Xrp(7))
+        );
+        assert_eq!(
+            delivered_amount(&serde_json::json!({"delivered_amount": "unavailable"})),
+            None
+        );
+        assert_eq!(delivered_amount(&serde_json::json!({})), None);
     }
 }

@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 pub struct TrustSet {
     /// The fields every transaction has.
     pub common: TxCommon,
-    /// The most of the token the account will hold, and its issuer (`LimitAmount`).
+    /// The most of the token the account will hold, and its issuer (`LimitAmount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub limit_amount: Value,
     /// The value of incoming balances, in billionths (0 or 1,000,000,000 = face value) (`QualityIn`).
     pub quality_in: Option<u32>,

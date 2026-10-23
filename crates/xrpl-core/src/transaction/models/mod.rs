@@ -527,10 +527,21 @@ macro_rules! tx_enum {
                 #[doc = concat!("`", stringify!($name), "`")]
                 $name($name),
             )*
-            /// A `TransactionType` this crate does not know, or (when
-            /// deserialized inside a larger value) a transaction that does not
-            /// fit its type: as JSON.
+            /// A `TransactionType` this crate does not know: as JSON.
             Other(Value),
+            /// A transaction of a type this crate knows that did not parse as
+            /// that type (a field a newer `rippled` added, or a value of the
+            /// wrong shape). Only lenient parsing (inside a larger value, such
+            /// as a stream event or a response) makes one; [`Tx::from_value`]
+            /// returns the error instead.
+            Unparsed {
+                /// The `TransactionType`.
+                transaction_type: String,
+                /// Why it did not parse.
+                error: String,
+                /// The transaction, as JSON.
+                value: Value,
+            },
         }
 
         impl Tx {
@@ -539,14 +550,15 @@ macro_rules! tx_enum {
                 match self {
                     $(Tx::$name(_) => stringify!($name),)*
                     Tx::Other(v) => v.get("TransactionType").and_then(Value::as_str).unwrap_or_default(),
+                    Tx::Unparsed { transaction_type, .. } => transaction_type,
                 }
             }
 
-            /// The common fields, unless this is [`Tx::Other`].
+            /// The common fields, unless this is [`Tx::Other`] or [`Tx::Unparsed`].
             pub fn common(&self) -> Option<&Common> {
                 match self {
                     $(Tx::$name(t) => Some(&t.common),)*
-                    Tx::Other(_) => None,
+                    Tx::Other(_) | Tx::Unparsed { .. } => None,
                 }
             }
 
@@ -554,21 +566,31 @@ macro_rules! tx_enum {
             pub fn common_mut(&mut self) -> Option<&mut Common> {
                 match self {
                     $(Tx::$name(t) => Some(&mut t.common),)*
-                    Tx::Other(_) => None,
+                    Tx::Other(_) | Tx::Unparsed { .. } => None,
                 }
             }
 
             /// Parse `rippled`'s JSON for a transaction. Strict: a known type
             /// with a field its struct does not have, or a field of the wrong
-            /// shape, is an error. An unknown type is [`Tx::Other`].
+            /// shape, is an error, and so is a Batch whose inner transaction
+            /// is one. An unknown type is [`Tx::Other`].
             pub fn from_value(mut v: Value) -> Result<Self, CoreError> {
                 let ty = v.get("TransactionType").and_then(Value::as_str).map(str::to_owned);
-                // API v2 writes a Payment's Amount only as DeliverMax.
-                if ty.as_deref() == Some("Payment") && v.get("Amount").is_none() {
-                    if let Some(dm) = v.get("DeliverMax").cloned() {
-                        if let Some(obj) = v.as_object_mut() {
-                            obj.insert("Amount".into(), dm);
+                // API v2 writes a Payment's Amount only as DeliverMax; both,
+                // differing, is refused (as rippled refuses it).
+                if ty.as_deref() == Some("Payment") {
+                    match (v.get("Amount"), v.get("DeliverMax").cloned()) {
+                        (Some(amount), Some(dm)) if *amount != dm => {
+                            return Err(CoreError::CodecError(
+                                "Payment: Amount and DeliverMax differ".into(),
+                            ))
                         }
+                        (None, Some(dm)) => {
+                            if let Some(obj) = v.as_object_mut() {
+                                obj.insert("Amount".into(), dm);
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 let tx = match ty.as_deref() {
@@ -577,6 +599,15 @@ macro_rules! tx_enum {
                     ),)*
                     _ => return Ok(Tx::Other(v)),
                 };
+                if let Tx::Batch(batch) = &tx {
+                    for inner in &batch.raw_transactions {
+                        if let Tx::Unparsed { transaction_type, error, .. } = inner {
+                            return Err(CoreError::CodecError(format!(
+                                "Batch: inner {transaction_type}: {error}"
+                            )));
+                        }
+                    }
+                }
                 let back = tx.to_value()?;
                 let dropped = dropped_paths(&v, &back);
                 if dropped.is_empty() {
@@ -590,7 +621,7 @@ macro_rules! tx_enum {
             pub fn to_value(&self) -> Result<Value, CoreError> {
                 match self {
                     $(Tx::$name(t) => t.to_json(),)*
-                    Tx::Other(v) => Ok(v.clone()),
+                    Tx::Other(v) | Tx::Unparsed { value: v, .. } => Ok(v.clone()),
                 }
             }
         }
@@ -599,7 +630,7 @@ macro_rules! tx_enum {
 each_transaction_type!(tx_enum);
 
 /// Key paths of `original` that `back` does not have.
-fn dropped_paths(original: &Value, back: &Value) -> Vec<String> {
+pub(crate) fn dropped_paths(original: &Value, back: &Value) -> Vec<String> {
     fn paths(v: &Value, prefix: &str, out: &mut BTreeSet<String>) {
         match v {
             Value::Object(m) => {
@@ -623,13 +654,22 @@ fn dropped_paths(original: &Value, back: &Value) -> Vec<String> {
     sent.difference(&kept).cloned().collect()
 }
 
-/// Lenient: a transaction that does not fit its type becomes [`Tx::Other`],
-/// so one odd transaction never fails a whole response. [`Tx::from_value`]
-/// is strict.
+/// Lenient: a transaction that does not fit its type becomes
+/// [`Tx::Unparsed`] (carrying the error), so one odd transaction never fails
+/// a whole response, and is never mistaken for a transaction of an unknown
+/// type. [`Tx::from_value`] is strict.
 impl<'de> Deserialize<'de> for Tx {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let v = Value::deserialize(deserializer)?;
-        Ok(Tx::from_value(v.clone()).unwrap_or(Tx::Other(v)))
+        Ok(Tx::from_value(v.clone()).unwrap_or_else(|e| Tx::Unparsed {
+            transaction_type: v
+                .get("TransactionType")
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .to_string(),
+            error: e.to_string(),
+            value: v,
+        }))
     }
 }
 

@@ -25,6 +25,19 @@ impl Transaction for DelegateSet {
         Value::Object(obj)
     }
     fn validate(&self) -> Result<(), CoreError> {
+        let bad = |m: &str| super::invalid("DelegateSet", m);
+        if self.authorize == self.common.account {
+            return Err(bad("an account cannot delegate to itself"));
+        }
+        crate::address::decode_account_id(&self.authorize)?;
+        if self.permissions.len() > 10 {
+            return Err(bad("at most 10 permissions"));
+        }
+        for (i, p) in self.permissions.iter().enumerate() {
+            if self.permissions.iter().skip(i + 1).any(|q| q == p) {
+                return Err(bad("a permission is listed twice"));
+            }
+        }
         Ok(())
     }
 }
@@ -76,11 +89,13 @@ impl DelegateSetBuilder {
         let permissions = self.permissions.ok_or_else(|| {
             CoreError::ValidationError("DelegateSet: permissions is required".into())
         })?;
-        Ok(DelegateSet {
+        let tx = DelegateSet {
             common: self.common,
             authorize,
             permissions,
-        })
+        };
+        tx.validate()?;
+        Ok(tx)
     }
 }
 impl DelegateSet {

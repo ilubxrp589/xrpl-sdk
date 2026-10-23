@@ -1,83 +1,85 @@
 use crate::CoreError;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-use sha2::{Digest, Sha512};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::ToString, vec::Vec};
 
-/// Derive an Ed25519 keypair from a 16-byte seed.
-/// XRPL Ed25519: SHA512(seed) → first 32 bytes → scalar → keypair.
-/// Public key is prefixed with 0xED (33 bytes total on wire).
-pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> {
-    let mut hash: [u8; 64] = Sha512::digest(seed).into();
-    let mut secret_bytes = [0u8; 32];
-    secret_bytes.copy_from_slice(&hash[..32]);
-
-    let signing_key = SigningKey::from_bytes(&secret_bytes);
-    let verifying_key = signing_key.verifying_key();
-
-    // Private key: 32-byte scalar
-    let private_key = secret_bytes.to_vec();
-
-    // Public key: 0xED prefix + 32-byte compressed point = 33 bytes
+/// Derive an Ed25519 key pair from a 16-byte seed, as `rippled` does: the
+/// secret key is SHA-512Half(seed); the public key is 0xED + the 32-byte
+/// point (33 bytes, as on the ledger). The secret key comes back in a buffer
+/// wiped on drop.
+pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), CoreError> {
+    let secret = super::secret_sha512_half(&[seed]);
+    // SigningKey wipes itself on drop.
+    let signing_key = SigningKey::from_bytes(&secret);
     let mut public_key = Vec::with_capacity(33);
     public_key.push(0xED);
-    public_key.extend_from_slice(verifying_key.as_bytes());
-
-    // Zeroize intermediate key material
-    secret_bytes.zeroize();
-    hash.zeroize();
-
-    Ok((private_key, public_key))
+    public_key.extend_from_slice(signing_key.verifying_key().as_bytes());
+    Ok((Zeroizing::new(secret.to_vec()), public_key))
 }
 
-/// Sign a message with an Ed25519 private key.
-/// Returns 64-byte signature.
-pub fn sign(private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, CoreError> {
-    if private_key.len() != 32 {
-        return Err(CoreError::InvalidKeyLength {
+/// The 33-byte public key (0xED + point) of a 32-byte Ed25519 secret key.
+pub fn public_key(private_key: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let mut key_bytes = secret_key_bytes(private_key)?;
+    let signing_key = SigningKey::from_bytes(&key_bytes);
+    key_bytes.zeroize();
+    let mut public_key = Vec::with_capacity(33);
+    public_key.push(0xED);
+    public_key.extend_from_slice(signing_key.verifying_key().as_bytes());
+    Ok(public_key)
+}
+
+fn secret_key_bytes(private_key: &[u8]) -> Result<[u8; 32], CoreError> {
+    private_key
+        .try_into()
+        .map_err(|_| CoreError::InvalidKeyLength {
             expected: 32,
             got: private_key.len(),
-        });
-    }
-
-    let mut key_bytes = [0u8; 32];
-    key_bytes.copy_from_slice(private_key);
-    let signing_key = SigningKey::from_bytes(&key_bytes);
-    let signature = signing_key.sign(message);
-    key_bytes.zeroize();
-
-    Ok(signature.to_bytes().to_vec())
+        })
 }
 
-/// Verify an Ed25519 signature.
-/// public_key should be 33 bytes (0xED + 32 bytes) or 32 bytes (raw).
+/// Sign `message` (the message itself: Ed25519 hashes internally, and
+/// `rippled` verifies Ed25519 over the unhashed signing data) with a 32-byte
+/// secret key. Returns the 64-byte signature.
+pub fn sign(private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let mut key_bytes = secret_key_bytes(private_key)?;
+    let signing_key = SigningKey::from_bytes(&key_bytes);
+    key_bytes.zeroize();
+    Ok(signing_key.sign(message).to_bytes().to_vec())
+}
+
+/// Verify an Ed25519 signature over `message`. `public_key` is 33 bytes
+/// (0xED + point, as on the ledger) or the raw 32-byte point. A malformed
+/// key is an error; a signature that is not 64 bytes, or does not match,
+/// is `Ok(false)`.
+///
+/// Verification is strict (`verify_strict`: no small-order keys or `R`),
+/// which can refuse a signature `rippled` would take from such a key, never
+/// the other way round.
 pub fn verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
-    let raw_key = if public_key.len() == 33 && public_key.first() == Some(&0xED) {
-        public_key.get(1..).unwrap_or_default()
-    } else if public_key.len() == 32 {
-        public_key
-    } else {
-        return Err(CoreError::InvalidKeyLength {
+    let raw_key = match public_key {
+        [0xED, rest @ ..] if rest.len() == 32 => rest,
+        _ if public_key.len() == 32 => public_key,
+        _ => {
+            return Err(CoreError::InvalidKeyLength {
+                expected: 33,
+                got: public_key.len(),
+            })
+        }
+    };
+    let key_bytes: [u8; 32] = raw_key
+        .try_into()
+        .map_err(|_| CoreError::InvalidKeyLength {
             expected: 33,
             got: public_key.len(),
-        });
-    };
-
-    if signature.len() != 64 {
-        return Ok(false);
-    }
-
-    let mut key_bytes = [0u8; 32];
-    key_bytes.copy_from_slice(raw_key);
+        })?;
     let verifying_key = VerifyingKey::from_bytes(&key_bytes)
         .map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-
-    let mut sig_bytes = [0u8; 64];
-    sig_bytes.copy_from_slice(signature);
+    let Ok(sig_bytes) = <[u8; 64]>::try_from(signature) else {
+        return Ok(false);
+    };
     let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
-
     Ok(verifying_key.verify_strict(message, &sig).is_ok())
 }
 
@@ -111,7 +113,7 @@ mod tests {
     fn ed25519_derive_sign_verify_roundtrip() {
         // Generate a random Ed25519 seed and verify full round-trip
         let seed = crate::crypto::signing::Seed::generate();
-        let (privkey, pubkey) = derive_keypair(&seed.bytes).unwrap();
+        let (privkey, pubkey) = derive_keypair(seed.as_bytes()).unwrap();
 
         assert_eq!(
             pubkey.len(),
@@ -135,7 +137,7 @@ mod tests {
         );
 
         // Deterministic: same seed bytes produce same keypair
-        let (privkey2, pubkey2) = derive_keypair(&seed.bytes).unwrap();
+        let (privkey2, pubkey2) = derive_keypair(seed.as_bytes()).unwrap();
         assert_eq!(privkey, privkey2);
         assert_eq!(pubkey, pubkey2);
     }

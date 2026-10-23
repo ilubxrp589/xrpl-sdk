@@ -16,11 +16,14 @@ pub fn ripple_time_to_unix(ripple_time: u32) -> i64 {
 /// Unix seconds → ledger time. Errors before 2000 or after the last second a
 /// `u32` ledger time can hold (2136-02-07T06:28:15Z).
 pub fn unix_to_ripple_time(unix_seconds: i64) -> Result<u32, CoreError> {
-    u32::try_from(unix_seconds - RIPPLE_EPOCH_UNIX).map_err(|_| {
-        CoreError::ValidationError(format!(
-            "Unix time {unix_seconds} is outside ledger time (2000-01-01 to 2136-02-07)"
-        ))
-    })
+    unix_seconds
+        .checked_sub(RIPPLE_EPOCH_UNIX)
+        .and_then(|t| u32::try_from(t).ok())
+        .ok_or_else(|| {
+            CoreError::ValidationError(format!(
+                "Unix time {unix_seconds} is outside ledger time (2000-01-01 to 2136-02-07)"
+            ))
+        })
 }
 
 /// Ledger time → `SystemTime`.
@@ -172,5 +175,11 @@ mod tests {
         }
         let t = ripple_time_to_system_time(5);
         assert_eq!(system_time_to_ripple_time(t).unwrap(), 5);
+    }
+
+    #[test]
+    fn extreme_unix_times_are_errors_not_panics() {
+        assert!(unix_to_ripple_time(i64::MIN).is_err());
+        assert!(unix_to_ripple_time(i64::MAX).is_err());
     }
 }

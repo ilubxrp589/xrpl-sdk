@@ -44,12 +44,47 @@ pub enum WsEvent {
     PathFind(Value),
     /// A message of a type this crate does not know, as JSON.
     Other(Value),
-    /// The connection dropped and was re-established; subscriptions were
-    /// restored.
+    /// A message of a type this crate knows that did not parse (a field a
+    /// newer `rippled` added, for instance): its type, why, and the message.
+    /// Nothing is dropped silently; it is also logged at WARN.
+    Unparsed {
+        /// The message's `type`.
+        kind: String,
+        /// Why it did not parse.
+        error: String,
+        /// The message, as JSON.
+        message: Value,
+    },
+    /// The connection dropped; the client is reconnecting. Events until
+    /// [`WsEvent::Reconnected`] are not seen.
+    Disconnected,
+    /// The connection was re-established and every subscription asked for
+    /// again (a refused one is a [`WsEvent::ResubscribeFailed`] first).
     Reconnected,
+    /// After a reconnect, the server refused to restore this subscription.
+    ResubscribeFailed {
+        /// The subscription's parameters.
+        subscription: Value,
+        /// The server's answer.
+        error: String,
+    },
+    /// This receiver fell behind and this many events were dropped for it.
+    Missed(u64),
 }
 
 impl WsEvent {
+    /// Whether this is about the connection, not a stream: every
+    /// subscription receives these.
+    pub fn is_connection_event(&self) -> bool {
+        matches!(
+            self,
+            WsEvent::Disconnected
+                | WsEvent::Reconnected
+                | WsEvent::ResubscribeFailed { .. }
+                | WsEvent::Missed(_)
+        )
+    }
+
     /// The event a stream message (an object with a `type`) carries; `None`
     /// for anything else (such as a reply to a request).
     pub fn from_message(message: Value) -> Option<WsEvent> {
@@ -58,13 +93,32 @@ impl WsEvent {
             m: &Value,
             wrap: impl Fn(T) -> WsEvent,
         ) -> WsEvent {
-            serde_json::from_value(m.clone())
-                .map(wrap)
-                .unwrap_or_else(|_| WsEvent::Other(m.clone()))
+            match serde_json::from_value(m.clone()) {
+                Ok(t) => wrap(t),
+                Err(e) => {
+                    let kind = m.get("type").and_then(Value::as_str).unwrap_or("?");
+                    tracing::warn!(kind, error = %e, "a stream message did not parse");
+                    WsEvent::Unparsed {
+                        kind: kind.to_string(),
+                        error: e.to_string(),
+                        message: m.clone(),
+                    }
+                }
+            }
         }
         Some(match kind.as_str() {
             "ledgerClosed" => typed(&message, WsEvent::Ledger),
-            "transaction" => typed(&message, |t| WsEvent::Transaction(Box::new(t))),
+            "transaction" => typed(&message, |t: TransactionEvent| {
+                if let Tx::Unparsed {
+                    transaction_type,
+                    error,
+                    ..
+                } = &t.transaction
+                {
+                    tracing::warn!(%transaction_type, %error, "a streamed transaction did not parse as its type");
+                }
+                WsEvent::Transaction(Box::new(t))
+            }),
             "validationReceived" => typed(&message, WsEvent::Validation),
             "serverStatus" => typed(&message, WsEvent::Server),
             "consensusPhase" => typed(&message, WsEvent::Consensus),
@@ -153,6 +207,34 @@ pub struct TransactionEvent {
     /// Whether this marks the end of the history sent (history streams).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_history_boundary: Option<bool>,
+}
+
+impl TransactionEvent {
+    /// What the transaction delivered (`delivered_amount`), once validated:
+    /// check this, not a Payment's `Amount`, which a partial payment does
+    /// not reach.
+    pub fn delivered_amount(&self) -> Option<xrpl_core::types::Amount> {
+        xrpl_core::utils::delivered_amount(self.meta.as_ref()?)
+    }
+
+    /// Whether `account` (a classic address) appears in the transaction or
+    /// its metadata (the accounts `rippled` sends an `accounts` subscriber
+    /// the transaction for: sender, destination, issuers, every account
+    /// whose entries it changed).
+    pub fn affects(&self, account: &str) -> bool {
+        fn names(v: &Value, account: &str) -> bool {
+            match v {
+                Value::String(s) => s == account,
+                Value::Array(a) => a.iter().any(|v| names(v, account)),
+                Value::Object(o) => o.values().any(|v| names(v, account)),
+                _ => false,
+            }
+        }
+        self.transaction
+            .to_value()
+            .is_ok_and(|tx| names(&tx, account))
+            || self.meta.as_ref().is_some_and(|m| names(m, account))
+    }
 }
 
 /// `validationReceived`: a validator signed a ledger.

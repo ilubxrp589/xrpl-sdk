@@ -89,6 +89,13 @@ impl TxResult {
             .get("TransactionResult")
             .and_then(Value::as_str)
     }
+
+    /// What the transaction delivered (`delivered_amount`): check this, not
+    /// a Payment's `Amount`, which a partial payment does not reach. See
+    /// `xrpl_core::utils::delivered_amount`.
+    pub fn delivered_amount(&self) -> Option<xrpl_core::types::Amount> {
+        xrpl_core::utils::delivered_amount(self.meta.as_ref()?)
+    }
 }
 
 /// [`transaction_entry`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/transaction_entry):

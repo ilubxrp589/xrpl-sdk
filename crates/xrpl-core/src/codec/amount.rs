@@ -72,30 +72,33 @@ pub fn decode_xrp_signed(bytes: &[u8; 8]) -> Result<(bool, u64), CoreError> {
 
 /// Encode IOU mantissa/exponent to 8-byte wire format.
 /// Bit 63 = 1 (IOU), Bit 62 = positive flag, Bits 54-61 = exponent + 97, Bits 0-53 = mantissa.
-pub fn encode_iou_value(iou: &IouAmount) -> [u8; 8] {
+pub fn encode_iou_value(iou: &IouAmount) -> Result<[u8; 8], CoreError> {
     if iou.is_zero() {
         // Special zero encoding: bit 63 set, everything else 0
-        return 0x8000_0000_0000_0000u64.to_be_bytes();
+        return Ok(0x8000_0000_0000_0000u64.to_be_bytes());
+    }
+    // IouAmount's fields are public, so a value made by hand may not be in
+    // the canonical form every constructor produces: refuse it rather than
+    // write bits rippled would read as another amount.
+    if !(IOU_MANTISSA_MIN..IOU_MANTISSA_MAX).contains(&iou.mantissa)
+        || !(IOU_EXPONENT_MIN..=IOU_EXPONENT_MAX).contains(&iou.exponent)
+    {
+        return Err(CoreError::InvalidAmount(format!(
+            "token amount {}e{} is not normalized (build it with IouAmount::new or from_decimal)",
+            iou.mantissa, iou.exponent
+        )));
     }
 
-    let mut value: u64 = 0;
-
-    // Bit 63 = 1 (IOU marker)
-    value |= 0x8000_0000_0000_0000;
-
-    // Bit 62 = positive flag
+    let mut value: u64 = 0x8000_0000_0000_0000; // bit 63: not XRP
     if !iou.is_negative {
-        value |= 0x4000_0000_0000_0000;
+        value |= 0x4000_0000_0000_0000; // bit 62: positive
     }
-
-    // Bits 54-61 = exponent + 97 (8-bit biased)
-    let biased_exp = (iou.exponent as i16 + 97) as u64;
-    value |= (biased_exp & 0xFF) << 54;
-
-    // Bits 0-53 = mantissa
-    value |= iou.mantissa & 0x003F_FFFF_FFFF_FFFF;
-
-    value.to_be_bytes()
+    // Bits 54-61: exponent + 97, in 1..=177 for the checked range.
+    let biased = u64::try_from(i16::from(iou.exponent) + 97)
+        .map_err(|_| CoreError::InvalidAmount("exponent out of range".to_string()))?;
+    value |= biased << 54;
+    value |= iou.mantissa; // below 10^16 < 2^54
+    Ok(value.to_be_bytes())
 }
 
 /// Decode 8-byte IOU value to IouAmount.
@@ -135,19 +138,30 @@ pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
 
     Ok(IouAmount {
         mantissa,
-        exponent: exponent as i8,
+        exponent: i8::try_from(exponent)
+            .map_err(|_| CoreError::InvalidAmount("exponent out of range".to_string()))?,
         is_negative,
     })
 }
 
-/// Encode a full IOU Amount to 48 bytes (8B value + 20B currency + 20B issuer).
-pub fn encode_amount_iou(iou: &IouAmount, currency: &Currency, issuer: &AccountId) -> [u8; 48] {
+/// Encode a full IOU Amount to 48 bytes (8B value + 20B currency + 20B
+/// issuer). A value not in canonical form, XRP's currency code or the zero
+/// account as issuer is refused, as `rippled` refuses to read them.
+pub fn encode_amount_iou(
+    iou: &IouAmount,
+    currency: &Currency,
+    issuer: &AccountId,
+) -> Result<[u8; 48], CoreError> {
+    if currency.to_bytes() == [0u8; 20] || issuer.as_bytes() == &[0u8; 20] {
+        return Err(CoreError::InvalidAmount(
+            "a token amount cannot have XRP's currency or issuer (all zeros)".to_string(),
+        ));
+    }
     let mut buf = [0u8; 48];
-    let value_bytes = encode_iou_value(iou);
-    buf[..8].copy_from_slice(&value_bytes);
+    buf[..8].copy_from_slice(&encode_iou_value(iou)?);
     buf[8..28].copy_from_slice(&currency.to_bytes());
     buf[28..48].copy_from_slice(issuer.as_bytes());
-    buf
+    Ok(buf)
 }
 
 /// Decode 48 bytes to (IouAmount, Currency, AccountId).
@@ -182,8 +196,15 @@ pub fn encode_amount(amount: &Amount) -> Result<Vec<u8>, CoreError> {
             value,
             currency,
             issuer,
-        } => Ok(encode_amount_iou(value, currency, issuer).to_vec()),
+        } => Ok(encode_amount_iou(value, currency, issuer)?.to_vec()),
         Amount::Mpt { value, issuance_id } => {
+            // -i64::MAX..=i64::MAX: i64::MIN's magnitude, 2^63, is past
+            // maxMPTokenAmount and rippled refuses it.
+            if *value == i64::MIN {
+                return Err(CoreError::InvalidAmount(
+                    "an MPT amount's magnitude is at most i64::MAX".to_string(),
+                ));
+            }
             // STAmount::add: lead byte 0x20 (MPT) | 0x40 unless negative,
             // the 8-byte magnitude, then the 24-byte MPTokenIssuanceID.
             let mut out = Vec::with_capacity(33);
@@ -316,7 +337,7 @@ mod tests {
     #[test]
     fn encode_iou_zero() {
         let zero = IouAmount::zero();
-        let encoded = encode_iou_value(&zero);
+        let encoded = encode_iou_value(&zero).unwrap();
         assert_eq!(encoded, [0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     }
 
@@ -330,7 +351,7 @@ mod tests {
     #[test]
     fn iou_value_roundtrip() {
         let iou = IouAmount::from_decimal("1.5").unwrap();
-        let encoded = encode_iou_value(&iou);
+        let encoded = encode_iou_value(&iou).unwrap();
         let decoded = decode_iou_value(&encoded).unwrap();
         assert_eq!(iou.mantissa, decoded.mantissa);
         assert_eq!(iou.exponent, decoded.exponent);
@@ -340,7 +361,7 @@ mod tests {
     #[test]
     fn iou_negative_roundtrip() {
         let iou = IouAmount::from_decimal("-42.5").unwrap();
-        let encoded = encode_iou_value(&iou);
+        let encoded = encode_iou_value(&iou).unwrap();
         let decoded = decode_iou_value(&encoded).unwrap();
         assert!(decoded.is_negative);
         assert_eq!(decoded.to_decimal(), "-42.5");
@@ -352,7 +373,7 @@ mod tests {
         let currency = Currency::from_ascii("USD").unwrap();
         let issuer = AccountId::from_address("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
 
-        let encoded = encode_amount_iou(&iou, &currency, &issuer);
+        let encoded = encode_amount_iou(&iou, &currency, &issuer).unwrap();
         assert_eq!(encoded.len(), 48);
 
         let (dec_iou, dec_currency, dec_issuer) = decode_amount_iou(&encoded).unwrap();
@@ -471,5 +492,39 @@ mod tests {
     fn encode_xrp_u64_max_rejected() {
         let result = encode_amount_xrp(u64::MAX);
         assert!(result.is_err(), "u64::MAX must be rejected");
+    }
+
+    /// A hand-made IouAmount out of canonical form, an MPT of i64::MIN, or
+    /// a token in XRP's currency is refused, never written as other bits.
+    #[test]
+    fn encoders_refuse_what_rippled_cannot_read() {
+        let raw = |mantissa: u64, exponent: i8| IouAmount {
+            mantissa,
+            exponent,
+            is_negative: false,
+        };
+        assert!(encode_iou_value(&raw(1u64 << 60, 0)).is_err());
+        assert!(encode_iou_value(&raw(5, 0)).is_err());
+        assert!(encode_iou_value(&raw(IOU_MANTISSA_MIN, 81)).is_err());
+        assert!(encode_iou_value(&raw(IOU_MANTISSA_MIN, -97)).is_err());
+        assert!(encode_iou_value(&raw(IOU_MANTISSA_MIN, 80)).is_ok());
+        let issuer = AccountId::from_address("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
+        let one = IouAmount::from_decimal("1").unwrap();
+        assert!(encode_amount_iou(&one, &Currency::xrp(), &issuer).is_err());
+        assert!(encode_amount_iou(
+            &one,
+            &Currency::from_ascii("USD").unwrap(),
+            &AccountId::from_bytes([0; 20])
+        )
+        .is_err());
+        let mpt = |value| Amount::Mpt {
+            value,
+            issuance_id: crate::types::Hash192::from_hex(
+                "00000001B5F762798A53D543A014CAF8B297CFF8F2F937E8",
+            )
+            .unwrap(),
+        };
+        assert!(encode_amount(&mpt(i64::MIN)).is_err());
+        assert!(encode_amount(&mpt(-i64::MAX)).is_ok());
     }
 }

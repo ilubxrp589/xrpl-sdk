@@ -7,11 +7,11 @@ use serde_json::{json, Value};
 pub struct OfferCreate {
     /// The fields every transaction has.
     pub common: TxCommon,
-    /// What the offer wants in return (`TakerPays`).
+    /// What the offer wants in return (`TakerPays`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub taker_pays: Value,
-    /// What the offer gives (`TakerGets`).
+    /// What the offer gives (`TakerGets`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub taker_gets: Value,
-    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
+    /// When it expires (`Expiration`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub expiration: Option<u32>,
     /// The sequence of the transaction that created the entry (`OfferSequence`).
     pub offer_sequence: Option<u32>,

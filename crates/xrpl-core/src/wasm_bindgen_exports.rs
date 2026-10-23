@@ -78,42 +78,37 @@ pub fn generate_seed(key_type: &str) -> Result<String, JsValue> {
         }
     };
     let seed = crate::crypto::Seed::generate_with_type(kt);
-    Ok(seed.to_base58())
+    Ok(seed.to_base58().to_string())
 }
 
 /// Derive the classic address from a seed string.
 #[wasm_bindgen]
 pub fn seed_to_address(seed: &str) -> Result<String, JsValue> {
-    let (seed_bytes, key_type) = crate::address::decode_seed(seed).map_err(to_js_error)?;
-    let (_, public_key) = match key_type {
-        crate::address::KeyType::Ed25519 => {
-            crate::crypto::ed25519::derive_keypair(&seed_bytes).map_err(to_js_error)?
-        }
-        crate::address::KeyType::Secp256k1 => {
-            crate::crypto::secp256k1::derive_keypair(&seed_bytes).map_err(to_js_error)?
-        }
-    };
-    let account_id = crate::crypto::signing::public_key_to_account_id(&public_key);
-    Ok(crate::address::encode_account_id(&account_id))
+    let keypair = crate::crypto::Seed::from_base58(seed)
+        .and_then(|s| s.derive_keypair())
+        .map_err(to_js_error)?;
+    Ok(keypair.classic_address())
 }
 
-/// Sign a message hash with a seed.
+/// Sign `message_hex` with a seed's key: Ed25519 signs the bytes;
+/// secp256k1 signs them as an already-computed 32-byte hash, and any other
+/// length is an error (for XRPL data, SHA-512Half it first). The key is
+/// wiped when done.
 #[wasm_bindgen]
 pub fn sign_message(seed: &str, message_hex: &str) -> Result<String, JsValue> {
     let message = hex::decode(message_hex)
         .map_err(|e| JsValue::from_str(&format!("invalid message hex: {e}")))?;
-    let (seed_bytes, key_type) = crate::address::decode_seed(seed).map_err(to_js_error)?;
-    let signature = match key_type {
+    let keypair = crate::crypto::Seed::from_base58(seed)
+        .and_then(|s| s.derive_keypair())
+        .map_err(to_js_error)?;
+    let signature = match keypair.key_type() {
         crate::address::KeyType::Ed25519 => {
-            let (private_key, _) =
-                crate::crypto::ed25519::derive_keypair(&seed_bytes).map_err(to_js_error)?;
-            crate::crypto::ed25519::sign(&private_key, &message).map_err(to_js_error)?
+            crate::crypto::ed25519::sign(keypair.private_key(), &message)
         }
         crate::address::KeyType::Secp256k1 => {
-            let (private_key, _) =
-                crate::crypto::secp256k1::derive_keypair(&seed_bytes).map_err(to_js_error)?;
-            crate::crypto::secp256k1::sign(&private_key, &message).map_err(to_js_error)?
+            crate::crypto::secp256k1::sign(keypair.private_key(), &message)
         }
-    };
+    }
+    .map_err(to_js_error)?;
     Ok(hex::encode_upper(signature))
 }

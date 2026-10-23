@@ -30,11 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     client.autofill(&mut tx)?;
     let blob = wallet.sign_and_encode(&tx)?;
-    let last = tx
-        .get("LastLedgerSequence")
-        .and_then(|v| v.as_u64())
-        .ok_or("no LastLedgerSequence")? as u32;
-    let result = client.submit_and_wait(&blob, last)?;
+    let result = client.submit_and_wait(&blob)?;
     println!(
         "  Payment {}: {}",
         result.hash().unwrap_or("?"),

@@ -1,5 +1,198 @@
 # Changelog
 
+## v0.6.0 (2026-10-23)
+
+Security. A full adversarial review of every crate found ways the SDK could
+sign something other than what the caller wrote, report a payment that went
+through as failed (inviting a second payment), let a server set any fee, and
+leak secrets into logs. All are fixed here, each with a test; most are checked
+against `rippled` 3.4.1's own answers. **Upgrade from 0.5 and earlier.** The
+API changes this needs are listed under "Changed (breaking)"; most code that
+compiles against 0.5 needs only a few edits.
+
+### Security
+- **The codec no longer changes the transaction you wrote.**
+  - A field name `rippled` does not define is now an error
+    (`CoreError::UnknownField`); it was dropped from the signed transaction,
+    so `"destination_tag"` or `"DestinationTAg"` sent a payment to an
+    exchange without its tag. This holds at the top level, inside inner
+    objects and as an array element's name. The keys `rippled` adds to its
+    responses (`hash`, `meta`, `ledger_index`, …) are still skipped.
+  - A UInt8/16/32 value too large for its field is now an error; it was
+    wrapped (`DestinationTag` 4294979641 was signed as 12345, `TransferFee`
+    65536 as 0). Decimal strings are read as `rippled` reads them; `"0x…"`
+    strings, which `rippled` refuses, are refused.
+  - A token value with 19 or more digits could be read with the wrong sign
+    and magnitude (`"9999999999999999999"` became negative), `""`, `"-"`,
+    `"."` and `"e5"` read as zero, and digits past the sixteenth were cut
+    instead of rounded. Token values now take `rippled`'s number syntax and
+    round as it does (to nearest, ties to even), checked on 26 values and 16
+    refusals against `rippled`'s `simulate`; any number of digits is read
+    exactly.
+  - The builders' common fields wrote `AccountTxnId` (serde PascalCase)
+    instead of `AccountTxnID`, which the old codec dropped silently.
+- **`autofill` caps the fee.** It signed whatever `open_ledger_fee` the
+  server named, so a dishonest server (or a man in the middle on `http://`)
+  could make a transaction burn the account's balance. Above the client's
+  cap (2 XRP by default, as in xrpl.js; `with_max_fee_drops` on every
+  client) it returns `ClientError::FeeTooHigh` and changes nothing.
+- **`submit_and_wait` answers only with final outcomes.** It could report a
+  transaction that went through as failed or expired, the usual cue to send
+  it again: a preliminary `tec` was taken as final; `terQUEUED` was
+  resubmitted and the resubmit's `tef` reported as "never reaches a ledger";
+  expiry was decided from the open ledger before the transaction was looked
+  up. And a validated `tec` came back as `Ok`. Now the transaction ID is
+  computed locally; `Ok` means validated `tesSUCCESS`;
+  `TransactionClaimed { result: Some(..) }` a validated `tec`;
+  `TransactionExpired` only once the `LastLedgerSequence` is validated and
+  the server has searched every ledger up to it; and the new
+  `ClientError::OutcomeUnknown { hash, .. }` says "look it up before
+  replacing it". A transaction the server dropped is resubmitted as the
+  same blob.
+- **`hxrpl` asks the server which network it is on** before it submits
+  anything; anywhere but Testnet or Devnet needs `--yes`. It checked only
+  `--network`, so `--url`/`XRPL_URL` pointing at a mainnet server sent real
+  XRP without `--yes`, and `raw submit` had no guard.
+- **secp256k1 `sign` / `verify` take exactly a 32-byte hash.** The ECDSA
+  primitive used only the first 32 bytes of a longer input, so
+  `Keypair::sign` / `verify` on a secp256k1 key accepted a signature over one
+  message for any message with the same first 32 bytes. Transaction signing
+  was not affected (it hashes first).
+- **Secrets stay out of logs and errors.** `Seed` and `Keypair` derived
+  `Debug`, so `{:?}` printed the secret bytes; seed decoding errors carried a
+  seed character and a checksum of the secret. WebSocket and HTTP logs and
+  transport errors named the URL, which can carry an API key; they name the
+  host only.
+- **The WebSocket client routes each subscription its own events.** Every
+  receiver got every subscription's events, so a per-account deposit handler
+  could credit the wrong account. `subscribe_account(a)` now hears only
+  validated transactions naming `a`.
+
+### Fixed
+- **WebSocket client**: dropping it now closes the connection (the
+  reconnect task kept the socket, keepalive and resubscriptions alive
+  forever); a connection silent for 45 s is replaced (a laptop that slept or
+  a NAT that dropped it left the client "connected" with streams quiet);
+  resubscriptions after a reconnect are checked and a refusal reported
+  (`WsEvent::ResubscribeFailed`); `WsEvent::Disconnected` marks the gap; a
+  receiver that falls behind gets `WsEvent::Missed(n)` instead of an error
+  that ended the usual `while let Ok(..)` loop; backoff no longer overflows
+  after 64 attempts; 15 s connect timeout. In the browser: subscriptions
+  deliver their events (they were dropped), requests time out after 30 s,
+  a closed connection fails pending requests, dropping the client closes it.
+- **Multi-signing**: `sign_for_multisigning` signs an empty `SigningPubKey`
+  as `rippled`'s `sign_for` does (a missing one gave signatures that failed);
+  `collect_signers` verifies every signature, refuses a repeated signer,
+  more than 32, or a `TxnSignature`; `sign_transaction` refuses a
+  transaction with `Signers`.
+- **Batch**: `Flags`/`Sequence` given as decimal strings were read as 0
+  (inner flags lost; every `BatchSigner` signature invalid);
+  `verify_batch_signers` said yes with signers missing or empty; the fee
+  ignored an outer transaction's own signers. New `required_batch_signers`
+  (rippled's rule: inner initiators, counterparties and sponsors, minus the
+  outer account) and `sign_batch_as` (sign through a regular key).
+- **Transaction IDs**: `hash_signed_tx_blob` hashes `rippled`'s
+  re-serialization, so a blob with reordered fields has the ID the ledger
+  shows; `hash_signed_tx` of API v2 JSON (`DeliverMax`) hashed a Payment
+  with no `Amount`.
+- **Typed parsing never hides a failure**: a known transaction or ledger
+  entry that does not parse is `Tx::Unparsed` / `LedgerObject::Unparsed`
+  (with the error), not `Other`; `Tx::from_value` is strict for Batch inner
+  transactions and refuses differing `Amount`/`DeliverMax`;
+  `LedgerObject::from_value` refuses fields its type does not have.
+- **Codec**: a two-key array element, a token in XRP's currency code, an
+  `Issue` with fields its kind lacks, and an over-long VL length (its prefix
+  was clamped while the payload was written in full) are refused; field
+  headers are read in their shortest form only, as `rippled` reads them;
+  inner objects are signed whole, as `STObject::add` writes them; currencies
+  are canonical (`"USD"` given as 40 hex digits equals `"USD"`; `"XRP"` is
+  the all-zero code; `"1"` is `rippled`'s noCurrency); hand-built amounts out
+  of canonical form are refused, not bit-masked.
+- **Paginated calls** (`*_all`) read one ledger: every page after the first
+  asks for the first page's ledger (markers are only good there).
+- **autofill**: `Sequence` 0 with a `TicketSequence`; `NetworkID` on networks
+  above 1024; `LastLedgerSequence` current + 20 (was + 4); an X-address for
+  the other kind of network (Testnet vs mainnet) is refused.
+- **Builders**: AMMDeposit/AMMWithdraw set the mode flag `rippled` requires
+  (inferred from the fields given) and `build()` checks what `rippled`'s
+  preflight checks for AccountSet, SignerListSet, SetRegularKey,
+  DelegateSet, Clawback (now with `Holder` for MPTs) and the AMM types.
+- **Utilities**: reserves are computed in exact drops (`1.001` XRP was
+  1,000,999 drops; NaN made the whole balance spendable); book liquidity is
+  exact, counts funded amounts and documents its units; float helpers
+  return `None` instead of inf/NaN.
+- **Faucet**: a timeout; the status is checked before the body is parsed;
+  `fund_and_wait` waits for the balance to grow (an existing account counted
+  as funded); `amount_xrp` is `"100"`, not `"\"100\""`.
+- **CLI**: a failed transaction prints its result and exits 1; `send-xrp`
+  shows amount, destination, tag and fee first; `--seed-out FILE` (mode
+  0600, never overwritten); a world-readable `--seed-file` is warned about;
+  `watch --url https://…` is an error instead of a silent switch.
+- **Other**: HTTP response bodies are capped (128 MiB); base58 strings over
+  128 characters are refused before decoding; seeds come from the OS random
+  source (not reseeded-on-fork thread RNG); `BlockingClient` inside an async
+  runtime returns `ClientError::InsideAsyncRuntime` instead of panicking;
+  `unix_to_ripple_time` does not overflow; an unknown engine-result prefix,
+  or a WebSocket reply with neither result nor error, is no longer `Ok`.
+
+### Added
+- Keylets for every remaining entry type, each matching `rippled` 3.4.1's
+  computed index: `bridge`, `xchain_owned_claim_id`,
+  `xchain_owned_create_account_claim_id`, `deposit_preauth_credentials`,
+  `sponsorship`, `book_base` / `book_directory`, `nftoken_page_min` / `max`.
+- `utils::delivered_amount`, `TxResult::delivered_amount`,
+  `TransactionEvent::delivered_amount`: what a payment actually delivered.
+- `Client::autofill_for_multisigning(tx, signers)`,
+  `Client::validated_ledger_index`, `Client::max_fee_drops`,
+  `with_max_fee_drops` on every client; `DEFAULT_MAX_FEE_DROPS`,
+  `LAST_LEDGER_OFFSET`.
+- `Keypair::sign_message` / `verify_message` / `from_private_key`;
+  `crypto::verify_signing_data`; `Seed::from_bytes`.
+- `Currency::parse`, `Currency::from_code`, `Currency::no_currency`;
+  `utils::reserve::reserve_xrp_to_drops`;
+  `transaction::batch::{required_batch_signers, sign_batch_as}`;
+  `Wallet::sign_batch_as`; `TxCommon::{network_id, delegate}`.
+- `docs/CRYPTO.md` (keys, signing, verification, secret handling), a rewritten
+  `SECURITY.md` with a private reporting channel, `scripts/probe_iou.py`.
+- Clippy denies narrowing `as` casts in every crate.
+
+### Changed (breaking)
+- `Client::submit_and_wait(tx_blob)` takes no `last_ledger_sequence` (it is
+  read from the blob, which must carry one) and has the outcomes above;
+  `BlockingClient::submit_and_wait` likewise. `ClientError` has new variants
+  (`OutcomeUnknown`, `FeeTooHigh`, `InsideAsyncRuntime`), `RpcError` a
+  `response` field, `TransactionClaimed` a `result` field, and
+  `ClientError` / `CoreError` are `#[non_exhaustive]`.
+- `XrplWsClient::subscribe_*` and `events()` return a `Subscription`
+  (`recv()` gives `Option<WsEvent>`: `while let Some(event) = sub.recv().await`);
+  `WsEvent` has `Unparsed`, `Disconnected`, `ResubscribeFailed` and `Missed`.
+- `Seed`, `Keypair` and `Wallet` fields are private: use `as_bytes()`,
+  `key_type()`, `public_key()`, `private_key()`, `keypair()`, `account_id()`,
+  `classic_address()`. `Seed::to_base58` and `Wallet::seed` return
+  `Zeroizing<String>` (`.as_str()` to print); `ed25519::derive_keypair` /
+  `secp256k1::derive_keypair` return the secret key as `Zeroizing<Vec<u8>>`.
+- The codec refuses unknown fields, out-of-range integers, `"0x"` UInt32
+  strings and the other inputs listed above. `encode_vl`, `encode_iou_value`
+  and `encode_amount_iou` return `Result`.
+- `IouAmount::from_decimal` / `new` round instead of truncating, and give
+  zero below 10^-81.
+- `Tx` and `LedgerObject` have an `Unparsed` variant.
+- `utils::reserve` takes drops (`total_reserve_drops(base_drops, inc_drops,
+  owners)`); `dex::liquidity_at_price(offers, max_quality: &str) -> String`;
+  `offer_quality_xrp` and `spread_percent` return `Option<f64>`.
+- `hxrpl`: `wallet faucet` takes `--seed-out`; `raw` takes `--yes`.
+
+### Deprecated
+- `Keypair::sign` / `Keypair::verify` (use `sign_message` / `verify_message`),
+  `transaction::CommonFields` and `transaction::TransactionType` (use
+  `transaction::models`).
+
+### Docs
+- `docs/PARITY.md`: the encoder's refusals, token values, the new keylets and
+  two more deliberate differences. The design notes from March 2026 moved
+  to `docs/design/` and are marked historical (they described signing that
+  `rippled` rejects for Ed25519).
+
 ## v0.5.0 (2026-10-22)
 
 Trust: fuzzing in CI, benchmarks, a minimum Rust version, and a parity report.

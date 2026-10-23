@@ -33,7 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tx_fields
         .get("Sequence")
         .and_then(|s| s.as_u64())
-        .ok_or("no Sequence")? as u32;
+        .and_then(|s| u32::try_from(s).ok())
+        .ok_or("no Sequence")?;
     let id = keylet::mpt_issuance_id(sequence, issuer.classic_address())?;
     println!("  MPTokenIssuanceID {id}");
 

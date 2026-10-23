@@ -49,10 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let approval = bob.sign_batch(&tx)?;
     batch::add_batch_signers(&mut tx, vec![approval])?;
     let blob = alice.sign_and_encode(&tx)?;
-    let last = tx["LastLedgerSequence"]
-        .as_u64()
-        .ok_or("no LastLedgerSequence")? as u32;
-    let result = client.submit_and_wait(&blob, last).await?;
+    let result = client.submit_and_wait(&blob).await?;
     println!(
         "  Batch                    {}",
         result.transaction_result().unwrap_or("?")

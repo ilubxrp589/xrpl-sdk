@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 pub struct PaymentChannelCreate {
     /// The fields every transaction has.
     pub common: TxCommon,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: String,
     /// The account that receives it (`Destination`).
     pub destination: String,
@@ -15,7 +15,7 @@ pub struct PaymentChannelCreate {
     pub settle_delay: u32,
     /// A public key, hex (`PublicKey`).
     pub public_key: String,
-    /// The time after which it can be cancelled (ledger time) (`CancelAfter`).
+    /// The time after which it can be cancelled (`CancelAfter`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub cancel_after: Option<u32>,
     /// A tag the destination uses to tell its senders apart (`DestinationTag`).
     pub destination_tag: Option<u32>,
@@ -151,9 +151,9 @@ pub struct PaymentChannelFund {
     pub common: TxCommon,
     /// The payment channel's ID (`Channel`).
     pub channel: String,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: String,
-    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
+    /// When it expires (`Expiration`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub expiration: Option<u32>,
 }
 impl Transaction for PaymentChannelFund {
@@ -252,9 +252,9 @@ pub struct PaymentChannelClaim {
     pub common: TxCommon,
     /// The payment channel's ID (`Channel`).
     pub channel: String,
-    /// The balance (`Balance`).
+    /// The balance (`Balance`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub balance: Option<String>,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: Option<String>,
     /// A signature, hex (`Signature`).
     pub signature: Option<String>,

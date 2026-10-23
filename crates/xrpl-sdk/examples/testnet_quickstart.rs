@@ -15,7 +15,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Address: {}", wallet.classic_address());
     println!(
         "Seed:    {} (test network only)",
-        wallet.seed().unwrap_or_default()
+        wallet
+            .seed()
+            .as_deref()
+            .map(String::as_str)
+            .unwrap_or_default()
     );
 
     let client = XrplHttpClient::new(network.rpc_url())?;
@@ -29,11 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let blob = wallet.sign_and_encode(&tx)?;
     println!("Hash:    {}", hash_signed_tx_blob(&blob)?);
 
-    let last_ledger = tx
-        .get("LastLedgerSequence")
-        .and_then(|v| v.as_u64())
-        .unwrap_or_default() as u32;
-    let result = client.submit_and_wait(&blob, last_ledger).await?;
+    let result = client.submit_and_wait(&blob).await?;
     if let Some(meta) = &result.meta {
         let result = meta.get("TransactionResult").and_then(|v| v.as_str());
         println!("Result:  {}", result.unwrap_or("?"));

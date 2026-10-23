@@ -31,8 +31,49 @@ impl Currency {
         Currency::NonStandard([0u8; 20])
     }
 
-    /// Create a standard 3-char currency from a string.
+    /// `rippled`'s `noCurrency()` (0x00…01), which it writes as `"1"`.
+    pub fn no_currency() -> Self {
+        let mut bytes = [0u8; 20];
+        bytes[19] = 1;
+        Currency::NonStandard(bytes)
+    }
+
+    /// A currency as `rippled`'s JSON writes one: `"XRP"`, `"1"`
+    /// (no currency), a three-character ISO code, or 40 hex digits. The
+    /// result is canonical: the same currency compares equal however it was
+    /// written (`"USD"` and its 40-digit form are one value).
+    pub fn parse(s: &str) -> Result<Self, crate::CoreError> {
+        match s {
+            "XRP" => Ok(Self::xrp()),
+            "1" => Ok(Self::no_currency()),
+            _ if s.len() == 3 => Self::from_ascii(s),
+            _ if s.len() == 40 => Self::from_hex(s),
+            _ => Err(crate::CoreError::InvalidCurrency(format!(
+                "invalid currency: '{s}'"
+            ))),
+        }
+    }
+
+    /// A currency code as people write one: anything [`Currency::parse`]
+    /// takes, or 4 to 20 ASCII characters (`"RLUSD"`), stored as their bytes
+    /// padded with zeros, as the ledger holds such codes.
+    pub fn from_code(code: &str) -> Result<Self, crate::CoreError> {
+        if (4..=20).contains(&code.len()) && code.len() != 40 && code.is_ascii() {
+            let mut bytes = [0u8; 20];
+            for (slot, b) in bytes.iter_mut().zip(code.bytes()) {
+                *slot = b;
+            }
+            return Ok(Self::from_bytes(bytes));
+        }
+        Self::parse(code)
+    }
+
+    /// Create a standard 3-char currency from a string. `"XRP"` is XRP's
+    /// currency (20 zero bytes), as `rippled`'s `to_currency` reads it.
     pub fn from_ascii(s: &str) -> Result<Self, crate::CoreError> {
+        if s == "XRP" {
+            return Ok(Self::xrp());
+        }
         if s.len() != 3 {
             return Err(crate::CoreError::InvalidCurrency(format!(
                 "standard currency must be 3 chars, got '{s}'"
@@ -59,7 +100,8 @@ impl Currency {
         }
         let mut arr = [0u8; 20];
         arr.copy_from_slice(&bytes);
-        Ok(Currency::NonStandard(arr))
+        // Canonical: a standard code given as hex is the standard code.
+        Ok(Self::from_bytes(arr))
     }
 
     /// Encode to 20-byte wire format.
@@ -130,6 +172,7 @@ impl fmt::Display for Currency {
             Currency::NonStandard(bytes) if *bytes == [0u8; 20] => {
                 write!(f, "XRP")
             }
+            c if *c == Currency::no_currency() => write!(f, "1"),
             Currency::NonStandard(bytes) => {
                 write!(f, "{}", hex::encode_upper(bytes))
             }
@@ -145,6 +188,7 @@ impl Serialize for Currency {
                 serializer.serialize_str(s)
             }
             Currency::NonStandard(bytes) if *bytes == [0u8; 20] => serializer.serialize_str("XRP"),
+            c if *c == Currency::no_currency() => serializer.serialize_str("1"),
             Currency::NonStandard(bytes) => serializer.serialize_str(&hex::encode_upper(bytes)),
         }
     }
@@ -153,16 +197,7 @@ impl Serialize for Currency {
 impl<'de> Deserialize<'de> for Currency {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        if s == "XRP" {
-            return Ok(Currency::xrp());
-        }
-        if s.len() == 3 {
-            Currency::from_ascii(&s).map_err(serde::de::Error::custom)
-        } else if s.len() == 40 {
-            Currency::from_hex(&s).map_err(serde::de::Error::custom)
-        } else {
-            Err(serde::de::Error::custom(format!("invalid currency: '{s}'")))
-        }
+        Currency::parse(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -249,5 +284,29 @@ mod tests {
     fn invalid_currency_length() {
         assert!(Currency::from_ascii("US").is_err());
         assert!(Currency::from_ascii("USDT").is_err());
+    }
+
+    /// One currency, one value: however it is written, it compares (and
+    /// hashes) equal and prints as rippled prints it.
+    #[test]
+    fn a_currency_is_canonical_however_written() {
+        let usd = Currency::from_ascii("USD").unwrap();
+        let hex = Currency::from_hex("0000000000000000000000005553440000000000").unwrap();
+        assert_eq!(usd, hex);
+        assert_eq!(hex.to_string(), "USD");
+        assert_eq!(Currency::from_ascii("XRP").unwrap(), Currency::xrp());
+        assert_eq!(Currency::parse("1").unwrap(), Currency::no_currency());
+        assert_eq!(Currency::no_currency().to_string(), "1");
+        assert_eq!(
+            serde_json::from_value::<Currency>(serde_json::json!("1")).unwrap(),
+            Currency::no_currency()
+        );
+        let rlusd = Currency::from_code("RLUSD").unwrap();
+        assert_eq!(
+            rlusd.to_string(),
+            "524C555344000000000000000000000000000000"
+        );
+        assert_eq!(Currency::from_code("USD").unwrap(), usd);
+        assert!(Currency::parse("RLUSD").is_err());
     }
 }

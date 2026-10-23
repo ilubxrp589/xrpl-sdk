@@ -30,12 +30,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.5"
+halcyon-xrpl-sdk = "0.6"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.5"      # types + codec + crypto only
-halcyon-xrpl-client = "0.5"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.6"      # types + codec + crypto only
+halcyon-xrpl-client = "0.6"    # HTTP + WebSocket clients
 ```
 
 ### Minimum supported Rust version
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for change in utils::get_balance_changes(result.meta.as_ref().unwrap())? {
         println!("{}: {:?}", change.account, change.balances);
     }
-    println!("seed to keep: {}", wallet.seed().unwrap());
+    println!("seed to keep: {}", wallet.seed().unwrap().as_str());
     Ok(())
 }
 ```
@@ -117,14 +117,17 @@ below was run against Testnet (and `watch_streams` against mainnet) before relea
 cargo install halcyon-xrpl-cli
 hxrpl wallet faucet                                       # a funded Testnet wallet
 hxrpl --network mainnet account info rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
-XRPL_SEED=s… hxrpl tx send-xrp rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe 1.5
+read -rs XRPL_SEED && export XRPL_SEED                    # typed, not echoed or kept in history
+hxrpl tx send-xrp rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe 1.5
 hxrpl --network mainnet book XRP RLUSD.rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De
 hxrpl --network mainnet watch ledger --count 5
 hxrpl tx hash 120000220000000024…                         # a signed blob's ID, offline
 ```
 
-Testnet unless told otherwise; sending on mainnet needs `--yes`; seeds only from `XRPL_SEED` or
-`--seed-file`. See [`crates/xrpl-cli`](crates/xrpl-cli).
+Testnet unless told otherwise. Before it submits anything, `hxrpl` asks the server which network
+it is on: anywhere but Testnet or Devnet needs `--yes`, whatever `--network` or `--url` say, and a
+failed transaction exits non-zero. Seeds only from `XRPL_SEED` or `--seed-file`; new ones can go to
+a file (`--seed-out`, mode 0600). See [`crates/xrpl-cli`](crates/xrpl-cli).
 
 ### Subscribe to Ledger Closes (WebSocket)
 
@@ -188,9 +191,12 @@ assert_eq!(json["TransactionType"], "Payment");
 
 - Binary codec: `encode_transaction_json` / `decode_transaction_binary`. Its field registry is rippled 3.4.1's
   `server_definitions` (82 transaction types, 357 fields); all 34 transaction and 261 ledger-object
-  XRPL codec fixtures round-trip byte for byte
+  XRPL codec fixtures round-trip byte for byte. It refuses what rippled refuses instead of changing
+  the transaction: a misspelt field name is an error (never dropped from what is signed), and an
+  integer too large for its field is an error (never wrapped)
 - Ed25519 + Secp256k1 key derivation & signing, checked byte for byte against rippled's `sign` / `sign_for`
-  and xrpl.js's keypair fixtures
+  and xrpl.js's keypair fixtures; secrets wiped on drop and never shown by `Debug`
+  ([docs/CRYPTO.md](docs/CRYPTO.md))
 - X-addresses (XLS-5d): encode/decode, and accepted by the codec in `Account` / `Destination`
 - All XRPL primitive types with serde support; amounts typed for XRP, IOU and MPT
 - Typed ledger objects for all 31 entry types, generated from rippled's own formats
@@ -198,15 +204,19 @@ assert_eq!(json["TransactionType"], "Payment");
   `new` with the required ones, and every flag as a constant (`Payment::TF_PARTIAL_PAYMENT`)
 - **Batch (XLS-56)**: inner transactions, `BatchSigners` from other accounts (single or multi-signed),
   the batch fee, and `autofill` that numbers and prices a batch
-- Fluent builders for 28 common transaction types
+- Fluent builders for 28 common transaction types; `build()` checks the rules rippled checks before
+  applying (AMM mode flags, signer lists, TickSize, TransferRate, …)
 - Transaction hashes (`hash_signed_tx`, `hash_signed_tx_blob`) and ledger entry IDs for every entry
-  type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, …)
+  type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, `bridge`,
+  `book_directory`, …), each matching the index rippled computes
 - Payment channel claims: sign and verify
 - Utilities: XRP ↔ drops, ledger time ↔ Unix / ISO 8601, text ↔ hex, TransferRate and quality,
   NFTokenID parsing, the NFTokenID a mint created, balance changes from metadata. Amounts are
   computed in exact decimal, never floating point
-- Reserve calculation utilities
-- DEX price/spread/liquidity utilities
+- Reserves and spendable balance in exact drops; exact order-book liquidity (price and spread
+  helpers are `f64` approximations, for display)
+- `delivered_amount`: what a payment actually delivered (a partial payment delivers less than its
+  `Amount`)
 - `no_std` compatible (types + crypto, no codec)
 - No `unsafe`, and no `unwrap` / `expect` / unchecked indexing in library code (workspace lints)
 
@@ -216,13 +226,18 @@ assert_eq!(json["TransactionType"], "Payment");
 - A typed request and response for every public `rippled` method and the Clio-only ones (43),
   each response checked against one recorded from a real server; `request_all` follows markers
 - `simulate` (dry-run a transaction) and `submit_multisigned`
-- WebSocket client with subscriptions & automatic reconnection; typed events for every rippled
-  stream (ledger, transactions, validations, server, consensus, book changes, manifests, peer status)
-  and order books with a snapshot
+- WebSocket client: each subscription hears only its own stream; automatic reconnection that
+  resubscribes and reports it (`Disconnected`, `Reconnected`, `ResubscribeFailed`), silent
+  connections replaced, the connection closed on drop; typed events for every rippled stream
+  (ledger, transactions, validations, server, consensus, book changes, manifests, peer status) and
+  order books with a snapshot
 - `BlockingClient`: every method as a plain call, no async runtime needed
-- Autofill (Sequence, Fee, LastLedgerSequence) with concurrent fetch
-- `submit_and_wait` — reliable submission with polling until validated
-- Pagination helpers (`_all` variants) for paginated endpoints
+- Autofill (Sequence, Fee, LastLedgerSequence, NetworkID) with concurrent fetch; the fee is capped
+  (2 XRP unless set with `with_max_fee_drops`), and multi-signed transactions are priced per signer
+- `submit_and_wait`: answers only with the final outcome (validated result, provably expired, or
+  "outcome unknown" with the hash), looking the transaction up by the ID it computes itself, so a
+  payment that went through is never reported as failed
+- Pagination helpers (`_all` variants): every page from the same ledger
 - `tracing` instrumentation on all RPC calls
 - Testnet / Devnet faucet (`faucet::fund`, `fund_and_wait`)
 
@@ -243,10 +258,10 @@ itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and h
 |------|-----------------|
 | Signatures, multisign, transaction hashes, channel claims | rippled 3.4.1's own `sign`, `sign_for` and `channel_authorize`, byte for byte, Ed25519 and secp256k1 |
 | Binary codec | all 34 transaction and 261 ledger-object XRPL codec fixtures; mainnet transactions and ledger entries |
-| Ledger entry IDs | the `index` of real mainnet entries, xrpl.js's hash tests, and a live run that creates each entry type on Testnet |
+| Ledger entry IDs | the `index` of real mainnet entries, the index rippled 3.4.1's `ledger_entry` computes for the kinds no sample holds, xrpl.js's hash tests, and a live run that creates each entry type on Testnet |
 | Balance changes, NFTokenIDs, rates, time, hex, X-addresses | xrpl.js's own test fixtures and expected results |
 | Transaction models | 186 real transactions (51 types) round-trip to the same JSON, bytes and ID; an example of every other type, signed by rippled 3.4.1, encodes to its exact `tx_blob`: all 82 types |
-| Edge cases of the format: `Number`, amounts, paths, issues, object structure | 94 binary forms and 80 JSON values put to rippled 3.4.1's `simulate`: the SDK writes and shows each as rippled does, and refuses what rippled refuses instead of rounding or guessing |
+| Edge cases of the format: `Number`, amounts, token values, paths, issues, object structure | 94 binary forms, 80 JSON values and 42 token values put to rippled 3.4.1's `simulate`: the SDK writes and shows each as rippled does, and refuses what rippled refuses instead of rounding or guessing |
 | Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
 | Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet: each must parse, and serializing it back must keep all 2,521 field paths |
 | End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |

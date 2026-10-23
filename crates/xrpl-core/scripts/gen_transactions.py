@@ -124,7 +124,12 @@ for n in names:
     out.append("    #[serde(flatten)]")
     out.append("    pub common: Common,")
     for f in own:
-        out.extend(field(f, f["optionality"] != 0))
+        lines = field(f, f["optionality"] != 0)
+        if n == "Payment" and f["name"] == "Amount":
+            lines[0] = ("    /// How much to send at most (`Amount`: XRP in drops, a token, or an MPT). Required.\n"
+                        "    /// With `tfPartialPayment` the payment may deliver less: what arrived is the\n"
+                        "    /// metadata's `delivered_amount` (`utils::delivered_amount`), never this field.")
+        out.extend(lines)
         nfields += 1
     if n == "OfferCreate":
         out += ['    /// What the owner holds of `TakerGets`\' asset: `rippled` adds it in transaction',
@@ -134,8 +139,9 @@ for n in names:
                 '    pub owner_funds: Option<String>,']
     if n == "Payment":
         out += ['    /// `rippled`\'s API name for `Amount` in what it returns (API v1 writes both; v2 only',
-                '    /// this). Not a transaction field: the codec ignores it, and a transaction read',
-                '    /// without `Amount` takes its `Amount` from here.',
+                '    /// this). Not a field of its own: the codec takes it as `Amount` (it must equal',
+                '    /// `Amount` when both are present), and a transaction read without `Amount` takes',
+                '    /// its `Amount` from here.',
                 '    #[serde(rename = "DeliverMax", default, skip_serializing_if = "Option::is_none")]',
                 '    pub deliver_max: Option<Amount>,']
     out.append("}")

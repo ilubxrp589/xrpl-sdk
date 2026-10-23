@@ -1,8 +1,10 @@
 //! [`ClientError`]: transport and JSON failures, `rippled` errors, and the
 //! sorted outcome of a submitted transaction.
 
-/// Everything a client call can fail with.
+/// Everything a client call can fail with. New variants may be added in
+/// minor releases (`#[non_exhaustive]`): match with a `_` arm.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ClientError {
     /// The HTTP request failed.
     #[error("HTTP error: {0}")]
@@ -19,9 +21,16 @@ pub enum ClientError {
         code: String,
         /// Its message.
         message: String,
+        /// The whole error response: `rippled` puts details beside the error
+        /// (`tx`'s `searched_all`, the `request` it refused, …).
+        response: Box<serde_json::Value>,
     },
 
-    /// Refused (`tem`, `tef`, most `tel`): it never reaches a ledger.
+    /// Refused. From [`Client::submit`](crate::Client::submit) this is the
+    /// server's preliminary `tem`, `tef` or `tel`; only a `tem` (malformed)
+    /// is sure never to reach a ledger. From
+    /// [`Client::submit_and_wait`](crate::Client::submit_and_wait) it is
+    /// final: a `tem`, or a `tef`/`tel` for a transaction no ledger holds.
     #[error("transaction failed: {engine_result} — {message}")]
     TransactionFailed {
         /// The engine result.
@@ -30,18 +39,54 @@ pub enum ClientError {
         message: String,
     },
 
-    /// May succeed if submitted again (`ter`, `telINSUF_FEE_P`, `telCAN_NOT_QUEUE…`).
-    #[error("transaction retry: {engine_result}")]
+    /// A preliminary result from [`Client::submit`](crate::Client::submit)
+    /// that is not an outcome yet (`ter…`, `telINSUF_FEE_P`,
+    /// `telCAN_NOT_QUEUE…`): the transaction was held, queued or dropped,
+    /// and may still be applied. Resubmitting the same blob is safe; signing
+    /// a new transaction for the same payment is not until this one's
+    /// `LastLedgerSequence` has passed.
+    #[error("transaction not applied yet: {engine_result}")]
     TransactionRetry {
         /// The engine result.
         engine_result: String,
     },
 
-    /// Failed, but the fee was charged (`tec`).
-    #[error("transaction fee claimed: {engine_result}")]
+    /// A `tec`: the transaction failed, but it was (or, preliminary, would
+    /// be) put in a ledger and its fee charged. From
+    /// [`Client::submit_and_wait`](crate::Client::submit_and_wait) it is
+    /// final and `result` holds the validated transaction and metadata; from
+    /// [`Client::submit`](crate::Client::submit) it is preliminary (`result`
+    /// is `None`) and the final result can still differ.
+    #[error("transaction failed, fee charged: {engine_result}")]
     TransactionClaimed {
         /// The engine result.
         engine_result: String,
+        /// The validated transaction, when the result is final.
+        result: Option<Box<crate::types::TxResult>>,
+    },
+
+    /// A transaction was sent, but whether it is in a ledger could not be
+    /// found out (the connection failed, or the server lacks the ledgers to
+    /// prove it is in none). Look it up by `hash` before sending anything
+    /// that replaces it.
+    #[error("transaction {hash} was sent; its outcome is unknown ({reason})")]
+    OutcomeUnknown {
+        /// The transaction's ID.
+        hash: String,
+        /// The last ledger it can be in.
+        last_ledger_sequence: u32,
+        /// What stopped the check.
+        reason: String,
+    },
+
+    /// [`Client::autofill`](crate::Client::autofill) would set a `Fee` above
+    /// the client's cap (see `with_max_fee_drops` on each client).
+    #[error("the fee {fee_drops} drops is above the cap of {max_fee_drops} drops")]
+    FeeTooHigh {
+        /// The fee the server's prices come to.
+        fee_drops: u64,
+        /// The cap.
+        max_fee_drops: u64,
     },
 
     /// The WebSocket connection is closed.
@@ -56,13 +101,19 @@ pub enum ClientError {
     #[error("unexpected response: {0}")]
     UnexpectedResponse(String),
 
-    /// Its `LastLedgerSequence` passed without it being validated.
+    /// Its `LastLedgerSequence` passed, and the server holds every ledger up
+    /// to it: the transaction is in none and never will be.
     #[error("transaction expired: LastLedgerSequence {0} passed")]
     TransactionExpired(u32),
 
     /// `request_all` stopped after this many pages; page on with `marker`.
     #[error("pagination limit reached: {0} pages fetched, use marker manually for more")]
     PaginationLimitReached(usize),
+
+    /// A [`crate::blocking::BlockingClient`] method was called inside an
+    /// async runtime, which blocking would stall; use the async client.
+    #[error("BlockingClient used inside an async runtime; use the async client there")]
+    InsideAsyncRuntime,
 
     /// A core error (codec, keys, amounts, …).
     #[error("core error: {0}")]

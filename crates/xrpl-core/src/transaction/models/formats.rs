@@ -3461,7 +3461,9 @@ pub struct Payment {
     /// The account that receives it (`Destination`: a classic address). Required.
     #[serde(rename = "Destination")]
     pub destination: String,
-    /// How much (`Amount`: XRP in drops, a token, or an MPT). Required.
+    /// How much to send at most (`Amount`: XRP in drops, a token, or an MPT). Required.
+    /// With `tfPartialPayment` the payment may deliver less: what arrived is the
+    /// metadata's `delivered_amount` (`utils::delivered_amount`), never this field.
     #[serde(rename = "Amount")]
     pub amount: Amount,
     /// The most the sender will spend, in any currency (`SendMax`: XRP in drops, a token, or an MPT). Optional.
@@ -3498,8 +3500,9 @@ pub struct Payment {
     #[serde(rename = "DomainID", default, skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<Hash256>,
     /// `rippled`'s API name for `Amount` in what it returns (API v1 writes both; v2 only
-    /// this). Not a transaction field: the codec ignores it, and a transaction read
-    /// without `Amount` takes its `Amount` from here.
+    /// this). Not a field of its own: the codec takes it as `Amount` (it must equal
+    /// `Amount` when both are present), and a transaction read without `Amount` takes
+    /// its `Amount` from here.
     #[serde(
         rename = "DeliverMax",
         default,
