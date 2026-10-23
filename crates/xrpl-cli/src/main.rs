@@ -1,9 +1,12 @@
 //! `hxrpl`: the XRP Ledger from the command line, on `halcyon-xrpl-sdk`.
 //!
 //! It works on Testnet unless told otherwise (`--network mainnet`, or
-//! `XRPL_NETWORK=mainnet`), and sending on mainnet also needs `--yes`.
+//! `XRPL_NETWORK=mainnet`). Before it submits anything it asks the server
+//! which network it is on, and anything but Testnet or Devnet (mainnet, a
+//! network it cannot tell, `--url` pointing anywhere else) needs `--yes`.
 //! Seeds are read from `XRPL_SEED` or `--seed-file`, never from the command
-//! line, where shell history and process lists would keep them.
+//! line, where shell history and process lists would keep them; new seeds
+//! can go to a file (`--seed-out`, mode 0600) instead of the terminal.
 
 #![warn(missing_docs)]
 
@@ -20,7 +23,7 @@ type Res<T = ()> = Result<T, Box<dyn Error>>;
     name = "hxrpl",
     version,
     about = "The XRP Ledger from the command line: wallets, faucet, queries, signing, sending, hashes, ledger entry IDs and live streams.",
-    after_help = "Examples:\n  hxrpl wallet faucet                       a funded Testnet wallet\n  hxrpl --network mainnet account info rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh\n  XRPL_SEED=s… hxrpl tx send-xrp rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe 1.5\n  hxrpl --network mainnet watch ledger --count 5\n  hxrpl id trust-line rA… rB… USD           a trust line's ledger entry ID\n  hxrpl tx hash 1200002200000000…          a signed blob's transaction ID\n\nSeeds come from XRPL_SEED or --seed-file, never from arguments."
+    after_help = "Examples:\n  hxrpl wallet faucet                       a funded Testnet wallet\n  hxrpl --network mainnet account info rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh\n  read -rs XRPL_SEED && export XRPL_SEED   (typed, not echoed or kept in history)\n  hxrpl tx send-xrp rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe 1.5\n  hxrpl --network mainnet watch ledger --count 5\n  hxrpl id trust-line rA… rB… USD           a trust line's ledger entry ID\n  hxrpl tx hash 1200002200000000…          a signed blob's transaction ID\n\nSeeds come from XRPL_SEED or --seed-file, never from arguments. Submitting anywhere but Testnet or Devnet needs --yes."
 )]
 struct Cli {
     /// The network to use.
@@ -108,10 +111,13 @@ enum Command {
     #[command(subcommand)]
     Convert(ConvertCmd),
     /// Call any rippled method with JSON parameters, e.g. `hxrpl raw server_state '{}'`.
+    /// `submit` and `submit_multisigned` follow the same --yes rule as `tx submit`.
     Raw {
         method: String,
         #[arg(default_value = "{}")]
         params: String,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -127,22 +133,36 @@ enum Stream {
 
 #[derive(Args)]
 struct SeedSource {
-    /// Read the seed from this file instead of `XRPL_SEED`.
+    /// Read the seed from this file instead of `XRPL_SEED` (keep it mode 0600).
     #[arg(long)]
     seed_file: Option<PathBuf>,
 }
 
+#[derive(Args)]
+struct SeedOut {
+    /// Write the new seed to this file (created with mode 0600; never
+    /// overwritten) instead of printing it.
+    #[arg(long)]
+    seed_out: Option<PathBuf>,
+}
+
 #[derive(Subcommand)]
 enum WalletCmd {
-    /// Generate a new wallet (Ed25519, or secp256k1). Prints its seed: keep it safe.
+    /// Generate a new wallet (Ed25519, or secp256k1). Prints its seed, or
+    /// writes it to --seed-out: keep it safe.
     New {
         #[arg(long)]
         secp256k1: bool,
+        #[command(flatten)]
+        out: SeedOut,
     },
     /// Show the address and public key of the wallet in XRPL_SEED / --seed-file.
     Show(SeedSource),
     /// Generate a wallet and fund it from the Testnet or Devnet faucet.
-    Faucet,
+    Faucet {
+        #[command(flatten)]
+        out: SeedOut,
+    },
 }
 
 #[derive(Subcommand)]
@@ -194,7 +214,8 @@ enum TxCmd {
     },
     /// What a JSON transaction would do, without signing or submitting it.
     Simulate { json: String },
-    /// Submit a signed blob (`--wait` until validated). On mainnet, add --yes.
+    /// Submit a signed blob (`--wait` for the final outcome). Anywhere but
+    /// Testnet or Devnet, add --yes.
     Submit {
         blob: String,
         #[arg(long)]
@@ -202,10 +223,11 @@ enum TxCmd {
         #[arg(long)]
         yes: bool,
     },
-    /// Send XRP from the XRPL_SEED wallet: autofill, sign, submit, wait. On mainnet, add --yes.
+    /// Send XRP from the XRPL_SEED wallet: autofill, sign, submit, wait for
+    /// the final outcome. Anywhere but Testnet or Devnet, add --yes.
     SendXrp {
         destination: String,
-        /// In XRP, e.g. 1.5.
+        /// In XRP (not drops), e.g. 1.5.
         amount: String,
         #[arg(long)]
         tag: Option<u32>,
@@ -280,12 +302,65 @@ fn read_json(arg: &str) -> Res<Value> {
 
 fn wallet_from(seed: &SeedSource) -> Res<Wallet> {
     let secret = match &seed.seed_file {
-        Some(path) => std::fs::read_to_string(path)?.trim().to_string(),
+        Some(path) => {
+            warn_if_others_can_read(path);
+            zeroize::Zeroizing::new(std::fs::read_to_string(path)?)
+                .trim()
+                .to_string()
+        }
         None => std::env::var("XRPL_SEED").map_err(|_| {
             "set XRPL_SEED (or --seed-file); seeds are not taken as arguments, which shell history keeps"
         })?,
     };
+    let secret = zeroize::Zeroizing::new(secret);
     Ok(Wallet::from_seed(&secret)?)
+}
+
+#[cfg(unix)]
+fn warn_if_others_can_read(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        if meta.permissions().mode() & 0o077 != 0 {
+            eprintln!(
+                "warning: {} can be read by other users; `chmod 600` it",
+                path.display()
+            );
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn warn_if_others_can_read(_: &std::path::Path) {}
+
+/// Print a new wallet, its seed included, or write the seed to `out` (a new
+/// file, mode 0600) and print the rest.
+fn show_new_wallet(w: &Wallet, out: &SeedOut, extra: Value) -> Res {
+    let mut shown = serde_json::Map::new();
+    shown.insert("address".into(), json!(w.classic_address()));
+    shown.insert("public_key".into(), json!(w.public_key_hex()));
+    let seed = w.seed().ok_or("the wallet has no seed")?;
+    match &out.seed_out {
+        Some(path) => {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+            let mut file = options
+                .open(path)
+                .map_err(|e| format!("{}: {e} (it is never overwritten)", path.display()))?;
+            std::io::Write::write_all(&mut file, format!("{}\n", seed.as_str()).as_bytes())?;
+            shown.insert("seed_file".into(), json!(path.display().to_string()));
+        }
+        None => {
+            shown.insert("seed".into(), json!(seed.as_str()));
+        }
+    }
+    if let Value::Object(extra) = extra {
+        shown.extend(extra);
+    }
+    print(&shown)?;
+    eprintln!("Keep the seed private: it controls the account.");
+    Ok(())
 }
 
 /// A currency code as rippled takes it: three characters as they are, 40 hex
@@ -324,11 +399,48 @@ fn ledger_index(s: &str) -> Res<LedgerIndex> {
     })
 }
 
-fn mainnet_needs_yes(network: Network, yes: bool) -> Res {
-    if network == Network::Mainnet && !yes {
+/// Testnet's and Devnet's network IDs: the networks where sending needs no --yes.
+const TEST_NETWORK_IDS: [u32; 2] = [1, 2];
+
+/// Before anything is submitted: ask the server which network it is on.
+/// Anywhere but Testnet or Devnet (mainnet, a network it does not name,
+/// whatever `--url` points at) needs --yes, whatever --network says.
+async fn needs_yes_unless_test_network(
+    client: &XrplHttpClient,
+    network: Network,
+    yes: bool,
+) -> Res {
+    if yes {
+        return Ok(());
+    }
+    if network == Network::Mainnet {
         return Err("this sends a transaction on mainnet; add --yes to go ahead".into());
     }
-    Ok(())
+    let id = client.server_info().await?.info.network_id;
+    match id {
+        Some(id) if TEST_NETWORK_IDS.contains(&id) => Ok(()),
+        Some(0) => Err("the server is on mainnet; add --yes to send real XRP".into()),
+        Some(id) => Err(format!(
+            "the server is on network {id}, not Testnet or Devnet; add --yes to go ahead"
+        )
+        .into()),
+        None => Err("the server does not say which network it is on; add --yes to go ahead".into()),
+    }
+}
+
+/// Print a validated failure's transaction before reporting it, so its hash
+/// and metadata are not lost; the exit code is non-zero.
+fn outcome(result: Result<TxResult, ClientError>) -> Res<TxResult> {
+    match result {
+        Err(ClientError::TransactionClaimed {
+            engine_result,
+            result: Some(tx),
+        }) => {
+            print(&tx)?;
+            Err(format!("transaction failed, fee charged: {engine_result}").into())
+        }
+        other => Ok(other?),
+    }
 }
 
 #[tokio::main]
@@ -349,16 +461,13 @@ async fn run(cli: Cli) -> Res {
     let v = LedgerIndex::Validated;
     match cli.command {
         Command::Wallet(cmd) => match cmd {
-            WalletCmd::New { secp256k1 } => {
+            WalletCmd::New { secp256k1, out } => {
                 let w = if secp256k1 {
                     Wallet::generate_with_type(KeyType::Secp256k1)
                 } else {
                     Wallet::generate()
                 };
-                print(
-                    &json!({"address": w.classic_address(), "public_key": w.public_key_hex(), "seed": w.seed().as_deref().map(String::as_str)}),
-                )?;
-                eprintln!("Keep the seed private: it controls the account.");
+                show_new_wallet(&w, &out, json!({}))?;
             }
             WalletCmd::Show(seed) => {
                 let w = wallet_from(&seed)?;
@@ -366,16 +475,14 @@ async fn run(cli: Cli) -> Res {
                     &json!({"address": w.classic_address(), "public_key": w.public_key_hex(), "key_type": format!("{:?}", w.key_type())}),
                 )?;
             }
-            WalletCmd::Faucet => {
+            WalletCmd::Faucet { out } => {
                 let net = cli
                     .network
                     .faucet()
                     .ok_or("there is no faucet on mainnet")?;
                 eprintln!("Funding a new wallet from the {net:?} faucet…");
                 let w = generate_faucet_wallet(net).await?;
-                print(
-                    &json!({"address": w.classic_address(), "seed": w.seed().as_deref().map(String::as_str), "network": format!("{net:?}")}),
-                )?;
+                show_new_wallet(&w, &out, json!({"network": format!("{net:?}")}))?;
             }
         },
         Command::Account(cmd) => {
@@ -434,10 +541,10 @@ async fn run(cli: Cli) -> Res {
             }
             TxCmd::Simulate { json } => print(&client()?.simulate(&read_json(&json)?).await?)?,
             TxCmd::Submit { blob, wait, yes } => {
-                mainnet_needs_yes(cli.network, yes)?;
                 let c = client()?;
+                needs_yes_unless_test_network(&c, cli.network, yes).await?;
                 if wait {
-                    print(&c.submit_and_wait(blob.trim()).await?)?;
+                    print(&outcome(c.submit_and_wait(blob.trim()).await)?)?;
                 } else {
                     print(&c.submit(blob.trim()).await?)?;
                 }
@@ -449,22 +556,30 @@ async fn run(cli: Cli) -> Res {
                 yes,
                 seed,
             } => {
-                mainnet_needs_yes(cli.network, yes)?;
                 let wallet = wallet_from(&seed)?;
+                let drops = utils::xrp_to_drops(&amount)?;
                 let mut tx = json!({
                     "TransactionType": "Payment",
                     "Account": wallet.classic_address(),
                     "Destination": destination,
-                    "Amount": utils::xrp_to_drops(&amount)?.to_string(),
+                    "Amount": drops.to_string(),
                 });
                 if let (Some(tag), Some(obj)) = (tag, tx.as_object_mut()) {
                     obj.insert("DestinationTag".into(), json!(tag));
                 }
                 let c = client()?;
-                let result = submit_transaction(&c, &mut tx, &wallet).await?;
-                let outcome = result.transaction_result().unwrap_or("?").to_string();
+                c.autofill(&mut tx).await?;
+                eprintln!(
+                    "Sending {amount} XRP ({drops} drops) from {} to {destination}{}, fee {} drops.",
+                    wallet.classic_address(),
+                    tag.map(|t| format!(" (tag {t})")).unwrap_or_default(),
+                    tx.get("Fee").and_then(Value::as_str).unwrap_or("?"),
+                );
+                needs_yes_unless_test_network(&c, cli.network, yes).await?;
+                let blob = wallet.sign_and_encode(&tx)?;
+                let result = outcome(c.submit_and_wait(&blob).await)?;
                 print(
-                    &json!({"hash": result.hash(), "result": outcome, "ledger_index": result.ledger_index}),
+                    &json!({"hash": result.hash(), "result": result.transaction_result(), "ledger_index": result.ledger_index}),
                 )?;
             }
         },
@@ -506,11 +621,15 @@ async fn run(cli: Cli) -> Res {
             print(&client()?.request(&req).await?)?;
         }
         Command::Watch { stream, count } => {
-            let ws_url = cli
-                .url
-                .clone()
-                .filter(|u| u.starts_with("ws"))
-                .unwrap_or_else(|| cli.network.ws().to_string());
+            let ws_url = match &cli.url {
+                Some(u) if u.starts_with("ws://") || u.starts_with("wss://") => u.clone(),
+                Some(u) => {
+                    return Err(
+                        format!("watch needs a WebSocket URL (ws:// or wss://), got {u}").into(),
+                    )
+                }
+                None => cli.network.ws().to_string(),
+            };
             let ws = XrplWsClient::connect(&ws_url).await?;
             let mut events = match stream {
                 Stream::Ledger => ws.subscribe_ledger().await?,
@@ -552,11 +671,20 @@ async fn run(cli: Cli) -> Res {
             ConvertCmd::Hex { text } => println!("{}", utils::str_to_hex(&text)),
             ConvertCmd::Text { hex } => println!("{}", utils::hex_to_str(&hex)?),
         },
-        Command::Raw { method, params } => print(
-            &client()?
-                .raw_request(&method, serde_json::from_str(&params)?)
-                .await?,
-        )?,
+        Command::Raw {
+            method,
+            params,
+            yes,
+        } => {
+            let c = client()?;
+            if matches!(method.as_str(), "submit" | "submit_multisigned") {
+                needs_yes_unless_test_network(&c, cli.network, yes).await?;
+            }
+            print(
+                &c.raw_request(&method, serde_json::from_str(&params)?)
+                    .await?,
+            )?
+        }
     }
     Ok(())
 }

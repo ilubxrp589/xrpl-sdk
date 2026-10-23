@@ -157,3 +157,101 @@ fn long_currency_codes_become_hex() {
     assert!(text.0 && hex.0);
     assert_eq!(text.1, hex.1);
 }
+
+/// A one-request JSON-RPC server answering `server_info` with `network_id`.
+fn fake_server(network_id: u32) -> String {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let body = format!(
+                r#"{{"result":{{"info":{{"network_id":{network_id}}},"status":"success"}}}}"#
+            );
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    url
+}
+
+/// --url pointing at a mainnet server needs --yes even though --network
+/// says Testnet (the default): the server is asked which network it is on.
+#[test]
+fn the_server_decides_whether_yes_is_needed() {
+    let url = fake_server(0);
+    let (ok, _, err) = hxrpl(&["--url", &url, "tx", "submit", SIGNED], &[]);
+    assert!(
+        !ok && err.contains("mainnet") && err.contains("--yes"),
+        "{err}"
+    );
+    let url = fake_server(21337);
+    let (ok, _, err) = hxrpl(
+        &["--url", &url, "raw", "submit", r#"{"tx_blob":"00"}"#],
+        &[],
+    );
+    assert!(
+        !ok && err.contains("21337") && err.contains("--yes"),
+        "{err}"
+    );
+    let url = fake_server(0);
+    let (ok, _, err) = hxrpl(
+        &[
+            "--url",
+            &url,
+            "tx",
+            "send-xrp",
+            "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "1",
+            "--seed-file",
+            "/nonexistent",
+        ],
+        &[],
+    );
+    assert!(!ok, "{err}");
+}
+
+#[test]
+fn a_new_seed_can_go_to_a_private_file() {
+    let dir = std::env::temp_dir().join(format!("hxrpl-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("seed");
+    let _ = std::fs::remove_file(&path);
+    let p = path.to_str().unwrap();
+    let (ok, out, _) = hxrpl(&["wallet", "new", "--seed-out", p], &[]);
+    assert!(ok && !out.contains("\"seed\""), "{out}");
+    let seed = std::fs::read_to_string(&path).unwrap();
+    assert!(seed.starts_with("sEd"), "{seed}");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+    // Never overwritten.
+    let (ok, _, err) = hxrpl(&["wallet", "new", "--seed-out", p], &[]);
+    assert!(!ok && err.contains("never overwritten"), "{err}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), seed);
+    // Reading a seed file others can read is warned about.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let (ok, _, err) = hxrpl(&["wallet", "show", "--seed-file", p], &[]);
+        assert!(ok && err.contains("chmod 600"), "{err}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn watch_refuses_a_url_that_is_not_websocket() {
+    let (ok, _, err) = hxrpl(&["--url", "https://example.com", "watch", "ledger"], &[]);
+    assert!(!ok && err.contains("WebSocket"), "{err}");
+}
