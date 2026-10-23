@@ -7,8 +7,10 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
-0.8 is the one deliberate set of breaking changes before 1.0. Each change
-below says how to update.
+## [v0.8.0] (2026-10-23)
+
+One consistent API, the 1.0 candidate: 0.8 is the one deliberate set of
+breaking changes before 1.0. Each change below says how to update.
 
 ### Changed (breaking)
 - **`rippled`'s API version 2, and typed metadata.** Every request now
@@ -919,7 +921,8 @@ Initial release.
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
 
-[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.0...HEAD
+[v0.8.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.4.0...v0.5.0
