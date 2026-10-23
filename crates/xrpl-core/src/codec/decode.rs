@@ -88,11 +88,6 @@ fn ledger_entry_type_name(code: u16) -> Option<&'static str> {
     LEDGER_ENTRY_TYPE_NAMES.get(&code).map(|s| s.as_str())
 }
 
-/// Decode a binary-encoded XRPL transaction (or ledger object) back to JSON.
-///
-/// This is the inverse of `encode_transaction_json`. It reads the canonical
-/// binary format and reconstructs the JSON representation, converting numeric
-/// type codes back to string names where appropriate.
 /// Maximum recursion depth for nested STObject/STArray decoding.
 /// Prevents stack overflow from malicious or malformed deeply-nested input.
 const MAX_DECODE_DEPTH: usize = 16;
