@@ -410,7 +410,7 @@ fn encode_amount_field(value: &Value) -> Result<Vec<u8>, CoreError> {
             }
             let issuer = AccountId::from_address(issuer_str)?;
 
-            Ok(amount::encode_amount_iou(&iou, &currency, &issuer).to_vec())
+            Ok(amount::encode_amount_iou(&iou, &currency, &issuer)?.to_vec())
         }
         _ => Err(CoreError::InvalidAmount(
             "Amount must be string (XRP) or object (IOU/MPT)".to_string(),

@@ -80,9 +80,20 @@ fn base58_encode(data: &[u8]) -> String {
 }
 
 /// Base58-decode string to raw bytes.
+/// The longest base58 string decoded (every XRPL base58 value — address,
+/// X-address, seed, public key — is far shorter). Decoding takes time
+/// quadratic in the length, so a server cannot make an "address" in a
+/// response cost minutes of CPU.
+const MAX_BASE58_LEN: usize = 128;
+
 fn base58_decode(s: &str) -> Result<Vec<u8>, CoreError> {
     if s.is_empty() {
         return Ok(Vec::new());
+    }
+    if s.len() > MAX_BASE58_LEN {
+        return Err(CoreError::InvalidBase58(format!(
+            "longer than {MAX_BASE58_LEN} characters"
+        )));
     }
 
     // Count leading 'r' (base58 zero character)
@@ -654,5 +665,13 @@ mod tests {
                 "{message}"
             );
         }
+    }
+
+    #[test]
+    fn a_huge_string_is_refused_before_decoding() {
+        let huge = "p".repeat(200_000);
+        let started = std::time::Instant::now();
+        assert!(decode_account_id(&huge).is_err());
+        assert!(started.elapsed() < std::time::Duration::from_millis(50));
     }
 }

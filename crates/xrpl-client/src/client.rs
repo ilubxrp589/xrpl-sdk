@@ -19,6 +19,36 @@ pub const DEFAULT_MAX_FEE_DROPS: u64 = 2_000_000;
 /// transaction (`LastLedgerSequence`): about a minute and a half.
 pub const LAST_LEDGER_OFFSET: u32 = 20;
 
+/// An X-address says whether it is for a test network (XLS-5d): one for
+/// the other kind of network than the server's (mainnet is 0; Testnet 1 and
+/// Devnet 2 are test networks) is refused, so a Testnet address cannot
+/// receive a mainnet payment by mistake.
+fn check_x_address_networks(tx: &Value, network_id: u32) -> Result<(), ClientError> {
+    let mainnet = match network_id {
+        0 => true,
+        1 | 2 => false,
+        _ => return Ok(()),
+    };
+    for (name, value) in tx.as_object().into_iter().flatten() {
+        let Some(text) = value.as_str().filter(|s| s.starts_with(['X', 'T'])) else {
+            continue;
+        };
+        let Ok((_, _, test)) = xrpl_core::address::decode_x_address(text) else {
+            continue;
+        };
+        if test == mainnet {
+            return Err(ClientError::Core(xrpl_core::CoreError::ValidationError(
+                format!(
+                    "{name} is an X-address for {}, but the server is on {}",
+                    if test { "a test network" } else { "mainnet" },
+                    if mainnet { "mainnet" } else { "a test network" }
+                ),
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// `fee`, or [`ClientError::FeeTooHigh`] above `max`.
 fn capped_fee(fee: u64, max: u64) -> Result<u64, ClientError> {
     if fee > max {
@@ -357,6 +387,9 @@ pub trait Client {
         };
         let (acct_info, fee_result, ledger_idx, network_id) =
             futures::future::try_join4(seq_fut, fee_fut, lls_fut, network_fut).await?;
+        if let Some(id) = network_id {
+            check_x_address_networks(tx, id)?;
+        }
         let open_ledger_fee = fee_result
             .map(|f| {
                 f.drops.open_ledger_fee.parse::<u64>().map_err(|_| {
@@ -1332,5 +1365,23 @@ mod tests {
             (json!(0), json!(21338))
         );
         assert_eq!(count(&mock, "account_info"), 0);
+    }
+
+    /// A Testnet X-address in a transaction for a mainnet server is refused.
+    #[tokio::test]
+    async fn autofill_refuses_an_x_address_for_the_other_network() {
+        let classic = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        let test_x = xrpl_core::address::classic_to_x_address(classic, Some(7), true).unwrap();
+        let main_x = xrpl_core::address::classic_to_x_address(classic, Some(7), false).unwrap();
+        let server =
+            |id: u32| Mock::default().reply("server_info", json!({"info": {"network_id": id}}));
+        let tx = |dest: &str| {
+            json!({"TransactionType": "Payment", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "Destination": dest, "Amount": "1", "Fee": "12", "Sequence": 1, "LastLedgerSequence": 9})
+        };
+        assert!(server(0).autofill(&mut tx(&test_x)).await.is_err());
+        assert!(server(1).autofill(&mut tx(&main_x)).await.is_err());
+        assert!(server(0).autofill(&mut tx(&main_x)).await.is_ok());
+        assert!(server(1).autofill(&mut tx(&test_x)).await.is_ok());
     }
 }

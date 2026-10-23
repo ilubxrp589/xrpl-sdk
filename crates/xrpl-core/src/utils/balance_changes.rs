@@ -32,6 +32,12 @@ pub struct AccountBalanceChanges {
 /// accounts on the trust line, each from its own side). The same result as
 /// xrpl.js's `getBalanceChanges`, in the same order, but exact: values are
 /// computed in decimal, never in floating point.
+///
+/// Not included: MPT balances (`MPToken` and `MPTokenIssuance` entries), and
+/// XRP held in escrows, payment channels and checks (they are not account
+/// balances). For what a Payment delivered, read `delivered_amount` in the
+/// metadata, never the transaction's `Amount` (a partial payment delivers
+/// less).
 pub fn get_balance_changes(meta: &Value) -> Result<Vec<AccountBalanceChanges>, CoreError> {
     let nodes = meta
         .get("AffectedNodes")

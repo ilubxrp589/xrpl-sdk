@@ -250,19 +250,12 @@ impl Amount {
     /// assert_eq!(serde_json::to_value(&rlusd).unwrap()["currency"], "524C555344000000000000000000000000000000");
     /// ```
     pub fn token(value: &str, currency: &str, issuer: &str) -> Result<Self, crate::CoreError> {
-        let currency = if currency.len() == 40 && currency.bytes().all(|b| b.is_ascii_hexdigit()) {
-            Currency::from_hex(currency)?
-        } else if currency.len() == 3 {
-            Currency::from_ascii(currency)?
-        } else if !currency.is_empty() && currency.len() <= 20 && currency.is_ascii() {
-            let mut bytes = [0u8; 20];
-            for (slot, b) in bytes.iter_mut().zip(currency.bytes()) {
-                *slot = b;
-            }
-            Currency::from_bytes(bytes)
-        } else {
-            return Err(crate::CoreError::InvalidCurrency(currency.to_string()));
-        };
+        let currency = Currency::from_code(currency)?;
+        if currency.is_xrp() {
+            return Err(crate::CoreError::InvalidCurrency(
+                "a token cannot use XRP's currency code; use Amount::Xrp".to_string(),
+            ));
+        }
         Ok(Amount::Iou {
             value: IouAmount::from_decimal(value)?,
             currency,

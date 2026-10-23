@@ -138,7 +138,20 @@ impl FieldId {
     }
 
     /// Decode field header from bytes. Returns (FieldId, bytes_consumed).
+    ///
+    /// Only the shortest header for each code is read, as `rippled`'s
+    /// `SerialIter::getFieldID` requires: a type or name byte in a longer
+    /// header must be 16 or more ("uncommon type/name out of range").
     pub fn decode(buf: &[u8]) -> Result<(Self, usize), CoreError> {
+        let uncommon = |b: u8, what: &str| -> Result<u16, CoreError> {
+            if b < 16 {
+                Err(CoreError::CodecError(format!(
+                    "non-canonical field header: {what} {b} fits in the first byte"
+                )))
+            } else {
+                Ok(u16::from(b))
+            }
+        };
         let &byte0 = buf
             .first()
             .ok_or_else(|| CoreError::CodecError("empty buffer for field header".to_string()))?;
@@ -154,25 +167,25 @@ impl FieldId {
                 let &b2 = buf.get(2).ok_or_else(|| {
                     CoreError::CodecError("need 3 bytes for field header".to_string())
                 })?;
-                Ok((Self::new(b1 as u16, b2 as u16), 3))
+                Ok((Self::new(uncommon(b1, "type")?, uncommon(b2, "name")?), 3))
             }
             (0, fc) => {
                 // 2-byte: type > 15, field fits in nibble
                 let &b1 = buf.get(1).ok_or_else(|| {
                     CoreError::CodecError("need 2 bytes for field header".to_string())
                 })?;
-                Ok((Self::new(b1 as u16, fc as u16), 2))
+                Ok((Self::new(uncommon(b1, "type")?, u16::from(fc)), 2))
             }
             (tc, 0) => {
                 // 2-byte: type fits, field > 15
                 let &b1 = buf.get(1).ok_or_else(|| {
                     CoreError::CodecError("need 2 bytes for field header".to_string())
                 })?;
-                Ok((Self::new(tc as u16, b1 as u16), 2))
+                Ok((Self::new(u16::from(tc), uncommon(b1, "name")?), 2))
             }
             (tc, fc) => {
                 // 1-byte header
-                Ok((Self::new(tc as u16, fc as u16), 1))
+                Ok((Self::new(u16::from(tc), u16::from(fc)), 1))
             }
         }
     }
@@ -328,5 +341,28 @@ mod tests {
     fn vl_refuses_a_length_no_prefix_can_say() {
         assert!(encode_vl(MAX_VL_LENGTH + 1).is_err());
         assert!(encode_vl(usize::MAX).is_err());
+    }
+
+    /// A longer header than the code needs is refused, as rippled refuses it.
+    #[test]
+    fn only_the_shortest_header_is_read() {
+        // Sequence (UInt32 = 2, field 4) is 0x24; the same in longer forms:
+        for long in [&[0x00, 0x02, 0x04][..], &[0x04, 0x02], &[0x20, 0x04]] {
+            assert!(FieldId::decode(long).is_err(), "{long:02X?}");
+        }
+        assert_eq!(FieldId::decode(&[0x24]).unwrap(), (FieldId::new(2, 4), 1));
+        // Uncommon codes keep their long forms.
+        assert_eq!(
+            FieldId::decode(&[0x01, 0x10]).unwrap(),
+            (FieldId::new(16, 1), 2)
+        );
+        assert_eq!(
+            FieldId::decode(&[0x20, 0x1B]).unwrap(),
+            (FieldId::new(2, 27), 2)
+        );
+        assert_eq!(
+            FieldId::decode(&[0x00, 0x10, 0x10]).unwrap(),
+            (FieldId::new(16, 16), 3)
+        );
     }
 }

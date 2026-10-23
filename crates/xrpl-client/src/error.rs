@@ -1,8 +1,10 @@
 //! [`ClientError`]: transport and JSON failures, `rippled` errors, and the
 //! sorted outcome of a submitted transaction.
 
-/// Everything a client call can fail with.
+/// Everything a client call can fail with. New variants may be added in
+/// minor releases (`#[non_exhaustive]`): match with a `_` arm.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ClientError {
     /// The HTTP request failed.
     #[error("HTTP error: {0}")]

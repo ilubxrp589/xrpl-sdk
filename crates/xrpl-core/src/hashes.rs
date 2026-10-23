@@ -123,13 +123,10 @@ pub mod keylet {
         Ok(Hash256::from_hex(hex_id)?.0)
     }
 
+    /// A currency code as [`Currency::from_code`] reads it ("USD", "RLUSD",
+    /// 40 hex digits; "XRP" is XRP's all-zero code, as in `rippled`).
     fn currency(code: &str) -> Result<[u8; 20], CoreError> {
-        let c = if code.len() == 40 {
-            Currency::from_hex(code)?
-        } else {
-            Currency::from_ascii(code)?
-        };
-        Ok(c.to_bytes())
+        Ok(Currency::from_code(code)?.to_bytes())
     }
 
     fn account_seq(space: u8, account: &str, seq: u32) -> Result<Hash256, CoreError> {
