@@ -393,15 +393,7 @@ fn encode_amount_field(value: &Value) -> Result<Vec<u8>, CoreError> {
                 .ok_or_else(|| CoreError::InvalidAmount("IOU missing 'issuer'".to_string()))?;
 
             let iou = crate::types::IouAmount::from_decimal(value_str)?;
-            let currency = if currency_str.len() == 3 {
-                crate::types::Currency::from_ascii(currency_str)?
-            } else if currency_str.len() == 40 {
-                crate::types::Currency::from_hex(currency_str)?
-            } else {
-                return Err(CoreError::InvalidCurrency(format!(
-                    "invalid currency: {currency_str}"
-                )));
-            };
+            let currency = crate::types::Currency::parse(currency_str)?;
             if is_xrp_currency_code(&currency.to_bytes()) {
                 return Err(CoreError::InvalidCurrency(format!(
                     "a token amount cannot use XRP's currency code ({currency_str}); \
@@ -607,13 +599,7 @@ fn encode_pathset(value: &Value) -> Result<Vec<u8>, CoreError> {
             }
             if let Some(s) = &currency {
                 type_byte |= 0x10;
-                let currency = if s == "XRP" {
-                    crate::types::Currency::xrp()
-                } else if s.len() == 3 {
-                    crate::types::Currency::from_ascii(s)?
-                } else {
-                    crate::types::Currency::from_hex(s)?
-                };
+                let currency = crate::types::Currency::parse(s)?;
                 fields.extend_from_slice(&currency.to_bytes());
             }
             if let Some(s) = &mpt {
@@ -743,13 +729,7 @@ fn encode_issue(value: &Value) -> Result<Vec<u8>, CoreError> {
         })?;
 
     // Non-XRP: 20 bytes currency + 20 bytes issuer
-    let currency = if currency_str == "XRP" {
-        [0u8; 20]
-    } else if currency_str.len() == 3 {
-        crate::types::Currency::from_ascii(currency_str)?.to_bytes()
-    } else {
-        crate::types::Currency::from_hex(currency_str)?.to_bytes()
-    };
+    let currency = crate::types::Currency::parse(currency_str)?.to_bytes();
     if currency == [0u8; 20] {
         // XRP issue: 20 zero bytes (no issuer)
         if obj.contains_key("issuer") {
@@ -830,30 +810,10 @@ fn encode_currency_type(value: &Value) -> Result<Vec<u8>, CoreError> {
         .as_str()
         .ok_or_else(|| CoreError::CodecError("Currency must be a string".to_string()))?;
 
-    if s == "XRP" {
-        return Ok(vec![0u8; 20]);
-    }
-
-    // rippled's to_string(Currency) spells noCurrency (0x00…01) "1"
-    // (UintTypes.cpp) — an Oracle BaseAsset/QuoteAsset can carry it
-    // (xrpl-validator finding 369).
-    if s == "1" {
-        let mut b = vec![0u8; 19];
-        b.push(1);
-        return Ok(b);
-    }
-
-    if s.len() == 3 {
-        let c = crate::types::Currency::from_ascii(s)?;
-        Ok(c.to_bytes().to_vec())
-    } else if s.len() == 40 {
-        let c = crate::types::Currency::from_hex(s)?;
-        Ok(c.to_bytes().to_vec())
-    } else {
-        Err(CoreError::InvalidCurrency(format!(
-            "invalid currency string: {s}"
-        )))
-    }
+    // "XRP", "1" (rippled's spelling of noCurrency, which an Oracle
+    // BaseAsset/QuoteAsset can carry: xrpl-validator finding 369), an ISO
+    // code or 40 hex digits, as rippled writes a currency.
+    Ok(crate::types::Currency::parse(s)?.to_bytes().to_vec())
 }
 
 /// Encode a Number (type 9, `STNumber`): see [`super::number`].
@@ -1344,5 +1304,28 @@ mod tests {
         let signing = encode_transaction_json(&batch, true).unwrap();
         // TxnSignature (74 01 AA) stays inside the inner transaction.
         assert!(signing.windows(3).any(|w| w == [0x74, 0x01, 0xAA]));
+    }
+
+    /// Found by fuzz_roundtrip: a token amount in rippled's noCurrency
+    /// (0x00…01) decodes as currency "1", as rippled writes it, and must
+    /// encode back to the same bytes.
+    #[test]
+    fn no_currency_round_trips_wherever_a_currency_is_written() {
+        let entry = json!({"Balance": {"currency": "USD", "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji", "value": "-1"},
+            "Flags": 131072, "HighLimit": {"currency": "1", "issuer": "r9duXXmUuhSs6JxKpPCSh2tPUg9AGvE2cG", "value": "10"},
+            "LedgerEntryType": "RippleState",
+            "LowLimit": {"currency": "0000000000FEFFFFFFFFFF3F5553440000000000", "issuer": "r9aRw8p1jHtR9PtFgnC6M4kKtSefw9QyFM", "value": "0"},
+            "PreviousTxnID": "AAC46BD97B75B21F81B73BE6F81DF13AE4F9E83B6BD8C290894A095878158DEB", "PreviousTxnLgrSeq": 27420});
+        let bytes = encode_transaction_json(&entry, false).unwrap();
+        let decoded = crate::codec::decode_transaction_binary(&bytes).unwrap();
+        assert_eq!(decoded, entry);
+        // In an Issue and a path step too.
+        let issue = json!({"TransactionType": "AMMDelete", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "Asset": {"currency": "1", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"}, "Asset2": {"currency": "XRP"}});
+        let bytes = encode_transaction_json(&issue, false).unwrap();
+        assert_eq!(
+            crate::codec::decode_transaction_binary(&bytes).unwrap(),
+            issue
+        );
     }
 }
