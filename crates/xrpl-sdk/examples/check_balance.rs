@@ -5,7 +5,7 @@
 //!
 //! Usage: cargo run --example check_balance
 
-use xrpl_sdk::{Client, LedgerIndex, XrplHttpClient};
+use xrpl_sdk::{utils, Client, LedgerIndex, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = client.server_info().await?;
 
     let balance_drops: u64 = info.account_data.balance.parse()?;
-    let balance_xrp = balance_drops as f64 / 1_000_000.0;
+    let balance_xrp = utils::drops_to_xrp(balance_drops);
 
     println!("Account:      {}", info.account_data.account);
     println!(
@@ -33,28 +33,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Owner count:  {}", info.account_data.owner_count);
 
     if let Some(vl) = &server.info.validated_ledger {
-        let reserve_base = vl.reserve_base_xrp.unwrap_or(10.0);
-        let reserve_inc = vl.reserve_inc_xrp.unwrap_or(2.0);
+        use xrpl_core::utils::reserve;
+        // server_info gives the reserves in XRP; convert them exactly.
+        let base =
+            reserve::reserve_xrp_to_drops(vl.reserve_base_xrp.ok_or("no reserve_base_xrp")?)?;
+        let inc = reserve::reserve_xrp_to_drops(vl.reserve_inc_xrp.ok_or("no reserve_inc_xrp")?)?;
+        let owners = info.account_data.owner_count;
+        let total = reserve::total_reserve_drops(base, inc, owners);
+        let available = reserve::available_balance_drops(balance_drops, base, inc, owners);
 
-        let available = xrpl_core::utils::reserve::available_balance_drops(
-            balance_drops,
-            reserve_base,
-            reserve_inc,
-            info.account_data.owner_count,
-        );
-
-        println!("\nReserve base: {} XRP", reserve_base);
-        println!("Reserve inc:  {} XRP per object", reserve_inc);
-        println!(
-            "Total reserve: {} XRP",
-            xrpl_core::utils::reserve::total_reserve_drops(
-                reserve_base,
-                reserve_inc,
-                info.account_data.owner_count
-            ) as f64
-                / 1_000_000.0
-        );
-        println!("Available:    {} XRP", available as f64 / 1_000_000.0);
+        println!("\nReserve base: {} XRP", utils::drops_to_xrp(base));
+        println!("Reserve inc:  {} XRP per object", utils::drops_to_xrp(inc));
+        println!("Total reserve: {} XRP", utils::drops_to_xrp(total));
+        println!("Available:    {} XRP", utils::drops_to_xrp(available));
     }
 
     Ok(())
