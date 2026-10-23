@@ -3,7 +3,7 @@
 //! headers (an API key), the user agent, the fee cap and the
 //! [`RetryPolicy`] with [`XrplHttpClient::builder`].
 
-use crate::client::Client;
+use crate::client::Transport;
 use crate::error::ClientError;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -136,7 +136,7 @@ impl HttpClientBuilder {
         self
     }
 
-    /// The most [`Client::autofill`] sets as a `Fee` (default
+    /// The most [`Client::autofill`](crate::Client::autofill) sets as a `Fee` (default
     /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     #[must_use]
     pub fn max_fee_drops(mut self, drops: u64) -> Self {
@@ -334,7 +334,7 @@ impl XrplHttpClient {
         }
     }
 
-    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// The same client with `drops` as the most [`Client::autofill`](crate::Client::autofill) sets as
     /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
         self.max_fee_drops = drops;
@@ -342,42 +342,48 @@ impl XrplHttpClient {
     }
 }
 
-impl Client for XrplHttpClient {
+impl Transport for XrplHttpClient {
     fn max_fee_drops(&self) -> u64 {
         self.max_fee_drops
     }
 
-    async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
-        let body = json!({
-            "method": method,
-            "params": [params]
-        });
-        let mut attempt = 0;
-        loop {
-            let outcome = self.send_once(method, &body).await;
-            let busy = match &outcome {
-                Err(ClientError::HttpStatus {
-                    status: 429 | 503,
-                    retry_after,
-                    ..
-                }) => Some(*retry_after),
-                Err(ClientError::RpcError { code, .. })
-                    if code == "slowDown" || code == "tooBusy" =>
-                {
-                    Some(None)
+    fn send_raw<'a>(
+        &'a self,
+        method: &'a str,
+        params: Value,
+    ) -> crate::client::TransportFuture<'a> {
+        Box::pin(async move {
+            let body = json!({
+                "method": method,
+                "params": [params]
+            });
+            let mut attempt = 0;
+            loop {
+                let outcome = self.send_once(method, &body).await;
+                let busy = match &outcome {
+                    Err(ClientError::HttpStatus {
+                        status: 429 | 503,
+                        retry_after,
+                        ..
+                    }) => Some(*retry_after),
+                    Err(ClientError::RpcError { code, .. })
+                        if code == "slowDown" || code == "tooBusy" =>
+                    {
+                        Some(None)
+                    }
+                    _ => None,
+                };
+                match busy {
+                    Some(retry_after) if attempt < self.retry.max_retries => {
+                        let wait = self.retry.delay(attempt, retry_after);
+                        tracing::warn!(method, ?wait, attempt, "server busy; retrying");
+                        crate::client::sleep_for(wait).await;
+                        attempt += 1;
+                    }
+                    _ => return outcome,
                 }
-                _ => None,
-            };
-            match busy {
-                Some(retry_after) if attempt < self.retry.max_retries => {
-                    let wait = self.retry.delay(attempt, retry_after);
-                    tracing::warn!(method, ?wait, attempt, "server busy; retrying");
-                    crate::client::sleep_for(wait).await;
-                    attempt += 1;
-                }
-                _ => return outcome,
             }
-        }
+        })
     }
 }
 
@@ -608,6 +614,7 @@ mod tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod transport_tests {
     use super::*;
+    use crate::client::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// A one-request HTTP server answering with `body` (and a
@@ -688,6 +695,7 @@ mod transport_tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;
+    use crate::client::Client;
     use crate::types::*;
 
     const TESTNET_URL: &str = "https://s.altnet.rippletest.net:51234";
@@ -727,6 +735,7 @@ mod live_tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod retry_tests {
     use super::*;
+    use crate::client::Client;
 
     /// A local HTTP server that answers each connection with the next of
     /// `replies` (status line, extra headers, body) and records the

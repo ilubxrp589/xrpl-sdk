@@ -11,6 +11,18 @@ may break the API, and says so under "Changed (breaking)").
 below says how to update.
 
 ### Changed (breaking)
+- **`Client` is every method on any `Transport`.** A transport implements
+  one method, `Transport::send_raw` (object safe: `Arc<dyn Transport>` and
+  `Box<dyn Transport>` are clients), plus `max_fee_drops`; `Client` has every
+  typed method for any transport, and on native targets each future it
+  returns is `Send`, so generic code (`C: Client`) can `tokio::spawn` it.
+  *Update:* callers change nothing (`client.raw_request(...)` and every
+  method work as before with `use xrpl_client::Client`). A type of your own
+  that implemented `Client` now implements `Transport`:
+  `fn send_raw<'a>(&'a self, method: &'a str, params: Value) ->
+  TransportFuture<'a> { Box::pin(async move { … }) }`. `max_fee_drops` is on
+  `Transport` (bring it into scope to call it). Request types must be
+  `Send + Sync` (all of this crate's are).
 - **Client errors.**
   - `ClientError::Http(reqwest::Error)` is gone: reqwest is no longer part
     of the public API, so a reqwest upgrade cannot break your code. A

@@ -686,15 +686,17 @@ mod tests {
     use serde_json::json;
 
     struct Fixed;
-    impl Client for Fixed {
-        async fn raw_request(&self, method: &str, _: Value) -> Result<Value, ClientError> {
-            Ok(match method {
-                "ledger_current" => json!({"ledger_current_index": 42}),
-                "server_info" => json!({"info": {"network_id": 1}}),
-                "fee" => {
-                    json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "12"}})
-                }
-                _ => json!({}),
+    impl crate::client::Transport for Fixed {
+        fn send_raw<'a>(&'a self, method: &'a str, _: Value) -> crate::client::TransportFuture<'a> {
+            Box::pin(async move {
+                Ok(match method {
+                    "ledger_current" => json!({"ledger_current_index": 42}),
+                    "server_info" => json!({"info": {"network_id": 1}}),
+                    "fee" => {
+                        json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "12"}})
+                    }
+                    _ => json!({}),
+                })
             })
         }
     }
@@ -733,12 +735,12 @@ mod tests {
     fn every_client_method_has_a_blocking_one() {
         // A Windows checkout may have CRLF line ends.
         let client = include_str!("client.rs").replace("\r\n", "\n");
-        let start = client.find("pub trait Client {").unwrap();
+        let start = client.find("pub trait Client: Transport {").unwrap();
         let end = start + client[start..].find("\n}\n").unwrap();
         let blocking = include_str!("blocking.rs");
         let mut checked = 0;
         for line in client[start..end].lines() {
-            let Some(rest) = line.strip_prefix("    async fn ") else {
+            let Some(rest) = line.strip_prefix("    fn ") else {
                 continue;
             };
             let name: String = rest

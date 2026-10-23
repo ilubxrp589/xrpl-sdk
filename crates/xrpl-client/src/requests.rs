@@ -40,17 +40,17 @@ use serde::Serialize;
 use serde_json::Value;
 
 /// A typed `rippled` request: the method it calls and the type of its `result`.
-pub trait Request: Serialize {
+pub trait Request: Serialize + crate::client::MaybeSend + crate::client::MaybeSync {
     /// The `rippled` method (`account_info`, `fee`, …).
     const METHOD: &'static str;
     /// What the response's `result` deserializes into.
-    type Response: DeserializeOwned;
+    type Response: DeserializeOwned + crate::client::MaybeSend;
 }
 
 /// A request whose response pages with `marker` (see [`crate::Client::request_all`]).
 pub trait Paginated: Request + Clone {
     /// One entry of a page.
-    type Item;
+    type Item: crate::client::MaybeSend;
     /// This request, asking for the page after `marker`.
     fn with_marker(self, marker: Value) -> Self;
     /// A page's entries and the marker of the next page, if any.

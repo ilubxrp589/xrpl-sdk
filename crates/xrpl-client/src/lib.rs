@@ -176,7 +176,7 @@ pub mod ws;
 #[cfg(target_arch = "wasm32")]
 pub mod ws_wasm;
 
-pub use client::Client;
+pub use client::{Client, MaybeSend, MaybeSync, Transport, TransportFuture};
 pub use error::{ClientError, TransportErrorKind};
 pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};

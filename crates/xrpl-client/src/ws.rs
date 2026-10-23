@@ -7,7 +7,7 @@
 //! backoff) when the connection drops or goes silent. Dropping the client
 //! stops it and closes the socket.
 
-use crate::client::Client;
+use crate::client::Transport;
 use crate::error::ClientError;
 use crate::host_of;
 use futures::{SinkExt, StreamExt};
@@ -109,7 +109,7 @@ impl WsClientBuilder {
         self
     }
 
-    /// The most [`Client::autofill`] sets as a `Fee` (default
+    /// The most [`Client::autofill`](crate::Client::autofill) sets as a `Fee` (default
     /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     #[must_use]
     pub fn max_fee_drops(mut self, drops: u64) -> Self {
@@ -425,7 +425,7 @@ impl Drop for XrplWsClient {
 }
 
 impl XrplWsClient {
-    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// The same client with `drops` as the most [`Client::autofill`](crate::Client::autofill) sets as
     /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
         self.max_fee_drops = drops;
@@ -744,13 +744,17 @@ impl std::fmt::Debug for Subscription {
     }
 }
 
-impl Client for XrplWsClient {
+impl Transport for XrplWsClient {
     fn max_fee_drops(&self) -> u64 {
         self.max_fee_drops
     }
 
-    async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
-        self.shared.request(command, params).await
+    fn send_raw<'a>(
+        &'a self,
+        command: &'a str,
+        params: Value,
+    ) -> crate::client::TransportFuture<'a> {
+        Box::pin(async move { self.shared.request(command, params).await })
     }
 }
 
@@ -758,6 +762,7 @@ impl Client for XrplWsClient {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::client::Client;
     use tokio::net::TcpListener;
     use tokio_tungstenite::tungstenite::Message;
 
@@ -990,6 +995,7 @@ mod tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;
+    use crate::client::Client;
 
     const TESTNET_WS: &str = "wss://s.altnet.rippletest.net:51233";
 
