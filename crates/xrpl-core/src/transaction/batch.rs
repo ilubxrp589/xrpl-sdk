@@ -73,6 +73,11 @@ pub const MAX_NESTED_SIGNERS: usize = 32;
 /// `TicketSequence`, with `Sequence` 0) must be set by the caller: the outer
 /// `Batch` uses its account's next sequence, so an inner transaction from the
 /// same account uses the one after.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `tx` is not a JSON object, or its `Flags`
+/// is not a 32-bit unsigned integer.
 pub fn inner_transaction(tx: &Value) -> Result<Value, CoreError> {
     let mut tx = tx.clone();
     let obj = tx
@@ -93,6 +98,11 @@ pub fn inner_transaction(tx: &Value) -> Result<Value, CoreError> {
 }
 
 /// The inner transactions of a batch, in order.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `batch` has no `RawTransactions` array, or
+/// an entry is not `{"RawTransaction": …}`.
 pub fn inner_transactions(batch: &Value) -> Result<Vec<&Value>, CoreError> {
     let raw = batch
         .get("RawTransactions")
@@ -109,6 +119,13 @@ pub fn inner_transactions(batch: &Value) -> Result<Vec<&Value>, CoreError> {
 
 /// The IDs of the inner transactions, in order: what the batch signatures
 /// cover, and the hashes the inner transactions get on the ledger.
+///
+/// # Errors
+///
+/// The errors of [`inner_transactions`]; [`CoreError::ValidationError`] for an
+/// inner transaction that is neither signed nor marked `tfInnerBatchTxn`, and a
+/// codec error ([`CoreError::UnknownField`], [`CoreError::CodecError`], …) for
+/// one that does not encode.
 pub fn inner_transaction_ids(batch: &Value) -> Result<Vec<Hash256>, CoreError> {
     inner_transactions(batch)?
         .into_iter()
@@ -120,6 +137,15 @@ pub fn inner_transaction_ids(batch: &Value) -> Result<Vec<Hash256>, CoreError> {
 /// "BCH\0", the outer account, its sequence (or ticket), the outer flags, the
 /// number of inner transactions and their IDs. Each signer then appends its
 /// account ID.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `batch` has no `Account`, has neither a
+/// `Sequence` nor a `TicketSequence`, or has a `Sequence`, `TicketSequence` or
+/// `Flags` that is not a 32-bit unsigned integer; an address error
+/// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for an
+/// `Account` that is not a classic address; and the errors of
+/// [`inner_transaction_ids`].
 pub fn batch_signing_data(batch: &Value) -> Result<Vec<u8>, CoreError> {
     let account = batch
         .get("Account")
@@ -162,6 +188,10 @@ pub fn batch_signing_data(batch: &Value) -> Result<Vec<u8>, CoreError> {
 /// `BatchSigner` to add with [`add_batch_signers`]. The key is the account's
 /// master key; for an account that signs with a regular key, use
 /// [`sign_batch_as`].
+///
+/// # Errors
+///
+/// The errors of [`batch_signing_data`].
 pub fn sign_batch(batch: &Value, keypair: &Keypair) -> Result<BatchSigner, CoreError> {
     sign_batch_as(batch, &keypair.classic_address(), keypair)
 }
@@ -170,6 +200,12 @@ pub fn sign_batch(batch: &Value, keypair: &Keypair) -> Result<BatchSigner, CoreE
 /// regular key: the `BatchSigner` to add with [`add_batch_signers`].
 /// (`rippled` appends the signing account, not the key's address, to the
 /// data each batch signature covers.)
+///
+/// # Errors
+///
+/// The errors of [`batch_signing_data`], and an address error
+/// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for an
+/// `account` that is not a classic address.
 pub fn sign_batch_as(
     batch: &Value,
     account: &str,
@@ -188,6 +224,12 @@ pub fn sign_batch_as(
 /// Sign `batch` for `batch_signer`, an account that signs through its signer
 /// list: one of the `Signers` of its `BatchSigner` (combine them with
 /// [`multisigned_batch_signer`]).
+///
+/// # Errors
+///
+/// The errors of [`batch_signing_data`], and an address error
+/// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for a
+/// `batch_signer` that is not a classic address.
 pub fn sign_batch_for(
     batch: &Value,
     batch_signer: &str,
@@ -206,6 +248,13 @@ pub fn sign_batch_for(
 /// A multi-signed `BatchSigner` for `batch_signer` from its signers'
 /// signatures ([`sign_batch_for`]), sorted by account ID as `rippled` requires;
 /// 1 to 32 signers, each once.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for no signers, more than 32, or an account
+/// that signs twice; an address error ([`CoreError::InvalidAddress`],
+/// `InvalidBase58` or `InvalidChecksum`) for a signer's account or
+/// `batch_signer` that is not a classic address.
 pub fn multisigned_batch_signer(
     batch_signer: &str,
     signers: Vec<Signer>,
@@ -237,6 +286,13 @@ pub fn multisigned_batch_signer(
 /// Put `signers` into the batch's `BatchSigners`, in ascending account-ID
 /// order (as `rippled` requires; base58 text order differs). Signers already
 /// there are kept; an account may appear only once.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `batch` is not a JSON object, a
+/// `BatchSigners` entry already there does not parse, or an account appears
+/// twice; an address error ([`CoreError::InvalidAddress`], `InvalidBase58` or
+/// `InvalidChecksum`) for a signer's account that is not a classic address.
 pub fn add_batch_signers(batch: &mut Value, signers: Vec<BatchSigner>) -> Result<(), CoreError> {
     let mut all: Vec<BatchSigner> = match batch.get("BatchSigners") {
         Some(existing) => existing
@@ -278,6 +334,14 @@ pub fn add_batch_signers(batch: &mut Value, signers: Vec<BatchSigner>) -> Result
 /// `Counterparty`, and its `Sponsor` when it carries a `SponsorSignature`,
 /// leaving out the batch's own account; in ascending account-ID order, each
 /// once.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `batch` has no `Account`, its
+/// `RawTransactions` are missing or malformed (see [`inner_transactions`]), or
+/// an inner transaction has no `Account`; an address error
+/// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for
+/// any of these accounts that is not a classic address.
 pub fn required_batch_signers(batch: &Value) -> Result<Vec<String>, CoreError> {
     let outer = batch
         .get("Account")
@@ -318,6 +382,16 @@ pub fn required_batch_signers(batch: &Value) -> Result<Vec<String>, CoreError> {
 ///
 /// `rippled` also checks each key against the account (master key, regular
 /// key or signer list), which needs the ledger; this does not.
+///
+/// # Errors
+///
+/// The errors of [`batch_signing_data`] and [`required_batch_signers`];
+/// [`CoreError::ValidationError`] if `BatchSigners` is not an array or an entry
+/// does not parse; an address error for a nested signer's account;
+/// [`CoreError::InvalidHex`] for a key or signature that is not hex;
+/// [`CoreError::InvalidKeyLength`] or [`CoreError::SigningFailed`] for a
+/// malformed key (or secp256k1 signature). A signature that does not match is
+/// `Ok(false)`, not an error.
 pub fn verify_batch_signers(batch: &Value) -> Result<bool, CoreError> {
     let data = batch_signing_data(batch)?;
     let required = required_batch_signers(batch)?;

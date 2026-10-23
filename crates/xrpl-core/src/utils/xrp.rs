@@ -19,6 +19,10 @@ pub const MAX_DROPS: u64 = 100_000_000_000 * DROPS_PER_XRP;
 /// assert_eq!(xrp_to_drops("1.5").unwrap(), 1_500_000);
 /// assert!(xrp_to_drops("0.0000001").is_err());
 /// ```
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] for any of those, or text that is not a number.
 pub fn xrp_to_drops(xrp: &str) -> Result<u64, CoreError> {
     if !xrp.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
         return Err(CoreError::InvalidAmount(format!(

@@ -131,6 +131,13 @@ may break the API, and says so under "Changed (breaking)").
   about one key in 170); this crate reads them.
 
 ### Docs and project
+- **Every function that can fail says how.** Each public function or method
+  returning `Result` (268) has an `# Errors` section naming the errors it
+  returns and when; the `rippled` error codes named (`actNotFound`,
+  `actMalformed`, `lgrNotFound`, `entryNotFound`) were checked against
+  `rippled` 3.4.1. Clippy's `missing_errors_doc` keeps it so.
+- ROADMAP.md: the 0.7 section, and the plan for 0.8 (one consistent API) and
+  1.0.
 - docs.rs labels each feature- or platform-gated item with what it needs
   (`doc_cfg`); CI builds the docs as docs.rs does (nightly, `--cfg docsrs`).
 - CONTRIBUTING.md, issue forms (bug, feature; security reports go to the

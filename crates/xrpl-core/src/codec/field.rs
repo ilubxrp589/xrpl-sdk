@@ -146,6 +146,11 @@ impl FieldId {
     /// Only the shortest header for each code is read, as `rippled`'s
     /// `SerialIter::getFieldID` requires: a type or name byte in a longer
     /// header must be 16 or more ("uncommon type/name out of range").
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::CodecError`] if `buf` is empty or shorter than the header
+    /// its first byte announces, or the header is not the shortest one.
     pub fn decode(buf: &[u8]) -> Result<(Self, usize), CoreError> {
         let uncommon = |b: u8, what: &str| -> Result<u16, CoreError> {
             if b < 16 {
@@ -232,6 +237,12 @@ fn too_long(len: usize) -> CoreError {
 }
 
 /// Decode variable-length prefix. Returns (length, bytes_consumed).
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] if `buf` is empty or shorter than the prefix
+/// its first byte announces, or the first byte is 255 (no prefix starts
+/// with it).
 pub fn decode_vl(buf: &[u8]) -> Result<(usize, usize), CoreError> {
     let &b0_byte = buf
         .first()

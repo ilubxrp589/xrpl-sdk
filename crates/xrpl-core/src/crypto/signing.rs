@@ -44,6 +44,11 @@ impl Seed {
     }
 
     /// Decode from base58check string.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if `s` is not a base58check seed (see
+    /// [`address::decode_seed`]).
     pub fn from_base58(s: &str) -> Result<Self, CoreError> {
         let (bytes, key_type) = address::decode_seed(s)?;
         Ok(Self { bytes, key_type })
@@ -65,6 +70,10 @@ impl Seed {
     }
 
     /// Derive a keypair from this seed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Keypair::from_seed`].
     pub fn derive_keypair(&self) -> Result<Keypair, CoreError> {
         Keypair::from_seed(self)
     }
@@ -154,6 +163,13 @@ pub struct Keypair {
 
 impl Keypair {
     /// Derive a keypair from a seed.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::KeyDerivationFailed`] only for a secp256k1 seed with no
+    /// valid key, which has no real chance of happening (see
+    /// [`secp256k1::derive_keypair`](super::secp256k1::derive_keypair)). An
+    /// Ed25519 seed always derives.
     pub fn from_seed(seed: &Seed) -> Result<Self, CoreError> {
         let (mut private_key, public_key) = match seed.key_type {
             KeyType::Ed25519 => super::ed25519::derive_keypair(&seed.bytes)?,
@@ -197,6 +213,12 @@ impl Keypair {
     }
 
     /// A keypair from a 32-byte secret key; the public key is derived from it.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidKeyLength`] if `private_key` is not 32 bytes; for
+    /// secp256k1, [`CoreError::SigningFailed`] if it is zero or not below the
+    /// curve order.
     pub fn from_private_key(key_type: KeyType, private_key: &[u8]) -> Result<Self, CoreError> {
         let public_key = match key_type {
             KeyType::Ed25519 => super::ed25519::public_key(private_key)?,
@@ -240,6 +262,12 @@ impl Keypair {
     /// (`PublicKey.cpp` `verify`): Ed25519 signs the message itself;
     /// secp256k1 signs SHA-512Half(message). Use this for any message,
     /// including XRPL signing data (a hash prefix plus serialized fields).
+    ///
+    /// # Errors
+    ///
+    /// None for Ed25519. For secp256k1, [`CoreError::SigningFailed`] only if
+    /// the ECDSA primitive fails (a zero nonce or signature value), which has
+    /// no real chance of happening.
     pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, CoreError> {
         match self.key_type {
             KeyType::Ed25519 => super::ed25519::sign(&self.private_key, message),
@@ -249,12 +277,21 @@ impl Keypair {
 
     /// Whether `signature` is this key's [`Keypair::sign_message`] signature
     /// over `message`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::SigningFailed`] for a secp256k1 key when `signature` is
+    /// not DER. For an Ed25519 key, a malformed signature is `Ok(false)`.
     pub fn verify_message(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
         verify_signing_data(&self.public_key, message, signature)
     }
 
     /// Sign XRPL signing data (a hash prefix plus serialized fields) the way
     /// rippled verifies it: the same as [`Keypair::sign_message`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Keypair::sign_message`].
     pub fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
         self.sign_message(data)
     }
@@ -263,6 +300,11 @@ impl Keypair {
     /// `message` as an already-computed 32-byte hash (any other length is an
     /// error). The two key types mean different things by the same call, so
     /// prefer [`Keypair::sign_message`].
+    ///
+    /// # Errors
+    ///
+    /// For secp256k1, [`CoreError::SigningFailed`] if `message` is not 32
+    /// bytes. Ed25519 never fails.
     #[deprecated(
         since = "0.6.0",
         note = "use sign_message (hashes for secp256k1 as rippled verifies); sign signs a 32-byte hash for secp256k1"
@@ -275,6 +317,11 @@ impl Keypair {
     }
 
     /// Verify a [`Keypair::sign`] signature (secp256k1: over a 32-byte hash).
+    ///
+    /// # Errors
+    ///
+    /// For secp256k1, [`CoreError::SigningFailed`] if `message` is not 32
+    /// bytes or `signature` is not DER. Ed25519 never fails.
     #[deprecated(since = "0.6.0", note = "use verify_message")]
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
         match self.key_type {
@@ -298,6 +345,14 @@ impl fmt::Debug for Keypair {
 /// (or any message), as `rippled` checks it: the key type is the key's
 /// first byte (0xED for Ed25519), Ed25519 over the data itself, secp256k1
 /// over SHA-512Half of it.
+///
+/// # Errors
+///
+/// For a key starting 0xED, as [`ed25519::verify`](super::ed25519::verify);
+/// for any other, as [`secp256k1::verify`](super::secp256k1::verify):
+/// [`CoreError::InvalidKeyLength`] for a key of the wrong length or prefix,
+/// [`CoreError::SigningFailed`] for a key not on the curve or a secp256k1
+/// signature that is not DER.
 pub fn verify_signing_data(
     public_key: &[u8],
     data: &[u8],
@@ -370,6 +425,13 @@ pub fn sha512_half(data: &[u8]) -> [u8; 32] {
 /// 4. Signs it (`Keypair::sign_signing_data`), sets TxnSignature
 ///
 /// Returns the signed transaction as a JSON Value with TxnSignature and SigningPubKey set.
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] if `tx_json` is not a JSON object;
+/// [`CoreError::ValidationError`] if it has `Signers` (it is multi-signed);
+/// and the errors of [`encode_transaction_json`](crate::codec::encode_transaction_json)
+/// when it does not encode.
 #[cfg(feature = "std")]
 pub fn sign_transaction(
     tx_json: &serde_json::Value,

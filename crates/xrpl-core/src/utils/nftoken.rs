@@ -61,6 +61,11 @@ impl NFTokenIdParts {
 /// assert_eq!((p.flags, p.transfer_fee, p.taxon, p.sequence), (11, 1337, 1337, 12));
 /// assert_eq!(p.issuer, "rJoxBSzpXhPtAuqFmqxQtGKjA13jUJWthE");
 /// ```
+///
+/// # Errors
+///
+/// [`CoreError::InvalidHex`] if `nftoken_id` is not hex;
+/// [`CoreError::ValidationError`] if it is not 32 bytes.
 pub fn parse_nftoken_id(nftoken_id: &str) -> Result<NFTokenIdParts, CoreError> {
     let bytes = hex::decode(nftoken_id).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
     let bytes: [u8; 32] = bytes.try_into().map_err(|b: Vec<u8>| {
@@ -97,6 +102,10 @@ fn taxon_cipher(sequence: u32) -> u32 {
 /// (older servers, or metadata decoded from binary) it is worked out the way
 /// xrpl.js's `getNFTokenID` does: the token in an `NFTokenPage` after the
 /// transaction that was not in it before. `Ok(None)` if no token was added.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `meta` has no `AffectedNodes` array.
 pub fn get_nftoken_id(meta: &Value) -> Result<Option<String>, CoreError> {
     let nodes = meta
         .get("AffectedNodes")

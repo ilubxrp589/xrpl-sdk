@@ -38,6 +38,10 @@ pub fn available_balance_drops(
 /// server wrote, never by multiplying a float (`1.001` is 1,001,000 drops,
 /// not 1,000,999). A negative, non-finite or fractional-drop value is an
 /// error.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] for such a value, or one above 100 billion XRP.
 #[cfg(feature = "std")]
 pub fn reserve_xrp_to_drops(xrp: f64) -> Result<u64, CoreError> {
     if !xrp.is_finite() {
@@ -47,6 +51,11 @@ pub fn reserve_xrp_to_drops(xrp: f64) -> Result<u64, CoreError> {
 }
 
 /// Parse an XRP balance string (in drops, as returned by rippled) to u64.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if `balance` is not a whole number that fits a
+/// `u64`.
 pub fn parse_drops(balance: &str) -> Result<u64, CoreError> {
     balance
         .parse::<u64>()

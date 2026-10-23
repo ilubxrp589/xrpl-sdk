@@ -130,7 +130,7 @@
 //! ```
 //!
 //! After a dropped connection the client reconnects with backoff, restores
-//! every subscription, and sends [`ws::WsEvent::Reconnected`].
+//! every subscription, and sends [`stream::WsEvent::Reconnected`].
 //!
 //! ## Test networks
 //!

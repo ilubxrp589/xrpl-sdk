@@ -125,7 +125,7 @@ pub enum ClientError {
     )]
     PaginationLimitReached(usize),
 
-    /// A [`crate::blocking::BlockingClient`] method was called inside an
+    /// A `BlockingClient` method (native targets only) was called inside an
     /// async runtime, which blocking would stall; use the async client.
     #[error("BlockingClient used inside an async runtime; use the async client there")]
     InsideAsyncRuntime,

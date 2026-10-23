@@ -27,6 +27,11 @@ impl Hash128 {
     pub const ZERO: Self = Self([0u8; 16]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 16 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 16 {
@@ -78,6 +83,11 @@ impl Hash160 {
     pub const ZERO: Self = Self([0u8; 20]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 20 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 20 {
@@ -129,6 +139,11 @@ impl Hash192 {
     pub const ZERO: Self = Self([0u8; 24]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 24 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 24 {
@@ -180,6 +195,11 @@ impl Hash256 {
     pub const ZERO: Self = Self([0u8; 32]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 32 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 32 {

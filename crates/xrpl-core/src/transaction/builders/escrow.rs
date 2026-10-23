@@ -131,6 +131,11 @@ impl EscrowCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount` or `destination` is missing
+    /// or empty.
     pub fn build(self) -> Result<EscrowCreate, CoreError> {
         let amount = self
             .amount
@@ -253,6 +258,11 @@ impl EscrowFinishBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `owner` or `offer_sequence` is
+    /// missing.
     pub fn build(self) -> Result<EscrowFinish, CoreError> {
         let owner = self
             .owner
@@ -346,6 +356,11 @@ impl EscrowCancelBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `owner` or `offer_sequence` is
+    /// missing.
     pub fn build(self) -> Result<EscrowCancel, CoreError> {
         let owner = self
             .owner

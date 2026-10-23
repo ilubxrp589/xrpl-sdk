@@ -272,9 +272,24 @@ fn capped_fee(fee: u64, max: u64) -> Result<u64, ClientError> {
 pub trait Client {
     /// Send `method` with `params` and return the response's `result`.
     /// A rippled error (`"status": "error"`) is [`ClientError::RpcError`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when `rippled` answers with an error (`code`
+    /// is its token, such as `actNotFound`), and
+    /// [`ClientError::UnexpectedResponse`] for an answer with no `result` (or,
+    /// over HTTP, a body too large or not UTF-8). Over HTTP a request also
+    /// fails with [`ClientError::Http`] (no connection, or a timeout),
+    /// [`ClientError::HttpStatus`] or [`ClientError::Json`]; over WebSocket
+    /// with [`ClientError::Disconnected`] or [`ClientError::Timeout`].
     async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError>;
 
     /// Send a typed request and decode its `result`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Client::raw_request`], and [`ClientError::Json`] when
+    /// the answer does not decode as `R::Response`.
     async fn request<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
         let result = self
             .raw_request(R::METHOD, serde_json::to_value(req)?)
@@ -335,6 +350,12 @@ pub trait Client {
     /// for more, read them with [`Client::pages`]).
     /// Every page after the first asks for the ledger the first came from,
     /// so the result is one ledger's state, never a mix of two.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::PaginationLimitReached`] when there are still more
+    /// pages after [`MAX_PAGES`], and the errors of [`Client::request`] for
+    /// any page.
     async fn request_all<R: Paginated>(&self, req: R) -> Result<Vec<R::Item>, ClientError> {
         let mut all = Vec::new();
         let mut req = req;
@@ -358,6 +379,11 @@ pub trait Client {
     }
 
     /// Get account information.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_info(
         &self,
         account: &str,
@@ -371,11 +397,19 @@ pub trait Client {
     }
 
     /// Get current fee information.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Client::request`].
     async fn fee(&self) -> Result<FeeResult, ClientError> {
         self.request(&FeeRequest {}).await
     }
 
     /// Get the current (open) ledger index.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Client::request`].
     async fn ledger_current(&self) -> Result<u32, ClientError> {
         Ok(self
             .request(&LedgerCurrentRequest {})
@@ -384,6 +418,11 @@ pub trait Client {
     }
 
     /// Get ledger information.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`lgrNotFound`) for a ledger the server does
+    /// not have, and the errors of [`Client::request`].
     async fn ledger(&self, ledger: &LedgerIndex) -> Result<LedgerResult, ClientError> {
         self.request(&LedgerRequest::new(*ledger)).await
     }
@@ -399,12 +438,23 @@ pub trait Client {
     /// or `terQUEUED` here can still succeed, and one that got `tesSUCCESS`
     /// can still fail. For the outcome, use [`Client::submit_and_wait`];
     /// never sign a replacement on the strength of this result alone.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::TransactionFailed`], [`ClientError::TransactionRetry`]
+    /// or [`ClientError::TransactionClaimed`] for an engine result other than
+    /// `tesSUCCESS`, sorted as above ([`ClientError::UnexpectedResponse`] for
+    /// one of no known class), and the errors of [`Client::request`].
     async fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
         classify_submit(self.request(&SubmitRequest::new(tx_blob)).await?)
     }
 
     /// Submit a multi-signed transaction (JSON with `Signers` and an empty
     /// `SigningPubKey`); the engine result is sorted as for [`Client::submit`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Client::submit`].
     async fn submit_multisigned(&self, tx_json: &Value) -> Result<SubmitResult, ClientError> {
         classify_submit(
             self.request(&SubmitMultisignedRequest::new(tx_json.clone()))
@@ -415,16 +465,33 @@ pub trait Client {
     /// What a transaction would do in the open ledger, without signing or
     /// submitting it (rippled 2.4+). Leave out `SigningPubKey` and
     /// `TxnSignature`; `Fee`, `Sequence` and the like are filled in.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the transaction
+    /// (`unknownCmd` from a server older than 2.4), and the errors of
+    /// [`Client::request`]. A transaction that would fail is not an error:
+    /// its engine result is in the answer.
     async fn simulate(&self, tx_json: &Value) -> Result<SimulateResult, ClientError> {
         self.request(&SimulateRequest::new(tx_json.clone())).await
     }
 
     /// Look up a transaction by hash.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`txnNotFound`) for a transaction the server
+    /// does not find, and the errors of [`Client::request`].
     async fn tx(&self, hash: &str) -> Result<TxResult, ClientError> {
         self.request(&TxRequest::new(hash)).await
     }
 
     /// Get trust lines for an account (one page of up to 400).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_lines(
         &self,
         account: &str,
@@ -434,6 +501,11 @@ pub trait Client {
     }
 
     /// Get open offers for an account (one page of up to 400).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_offers(
         &self,
         account: &str,
@@ -443,6 +515,11 @@ pub trait Client {
     }
 
     /// Get NFTs owned by an account (one page of up to 400).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_nfts(
         &self,
         account: &str,
@@ -452,6 +529,12 @@ pub trait Client {
     }
 
     /// Get order book offers (up to 20).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the request (a
+    /// currency or issuer it cannot read, for one), and the errors of
+    /// [`Client::request`].
     async fn book_offers(
         &self,
         taker_pays: &Value,
@@ -465,6 +548,11 @@ pub trait Client {
     }
 
     /// Get AMM pool information.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) when no AMM holds that pair
+    /// of assets, and the errors of [`Client::request`].
     async fn amm_info(&self, asset: &Value, asset2: &Value) -> Result<AmmInfoResult, ClientError> {
         self.request(&AmmInfoRequest::new(asset.clone(), asset2.clone()))
             .await
@@ -472,6 +560,12 @@ pub trait Client {
 
     /// Get transaction history for an account (bounds default to all
     /// validated ledgers, limit to 200, order to newest first).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the request
+    /// (`actMalformed` for an address that is not valid), and the errors of
+    /// [`Client::request`].
     async fn account_tx(
         &self,
         account: &str,
@@ -494,6 +588,11 @@ pub trait Client {
     }
 
     /// Get objects owned by an account (limit defaults to 200).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_objects(
         &self,
         account: &str,
@@ -511,6 +610,11 @@ pub trait Client {
     }
 
     /// Get currencies an account can send or receive.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_currencies(
         &self,
         account: &str,
@@ -524,6 +628,11 @@ pub trait Client {
     }
 
     /// Get payment channels for an account.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request`].
     async fn account_channels(
         &self,
         account: &str,
@@ -539,6 +648,11 @@ pub trait Client {
     }
 
     /// Get a single ledger entry by its object ID.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`entryNotFound`) when that ledger holds no
+    /// object with this ID, and the errors of [`Client::request`].
     async fn ledger_entry(
         &self,
         index: &str,
@@ -552,11 +666,21 @@ pub trait Client {
     }
 
     /// Get server information.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Client::request`].
     async fn server_info(&self) -> Result<ServerInfoResult, ClientError> {
         self.request(&ServerInfoRequest {}).await
     }
 
     /// Get gateway balances for an issuing account.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the request
+    /// (`actMalformed` for an address that is not valid), and the errors of
+    /// [`Client::request`].
     async fn gateway_balances(
         &self,
         account: &str,
@@ -599,6 +723,18 @@ pub trait Client {
     /// A `Batch` also gets its inner transactions filled in (see
     /// `autofill_batch`). For a multi-signed transaction use
     /// [`Client::autofill_for_multisigning`], whose fee counts the signers.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::FeeTooHigh`] for a fee above [`Client::max_fee_drops`].
+    /// - [`ClientError::UnexpectedResponse`] for a transaction with no
+    ///   `Account`, or a server answer the fee cannot be worked out from.
+    /// - [`ClientError::Core`] for a transaction that cannot be priced (no
+    ///   `TransactionType`; a `LoanSet` with neither `Counterparty` nor
+    ///   `LoanBrokerID`) or has an X-address for the other kind of network.
+    /// - A [`ClientError`] when a request fails (`actNotFound` when
+    ///   `Sequence` is missing and `Account` does not exist).
+    /// - For a `Batch`, the errors of [`Client::autofill_batch`].
     async fn autofill(&self, tx: &mut Value) -> Result<(), ClientError> {
         self.autofill_for_multisigning(tx, 0).await
     }
@@ -607,6 +743,10 @@ pub trait Client {
     /// sign: the fee is the open ledger's × (1 + `signers`), as `rippled`
     /// charges a multi-signed transaction, and `SigningPubKey` is set empty.
     /// With `signers` 0 it is exactly [`Client::autofill`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Client::autofill`].
     async fn autofill_for_multisigning(
         &self,
         tx: &mut Value,
@@ -737,6 +877,17 @@ pub trait Client {
     /// batch), refused above the fee cap. (A BatchSigner that signs through
     /// its signer list needs one base fee per signer: set the `Fee` yourself
     /// for those.)
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::UnexpectedResponse`] for a batch with no `Sequence`
+    ///   or `RawTransactions`, or an inner transaction with no `Account`.
+    /// - [`ClientError::Core`] for an inner transaction that is not a JSON
+    ///   object or has bad `Flags`, or a batch that cannot be priced.
+    /// - [`ClientError::FeeTooHigh`] for a fee above [`Client::max_fee_drops`].
+    /// - A [`ClientError`] when a request fails or its answer cannot be used
+    ///   (`actNotFound` for an inner transaction's account that does not
+    ///   exist).
     async fn autofill_batch(
         &self,
         tx: &mut Value,
@@ -787,6 +938,14 @@ pub trait Client {
     /// transaction the server dropped (`telINSUF_FEE_P`,
     /// `telCAN_NOT_QUEUE…`, or a failed connection) is resubmitted, as the
     /// same blob, until it is found or expires.
+    ///
+    /// # Errors
+    ///
+    /// The outcomes above. Before anything is sent: [`ClientError::Core`] for
+    /// a blob that is not hex, does not decode, is not signed or has no
+    /// `LastLedgerSequence`, and a [`ClientError`] when the validated ledger
+    /// index cannot be read. A [`ClientError::RpcError`] for the submit
+    /// itself (the server refused the request) is returned as it is.
     async fn submit_and_wait(&self, tx_blob: &str) -> Result<TxResult, ClientError> {
         let tx = xrpl_core::codec::decode_transaction_binary(
             &hex::decode(tx_blob).map_err(|e| xrpl_core::CoreError::InvalidHex(e.to_string()))?,
@@ -883,6 +1042,12 @@ pub trait Client {
     }
 
     /// The index of the latest validated ledger.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Client::ledger`], and
+    /// [`ClientError::UnexpectedResponse`] for an answer with no
+    /// `ledger_index`.
     async fn validated_ledger_index(&self) -> Result<u32, ClientError> {
         self.ledger(&LedgerIndex::Validated)
             .await?
@@ -987,6 +1152,11 @@ pub trait Client {
     }
 
     /// All trust lines of an account, following the marker.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request_all`].
     async fn account_lines_all(
         &self,
         account: &str,
@@ -997,6 +1167,11 @@ pub trait Client {
     }
 
     /// All offers of an account, following the marker.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request_all`].
     async fn account_offers_all(
         &self,
         account: &str,
@@ -1007,6 +1182,11 @@ pub trait Client {
     }
 
     /// All NFTs of an account, following the marker.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request_all`].
     async fn account_nfts_all(
         &self,
         account: &str,
@@ -1017,6 +1197,11 @@ pub trait Client {
     }
 
     /// All objects of an account, following the marker.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist in that ledger, and the errors of [`Client::request_all`].
     async fn account_objects_all(
         &self,
         account: &str,
@@ -1028,6 +1213,12 @@ pub trait Client {
     }
 
     /// All transactions of an account, newest first, following the marker.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the request
+    /// (`actMalformed` for an address that is not valid), and the errors of
+    /// [`Client::request_all`].
     async fn account_tx_all(
         &self,
         account: &str,

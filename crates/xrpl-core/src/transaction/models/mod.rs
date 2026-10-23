@@ -56,6 +56,11 @@ pub trait TxModel: Serialize + Into<Tx> + Clone {
 
     /// `rippled`'s JSON for the transaction, `TransactionType` included: what
     /// `autofill`, the signers and `encode_transaction_json` take.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::CodecError`] if a field does not serialize to JSON (for
+    /// example a hand-built `Currency::Standard` code that is not UTF-8).
     fn to_json(&self) -> Result<Value, CoreError> {
         let mut v = serde_json::to_value(self).map_err(|e| CoreError::CodecError(e.to_string()))?;
         if let Some(obj) = v.as_object_mut() {
@@ -574,6 +579,14 @@ macro_rules! tx_enum {
             /// with a field its struct does not have, or a field of the wrong
             /// shape, is an error, and so is a Batch whose inner transaction
             /// is one. An unknown type is [`Tx::Other`].
+            ///
+            /// # Errors
+            ///
+            /// [`CoreError::UnknownField`] for a field the type does not have;
+            /// [`CoreError::CodecError`] for a field of the wrong shape or a
+            /// required one missing, a Payment whose `Amount` and `DeliverMax`
+            /// differ, or a Batch with an inner transaction that does not
+            /// parse.
             pub fn from_value(mut v: Value) -> Result<Self, CoreError> {
                 let ty = v.get("TransactionType").and_then(Value::as_str).map(str::to_owned);
                 // API v2 writes a Payment's Amount only as DeliverMax; both,
@@ -618,6 +631,12 @@ macro_rules! tx_enum {
             }
 
             /// `rippled`'s JSON for the transaction, `TransactionType` included.
+            ///
+            /// # Errors
+            ///
+            /// [`CoreError::CodecError`] if a field of a typed transaction does
+            /// not serialize (see [`TxModel::to_json`]); `Other` and `Unparsed`
+            /// never fail.
             pub fn to_value(&self) -> Result<Value, CoreError> {
                 match self {
                     $(Tx::$name(t) => t.to_json(),)*

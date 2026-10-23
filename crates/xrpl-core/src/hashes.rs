@@ -41,6 +41,12 @@ pub fn transaction_id(blob: &[u8]) -> Hash256 {
 /// assert_eq!(hash_signed_tx(&tx).unwrap().to_string(),
 ///     "CA4562711E4679FE9317DD767871E90A404C7A8B84FAFD35EC2CF0231F1F6DAF");
 /// ```
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for a transaction with no `TxnSignature` or
+/// `Signers` (other than a pseudo-transaction or a Batch's inner transaction),
+/// and the errors of [`encode_transaction_json`] when it does not encode.
 pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
     require_signed(tx)?;
     Ok(transaction_id(&encode_transaction_json(tx, false)?))
@@ -52,6 +58,12 @@ pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
 /// order and forms), not the bytes it was sent, so this does the same: a
 /// blob whose fields someone reordered on the way still has the ID the
 /// ledger will show.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidHex`] if `tx_blob` is not hex; the errors of
+/// [`decode_transaction_binary`] when the bytes do not decode; then as
+/// [`hash_signed_tx`].
 pub fn hash_signed_tx_blob(tx_blob: &str) -> Result<Hash256, CoreError> {
     let blob = hex::decode(tx_blob).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
     hash_signed_tx(&decode_transaction_binary(&blob)?)
@@ -148,11 +160,21 @@ pub mod keylet {
     }
 
     /// `AccountRoot`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn account(account: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'a', &[&id(account)?]))
     }
 
     /// An account's owner directory (its first page).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn owner_dir(account: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'O', &[&id(account)?]))
     }
@@ -166,6 +188,13 @@ pub mod keylet {
     }
 
     /// `RippleState`: the trust line between two accounts (in either order).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account_a` or `account_b` is not a classic address;
+    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
+    /// are not hex) for a currency code that does not parse.
     pub fn trust_line(
         account_a: &str,
         account_b: &str,
@@ -177,21 +206,41 @@ pub mod keylet {
     }
 
     /// `Offer`, by the sequence of the OfferCreate that placed it.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn offer(account: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'o', account, sequence)
     }
 
     /// `Check`, by the sequence of its CheckCreate.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn check(account: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'C', account, sequence)
     }
 
     /// `Escrow`, by the sequence of its EscrowCreate.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn escrow(account: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'u', account, sequence)
     }
 
     /// `PayChannel`, by source, destination and the PaymentChannelCreate's sequence.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `source` or `destination` is not a classic address.
     pub fn payment_channel(
         source: &str,
         destination: &str,
@@ -204,36 +253,71 @@ pub mod keylet {
     }
 
     /// `Ticket`, by its TicketSequence.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn ticket(account: &str, ticket_sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'T', account, ticket_sequence)
     }
 
     /// `SignerList` (rippled only ever uses list 0).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn signer_list(account: &str) -> Result<Hash256, CoreError> {
         account_seq(b'S', account, 0)
     }
 
     /// `DepositPreauth` of one account by an owner.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` or `authorized` is not a classic address.
     pub fn deposit_preauth(owner: &str, authorized: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'p', &[&id(owner)?, &id(authorized)?]))
     }
 
     /// `NFTokenOffer`, by the sequence of its NFTokenCreateOffer.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn nftoken_offer(owner: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'q', owner, sequence)
     }
 
     /// The directory of buy offers for an NFToken.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `nftoken_id` is not 32 bytes in hex.
     pub fn nftoken_buy_offers(nftoken_id: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'h', &[&hash256(nftoken_id)?]))
     }
 
     /// The directory of sell offers for an NFToken.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `nftoken_id` is not 32 bytes in hex.
     pub fn nftoken_sell_offers(nftoken_id: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'i', &[&hash256(nftoken_id)?]))
     }
 
     /// `AMM`: the pool for two assets (in either order).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
+    /// are not hex) for a currency code that does not parse;
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// for an issuer that is not a classic address.
     pub fn amm(asset1: Issue<'_>, asset2: Issue<'_>) -> Result<Hash256, CoreError> {
         // rippled orders Issues by currency, then issuer; XRP is all zeros.
         let key = |i: Issue<'_>| -> Result<([u8; 20], [u8; 20]), CoreError> {
@@ -251,17 +335,32 @@ pub mod keylet {
     }
 
     /// `DID`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` is not a classic address.
     pub fn did(account: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'I', &[&id(account)?]))
     }
 
     /// `Oracle`, by owner and OracleDocumentID.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn oracle(owner: &str, document_id: u32) -> Result<Hash256, CoreError> {
         account_seq(b'R', owner, document_id)
     }
 
     /// An MPT issuance's ID (MPTokenIssuanceID): the issuing transaction's
     /// sequence, then the issuer.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `issuer` is not a classic address.
     pub fn mpt_issuance_id(sequence: u32, issuer: &str) -> Result<Hash192, CoreError> {
         let mut out = [0u8; 24];
         let (seq, acct) = out.split_at_mut(4);
@@ -271,11 +370,21 @@ pub mod keylet {
     }
 
     /// `MPTokenIssuance`, by MPTokenIssuanceID (48 hex digits).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `mpt_issuance_id` is not 24 bytes in hex.
     pub fn mpt_issuance(mpt_issuance_id: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'~', &[&Hash192::from_hex(mpt_issuance_id)?.0]))
     }
 
     /// `MPToken`: a holder's balance of an MPT issuance.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `mpt_issuance_id` is not 24 bytes in hex;
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `holder` is not a classic address.
     pub fn mptoken(mpt_issuance_id: &str, holder: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(
             b't',
@@ -284,6 +393,12 @@ pub mod keylet {
     }
 
     /// `Credential`, by subject, issuer and CredentialType (hex, as in the transaction).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `subject` or `issuer` is not a classic address;
+    /// [`CoreError::InvalidHex`] if `credential_type` is not hex.
     pub fn credential(
         subject: &str,
         issuer: &str,
@@ -294,26 +409,50 @@ pub mod keylet {
     }
 
     /// `Delegate`: the permissions `account` gave `authorized`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `account` or `authorized` is not a classic address.
     pub fn delegate(account: &str, authorized: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'E', &[&id(account)?, &id(authorized)?]))
     }
 
     /// `PermissionedDomain`, by owner and the PermissionedDomainSet's sequence.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn permissioned_domain(owner: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'm', owner, sequence)
     }
 
     /// `Vault`, by owner and the VaultCreate's sequence.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn vault(owner: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'V', owner, sequence)
     }
 
     /// `LoanBroker`, by owner and the LoanBrokerSet's sequence.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn loan_broker(owner: &str, sequence: u32) -> Result<Hash256, CoreError> {
         account_seq(b'l', owner, sequence)
     }
 
     /// `Loan`, by its LoanBroker's ID and the loan's sequence there.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `loan_broker_id` is not 32 bytes in hex.
     pub fn loan(loan_broker_id: &str, loan_sequence: u32) -> Result<Hash256, CoreError> {
         Ok(index_hash(
             b'L',
@@ -337,6 +476,14 @@ pub mod keylet {
 
     /// `Bridge`, as the ledger of `door` (one of the bridge's two doors)
     /// holds it: the door and its chain's currency.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `door` is neither of the bridge's
+    /// doors; [`CoreError::InvalidAddress`] (or `InvalidBase58`,
+    /// `InvalidChecksum`) if `door` or its asset's issuer is not a classic
+    /// address; [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40
+    /// characters that are not hex) for a currency code that does not parse.
     pub fn bridge(bridge: &Bridge<'_>, door: &str) -> Result<Hash256, CoreError> {
         let issue = if door == bridge.locking_chain_door {
             bridge.locking_chain_issue
@@ -369,11 +516,25 @@ pub mod keylet {
     }
 
     /// `XChainOwnedClaimID`: the bridge and the claim ID.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if a door or issuer in `bridge` is not a classic address;
+    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
+    /// are not hex) for a currency code that does not parse.
     pub fn xchain_owned_claim_id(bridge: &Bridge<'_>, claim_id: u64) -> Result<Hash256, CoreError> {
         bridge_claim(b'Q', bridge, claim_id)
     }
 
     /// `XChainOwnedCreateAccountClaimID`: the bridge and the account-create count.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if a door or issuer in `bridge` is not a classic address;
+    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
+    /// are not hex) for a currency code that does not parse.
     pub fn xchain_owned_create_account_claim_id(
         bridge: &Bridge<'_>,
         create_count: u64,
@@ -384,6 +545,12 @@ pub mod keylet {
     /// `DepositPreauth` by credentials: the owner and the credentials it
     /// accepts, each `(issuer, credential type in hex)`, in any order (they
     /// are sorted and de-duplicated as rippled's set does).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` or an issuer is not a classic address;
+    /// [`CoreError::InvalidHex`] if a credential type is not hex.
     pub fn deposit_preauth_credentials(
         owner: &str,
         credentials: &[(&str, &str)],
@@ -420,6 +587,11 @@ pub mod keylet {
     }
 
     /// `Sponsorship`: the sponsor and the sponsored account.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `sponsor` or `sponsee` is not a classic address.
     pub fn sponsorship(sponsor: &str, sponsee: &str) -> Result<Hash256, CoreError> {
         Ok(index_hash(b'>', &[&id(sponsor)?, &id(sponsee)?]))
     }
@@ -427,6 +599,13 @@ pub mod keylet {
     /// An order book's first directory (`getBookBase`): offers that take
     /// `taker_pays` and give `taker_gets`, with quality 0. Offers at a given
     /// quality are in [`book_directory`].
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
+    /// are not hex) for a currency code that does not parse;
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// for an issuer that is not a classic address.
     pub fn book_base(taker_pays: Issue<'_>, taker_gets: Issue<'_>) -> Result<Hash256, CoreError> {
         let (pc, pi) = issue_bytes(taker_pays)?;
         let (gc, gi) = issue_bytes(taker_gets)?;
@@ -439,6 +618,13 @@ pub mod keylet {
     /// The order-book directory for `quality` (a `DirectoryNode`'s
     /// `ExchangeRate`, as a number): the book base with the quality in its
     /// last eight bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
+    /// are not hex) for a currency code that does not parse;
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// for an issuer that is not a classic address.
     pub fn book_directory(
         taker_pays: Issue<'_>,
         taker_gets: Issue<'_>,
@@ -459,6 +645,11 @@ pub mod keylet {
 
     /// The lowest `NFTokenPage` ID an account's pages can have (its
     /// AccountID, then 12 zero bytes).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn nftoken_page_min(owner: &str) -> Result<Hash256, CoreError> {
         let mut key = [0u8; 32];
         key[..20].copy_from_slice(&id(owner)?);
@@ -467,6 +658,11 @@ pub mod keylet {
 
     /// The highest `NFTokenPage` ID an account's pages can have (its
     /// AccountID, then 12 bytes of 0xFF): its last page.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// if `owner` is not a classic address.
     pub fn nftoken_page_max(owner: &str) -> Result<Hash256, CoreError> {
         let mut key = [0xFFu8; 32];
         key[..20].copy_from_slice(&id(owner)?);

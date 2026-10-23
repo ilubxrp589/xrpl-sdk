@@ -106,6 +106,11 @@ impl TrustSetBuilder {
     }
 
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `limit_amount` is missing, or is not
+    /// an object with `currency`, `issuer` and `value`.
     pub fn build(self) -> Result<TrustSet, CoreError> {
         let limit_amount = self.limit_amount.ok_or_else(|| {
             CoreError::ValidationError("TrustSet: limit_amount is required".into())

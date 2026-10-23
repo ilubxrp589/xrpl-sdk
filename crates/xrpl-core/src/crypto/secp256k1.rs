@@ -23,6 +23,12 @@ fn first_valid(candidate: impl Fn(u32) -> Zeroizing<[u8; 32]>) -> Result<SecretK
 /// the first valid. Returns the 32-byte account secret key, in a buffer
 /// wiped on drop, and the 33-byte compressed public key. Every
 /// intermediate secret is wiped too.
+///
+/// # Errors
+///
+/// [`CoreError::KeyDerivationFailed`] if no valid secret key turns up in
+/// 2^32 tries, or the account secret comes to zero: `rippled` fails there
+/// too, and neither has any real chance of happening.
 pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), CoreError> {
     let root = first_valid(|seq| super::secret_sha512_half(&[seed, &seq.to_be_bytes()]))?;
     let root_public = root.public_key().to_encoded_point(true);
@@ -47,6 +53,11 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), 
 }
 
 /// The 33-byte compressed public key of a 32-byte secp256k1 secret key.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidKeyLength`] if `private_key` is not 32 bytes;
+/// [`CoreError::SigningFailed`] if it is zero or not below the curve order.
 pub fn public_key(private_key: &[u8]) -> Result<Vec<u8>, CoreError> {
     let secret = secret_key(private_key)?;
     Ok(secret
@@ -84,6 +95,12 @@ fn prehash32(prehash: &[u8]) -> Result<&[u8; 32], CoreError> {
 /// secret key. Returns the DER signature, low-S. The nonce is RFC 6979's
 /// (HMAC-SHA256), as in `rippled`, so the same key and hash always give the
 /// same signature. A hash that is not exactly 32 bytes is an error.
+///
+/// # Errors
+///
+/// [`CoreError::SigningFailed`] if `prehash` is not 32 bytes or the key is
+/// zero or not below the curve order; [`CoreError::InvalidKeyLength`] if
+/// `private_key` is not 32 bytes.
 pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
     let prehash = prehash32(prehash)?;
     let secret = secret_key(private_key)?;
@@ -103,6 +120,12 @@ pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
 /// be 33 bytes, compressed (0x02/0x03), the only form `rippled` takes; the
 /// signature must be low-S. A hash that is not 32 bytes, or a malformed key
 /// or signature, is an error; a signature that does not match is `Ok(false)`.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidKeyLength`] if `public_key` is not 33 bytes starting
+/// 0x02 or 0x03; [`CoreError::SigningFailed`] if `prehash` is not 32 bytes,
+/// the key is not a point on the curve, or the signature is not DER.
 pub fn verify(public_key: &[u8], prehash: &[u8], signature_der: &[u8]) -> Result<bool, CoreError> {
     use k256::ecdsa::signature::hazmat::PrehashVerifier;
 

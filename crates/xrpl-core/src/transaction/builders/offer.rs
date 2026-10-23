@@ -105,6 +105,11 @@ impl OfferCreateBuilder {
     }
 
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `taker_pays` or `taker_gets` is
+    /// missing.
     pub fn build(self) -> Result<OfferCreate, CoreError> {
         let taker_pays = self.taker_pays.ok_or_else(|| {
             CoreError::ValidationError("OfferCreate: taker_pays is required".into())
@@ -193,6 +198,10 @@ impl OfferCancelBuilder {
     }
 
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `offer_sequence` is missing.
     pub fn build(self) -> Result<OfferCancel, CoreError> {
         let offer_sequence = self.offer_sequence.ok_or_else(|| {
             CoreError::ValidationError("OfferCancel: offer_sequence is required".into())

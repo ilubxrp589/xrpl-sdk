@@ -53,6 +53,12 @@ impl<C: Client + std::fmt::Debug> std::fmt::Debug for BlockingClient<C> {
 
 impl BlockingClient<XrplHttpClient> {
     /// A blocking JSON-RPC client for the server at `url`.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Http`] if the HTTP stack cannot start, and
+    /// [`ClientError::UnexpectedResponse`] if the runtime cannot start. The URL
+    /// is not checked here: a bad one fails on the first request.
     pub fn new(url: &str) -> Result<Self, ClientError> {
         Self::with_client(XrplHttpClient::new(url)?)
     }
@@ -60,6 +66,10 @@ impl BlockingClient<XrplHttpClient> {
 
 impl<C: Client> BlockingClient<C> {
     /// Block on any [`Client`] (an [`XrplHttpClient`], or your own transport).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::UnexpectedResponse`] if the runtime cannot start.
     pub fn with_client(inner: C) -> Result<Self, ClientError> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -109,11 +119,27 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::request`]: any typed request.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::request`]: [`ClientError::RpcError`]
+    /// when the server answers with an error, [`ClientError::Json`] when the
+    /// answer does not decode as `R::Response`, and a [`ClientError`] when the
+    /// request fails.
     pub fn request<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
         self.call(|c| c.request(req))
     }
 
     /// [`Client::request_all`]: every page of a paginated request.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::request_all`]:
+    /// [`ClientError::PaginationLimitReached`] past
+    /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and the error of a page's
+    /// request.
     pub fn request_all<R: Paginated>(&self, req: R) -> Result<Vec<R::Item>, ClientError> {
         self.call(|c| c.request_all(req))
     }
@@ -140,11 +166,25 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::raw_request`]: any method, JSON in and out.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::raw_request`]:
+    /// [`ClientError::RpcError`] when the server answers with an error, and a
+    /// [`ClientError`] when the request fails.
     pub fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
         self.call(|c| c.raw_request(method, params))
     }
 
     /// [`Client::account_info`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_info`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_info(
         &self,
         account: &str,
@@ -154,6 +194,13 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_lines`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_lines`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_lines(
         &self,
         account: &str,
@@ -163,37 +210,83 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::fee`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::fee`]: a [`ClientError`] when the
+    /// request fails.
     pub fn fee(&self) -> Result<FeeResult, ClientError> {
         self.call(|c| c.fee())
     }
 
     /// [`Client::ledger_current`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::ledger_current`]: a [`ClientError`]
+    /// when the request fails.
     pub fn ledger_current(&self) -> Result<u32, ClientError> {
         self.call(|c| c.ledger_current())
     }
 
     /// [`Client::ledger`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::ledger`]: [`ClientError::RpcError`]
+    /// (`lgrNotFound`) for a ledger the server does not have, and a
+    /// [`ClientError`] when the request fails.
     pub fn ledger(&self, ledger: &LedgerIndex) -> Result<LedgerResult, ClientError> {
         self.call(|c| c.ledger(ledger))
     }
 
     /// [`Client::server_info`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::server_info`]: a [`ClientError`] when
+    /// the request fails.
     pub fn server_info(&self) -> Result<ServerInfoResult, ClientError> {
         self.call(|c| c.server_info())
     }
 
     /// [`Client::tx`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::tx`]: [`ClientError::RpcError`]
+    /// (`txnNotFound`) for a transaction the server cannot find, and a
+    /// [`ClientError`] when the request fails.
     pub fn tx(&self, hash: &str) -> Result<TxResult, ClientError> {
         self.call(|c| c.tx(hash))
     }
 
     /// [`Client::autofill`]: `Sequence`, `Fee`, `LastLedgerSequence` (and a
     /// `Batch`'s inner transactions).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::autofill`]:
+    /// [`ClientError::FeeTooHigh`] above the fee cap,
+    /// [`ClientError::UnexpectedResponse`] for a transaction with no `Account`,
+    /// [`ClientError::Core`] for one that cannot be priced or names an
+    /// X-address for the other network, and a [`ClientError`] when a request
+    /// fails.
     pub fn autofill(&self, tx: &mut Value) -> Result<(), ClientError> {
         self.call(|c| c.autofill(tx))
     }
 
     /// [`Client::autofill_for_multisigning`].
+    ///
+    /// # Errors
+    ///
+    /// As [`BlockingClient::autofill`].
     pub fn autofill_for_multisigning(
         &self,
         tx: &mut Value,
@@ -204,6 +297,16 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::autofill_batch`]: the inner-transaction part of
     /// [`BlockingClient::autofill`] for a `Batch`.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::autofill_batch`]:
+    /// [`ClientError::FeeTooHigh`] above the fee cap,
+    /// [`ClientError::UnexpectedResponse`] for a batch with no `Sequence` or
+    /// `RawTransactions` or an inner transaction with no `Account`,
+    /// [`ClientError::Core`] for one that cannot be priced, and a
+    /// [`ClientError`] when a request fails.
     pub fn autofill_batch(
         &self,
         tx: &mut Value,
@@ -216,6 +319,13 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::verified_ledger`]: a ledger with its transactions, checked
     /// against its hash.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::verified_ledger`]:
+    /// [`ClientError::Core`] when the answer does not check out against the
+    /// ledger's hash, and a [`ClientError`] when the request fails.
     pub fn verified_ledger(
         &self,
         ledger: &LedgerIndex,
@@ -224,31 +334,76 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::validated_ledger_index`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::validated_ledger_index`]:
+    /// [`ClientError::UnexpectedResponse`] for an answer with no
+    /// `ledger_index`, and a [`ClientError`] when the request fails.
     pub fn validated_ledger_index(&self) -> Result<u32, ClientError> {
         self.call(|c| c.validated_ledger_index())
     }
 
     /// [`Client::simulate`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::simulate`]: [`ClientError::RpcError`]
+    /// from a server that refuses it (`unknownCmd` before rippled 2.4), and a
+    /// [`ClientError`] when the request fails.
     pub fn simulate(&self, tx: &Value) -> Result<SimulateResult, ClientError> {
         self.call(|c| c.simulate(tx))
     }
 
     /// [`Client::submit`]: a signed blob, once.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::submit`]:
+    /// [`ClientError::TransactionFailed`], [`ClientError::TransactionRetry`] or
+    /// [`ClientError::TransactionClaimed`] for a preliminary result other than
+    /// `tesSUCCESS`, and a [`ClientError`] when the request fails.
     pub fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
         self.call(|c| c.submit(tx_blob))
     }
 
     /// [`Client::submit_multisigned`].
+    ///
+    /// # Errors
+    ///
+    /// As [`BlockingClient::submit`].
     pub fn submit_multisigned(&self, tx_json: &Value) -> Result<SubmitResult, ClientError> {
         self.call(|c| c.submit_multisigned(tx_json))
     }
 
     /// [`Client::submit_and_wait`]: submit, then wait for the final outcome.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::submit_and_wait`]: every ending but a
+    /// validated `tesSUCCESS` ([`ClientError::TransactionClaimed`],
+    /// [`ClientError::TransactionFailed`], [`ClientError::TransactionExpired`],
+    /// [`ClientError::OutcomeUnknown`]); [`ClientError::Core`] for a blob that
+    /// does not decode, is not signed or has no `LastLedgerSequence`; and a
+    /// [`ClientError`] when the transaction was never sent: the first request
+    /// failed, or the server refused the submit request
+    /// ([`ClientError::RpcError`]).
     pub fn submit_and_wait(&self, tx_blob: &str) -> Result<TxResult, ClientError> {
         self.call(|c| c.submit_and_wait(tx_blob))
     }
 
     /// [`Client::account_channels`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_channels`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_channels(
         &self,
         account: &str,
@@ -259,6 +414,13 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_currencies`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_currencies`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_currencies(
         &self,
         account: &str,
@@ -268,6 +430,15 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_lines_all`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_lines_all`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, [`ClientError::PaginationLimitReached`] past
+    /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
+    /// when a request fails.
     pub fn account_lines_all(
         &self,
         account: &str,
@@ -277,6 +448,13 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_nfts`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_nfts`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_nfts(
         &self,
         account: &str,
@@ -286,6 +464,15 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_nfts_all`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_nfts_all`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, [`ClientError::PaginationLimitReached`] past
+    /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
+    /// when a request fails.
     pub fn account_nfts_all(
         &self,
         account: &str,
@@ -295,6 +482,13 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_objects`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_objects`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_objects(
         &self,
         account: &str,
@@ -307,6 +501,15 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_objects_all`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_objects_all`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, [`ClientError::PaginationLimitReached`] past
+    /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
+    /// when a request fails.
     pub fn account_objects_all(
         &self,
         account: &str,
@@ -317,6 +520,13 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_offers`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_offers`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, and a [`ClientError`] when the request fails.
     pub fn account_offers(
         &self,
         account: &str,
@@ -326,6 +536,15 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_offers_all`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_offers_all`]:
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does not
+    /// exist, [`ClientError::PaginationLimitReached`] past
+    /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
+    /// when a request fails.
     pub fn account_offers_all(
         &self,
         account: &str,
@@ -335,6 +554,12 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_tx`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_tx`]: a [`ClientError`] when
+    /// the request fails.
     pub fn account_tx(
         &self,
         account: &str,
@@ -357,6 +582,14 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_tx_all`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::account_tx_all`]:
+    /// [`ClientError::PaginationLimitReached`] past
+    /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
+    /// when a request fails.
     pub fn account_tx_all(
         &self,
         account: &str,
@@ -367,11 +600,26 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::amm_info`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::amm_info`]: [`ClientError::RpcError`]
+    /// (`actNotFound`) when no pool holds the pair, and a [`ClientError`] when
+    /// the request fails.
     pub fn amm_info(&self, asset: &Value, asset2: &Value) -> Result<AmmInfoResult, ClientError> {
         self.call(|c| c.amm_info(asset, asset2))
     }
 
     /// [`Client::balances`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::balances`]: [`ClientError::RpcError`]
+    /// (`actNotFound`) for an account that does not exist, and a
+    /// [`ClientError`] when a request fails or an answer holds an amount that
+    /// does not parse.
     pub fn balances(
         &self,
         account: &str,
@@ -381,6 +629,12 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::book_offers`] (one page).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::book_offers`]: a [`ClientError`] when
+    /// the request fails.
     pub fn book_offers(
         &self,
         taker_pays: &Value,
@@ -390,6 +644,12 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::gateway_balances`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::gateway_balances`]: a [`ClientError`]
+    /// when the request fails.
     pub fn gateway_balances(
         &self,
         account: &str,
@@ -400,6 +660,13 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::ledger_entry`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::ledger_entry`]:
+    /// [`ClientError::RpcError`] (`entryNotFound`) for an entry the ledger does
+    /// not hold, and a [`ClientError`] when the request fails.
     pub fn ledger_entry(
         &self,
         index: &str,

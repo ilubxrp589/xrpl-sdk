@@ -126,6 +126,12 @@ impl XrplWsClient {
 
     /// Connect to an XRPL WebSocket endpoint.
     /// Uses the browser's native WebSocket API.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::UnexpectedResponse`] when the browser cannot create the
+    /// WebSocket (a malformed URL, for one) or the connection fails before
+    /// it opens.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
         let ws = WebSocket::new(url).map_err(|e| {
             ClientError::UnexpectedResponse(format!("WebSocket creation failed: {:?}", e))
@@ -276,6 +282,13 @@ impl XrplWsClient {
     }
 
     /// Subscribe to ledger closes ([`WsEvent::Ledger`] only).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the subscription;
+    /// [`ClientError::Disconnected`] when the connection is closed, or closes
+    /// before the reply; and [`ClientError::Timeout`] after 30 s without a
+    /// reply.
     pub async fn subscribe_ledger(&self) -> Result<Subscription, ClientError> {
         self.subscribe_with(json!({"streams": ["ledger"]}), |e| {
             matches!(e, WsEvent::Ledger(_))
@@ -285,6 +298,10 @@ impl XrplWsClient {
 
     /// Subscribe to every validated transaction ([`WsEvent::Transaction`],
     /// `validated: true`, only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe_ledger`].
     pub async fn subscribe_transactions(&self) -> Result<Subscription, ClientError> {
         self.subscribe_with(
             json!({"streams": ["transactions"]}),
@@ -294,6 +311,11 @@ impl XrplWsClient {
     }
 
     /// Subscribe to the validated transactions that affect `account` (only those).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe_ledger`] ([`ClientError::RpcError`]
+    /// `actMalformed` for an address that is not valid).
     pub async fn subscribe_account(&self, account: &str) -> Result<Subscription, ClientError> {
         let who = account.to_string();
         self.subscribe_with(

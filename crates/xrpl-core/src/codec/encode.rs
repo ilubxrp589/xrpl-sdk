@@ -847,6 +847,13 @@ fn encode_raw_hex(
 /// sign it that way: a missing `SigningPubKey` is signed as empty, as
 /// `sign_for` does, and a non-empty one is an error (the signatures would not
 /// match the transaction once its `Signers` are added).
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for a non-empty `SigningPubKey`; the
+/// errors of [`encode_transaction_json`] for the transaction's fields; and
+/// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`) if
+/// `signing_account` is not a classic address.
 pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<u8>, CoreError> {
     let obj = tx
         .as_object()

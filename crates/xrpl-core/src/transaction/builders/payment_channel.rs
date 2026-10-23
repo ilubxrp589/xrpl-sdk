@@ -114,6 +114,11 @@ impl PaymentChannelCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount`, `destination`,
+    /// `settle_delay` or `public_key` is missing.
     pub fn build(self) -> Result<PaymentChannelCreate, CoreError> {
         let amount = self.amount.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelCreate: amount is required".into())
@@ -225,6 +230,10 @@ impl PaymentChannelFundBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `channel` or `amount` is missing.
     pub fn build(self) -> Result<PaymentChannelFund, CoreError> {
         let channel = self.channel.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelFund: channel is required".into())
@@ -358,6 +367,10 @@ impl PaymentChannelClaimBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `channel` is missing.
     pub fn build(self) -> Result<PaymentChannelClaim, CoreError> {
         let channel = self.channel.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelClaim: channel is required".into())

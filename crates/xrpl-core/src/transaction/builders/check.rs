@@ -106,6 +106,11 @@ impl CheckCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `destination` or `send_max` is
+    /// missing.
     pub fn build(self) -> Result<CheckCreate, CoreError> {
         let destination = self.destination.ok_or_else(|| {
             CoreError::ValidationError("CheckCreate: destination is required".into())
@@ -212,6 +217,10 @@ impl CheckCashBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `check_id` is missing.
     pub fn build(self) -> Result<CheckCash, CoreError> {
         let check_id = self
             .check_id
@@ -289,6 +298,10 @@ impl CheckCancelBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `check_id` is missing.
     pub fn build(self) -> Result<CheckCancel, CoreError> {
         let check_id = self.check_id.ok_or_else(|| {
             CoreError::ValidationError("CheckCancel: check_id is required".into())

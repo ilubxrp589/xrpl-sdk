@@ -49,7 +49,7 @@ welcome as GitHub issues.
 - [x] The codec reads and writes exactly what `rippled` does at the edges: `Number`, amounts,
       payment paths (including MPT path steps), each probed against `rippled` itself
 
-## 0.6: security
+## 0.6: security (released 2026-10-23)
 
 - [x] A full adversarial review of every crate, with each finding fixed and tested (see the
       [changelog](CHANGELOG.md)): the codec refuses what `rippled` refuses instead of changing the
@@ -59,6 +59,43 @@ welcome as GitHub issues.
 - [x] `delivered_amount` helpers; exact reserves and book liquidity
 - [x] Narrowing `as` casts denied by Clippy in every crate
 - [x] [docs/CRYPTO.md](docs/CRYPTO.md) and a security policy with a private reporting channel
+
+## 0.7: complete and professional (no breaking changes)
+
+- [x] Open a wallet from another wallet's backup: a BIP-39 recovery phrase (BIP-32 paths, as
+      Ledger and xrpl.js), Xaman's secret numbers, `rippled`'s RFC 1751 `master_key`
+- [x] Sign typed transactions: `Wallet::sign` returns the blob and the hash; `sign_and_submit`
+- [x] `autofill` prices every transaction type as `rippled` does (owner reserve for
+      `AccountDelete` and `AMMCreate`, fulfillments, Confidential MPT, `LoanSet`, `Batch`)
+- [x] `verify_transaction`, `Client::balances`, ledger entry flags by name
+- [x] Check a ledger against its hash (header, transaction and state trees)
+- [x] Client settings: HTTP and WebSocket builders, retries only when the server says it is busy,
+      a typed HTTP status error; `Client::pages` with no page limit
+- [x] Standard traits on every public type; `BlockingClient` has every method
+- [x] wasm: waiting works in Web Workers and Node.js, tested in CI
+- [x] CI on Linux, macOS and Windows; SemVer check; docs built as docs.rs builds them;
+      contributor guide and issue forms
+- [x] `# Errors` in the documentation of every function that can fail
+
+## 0.8: one consistent API (the 1.0 candidate)
+
+One deliberate set of breaking changes, so that 1.0 can then stay stable:
+
+- [ ] One way to build a transaction (the typed models, with setters and checks); the builders
+      retired
+- [ ] Room to grow without breaking: `#[non_exhaustive]` on protocol types, setters instead of
+      struct literals
+- [ ] One type per idea: addresses, assets and path steps the same everywhere; typed flags per
+      transaction type
+- [ ] A `Client` trait whose futures are `Send`, usable as `dyn`; errors that separate the
+      caller's mistakes from the server's
+- [ ] An external signer (hardware wallet, HSM, cloud key service)
+- [ ] `rippled` API version 2 by default, with typed transaction metadata
+- [ ] An order book helper with typed assets
+
+## 1.0
+
+The 0.8 API, settled, with a stability promise: no breaking change without a major version.
 
 ## Ongoing
 

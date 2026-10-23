@@ -56,6 +56,14 @@ pub struct FaucetFunding {
 /// Ask `network`'s faucet to send test XRP to `address`. Returns once the
 /// faucet has submitted the payment, not once it is validated (see
 /// [`fund_and_wait`]).
+///
+/// # Errors
+///
+/// [`ClientError::HttpStatus`] when the faucet refuses (429 when it limits
+/// its rate); [`ClientError::Http`] when it cannot be reached;
+/// [`ClientError::Json`] for an answer that is not JSON; and
+/// [`ClientError::UnexpectedResponse`] when it reports funding another
+/// address, or its answer is over 1 MiB or not UTF-8.
 pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding, ClientError> {
     use crate::http::{http_error, read_capped};
     #[cfg(not(target_arch = "wasm32"))]
@@ -122,6 +130,13 @@ async fn validated_balance(client: &XrplHttpClient, address: &str) -> Result<u64
 /// [`fund`], then wait (up to about 40 seconds) until a validated ledger on
 /// the network shows the account's balance grown by the faucet's payment
 /// (an account that already existed is funded too, not just found).
+///
+/// # Errors
+///
+/// The errors of [`fund`]; a [`ClientError`] when the network's server
+/// cannot be asked for the balance before funding; and
+/// [`ClientError::UnexpectedResponse`] when no validated ledger shows the
+/// balance grown within about 40 seconds.
 pub async fn fund_and_wait(
     network: FaucetNetwork,
     address: &str,

@@ -52,6 +52,12 @@ macro_rules! ledger_object_enum {
             /// with a field its struct does not have (which would be lost on
             /// the way back), or a field of the wrong shape, is an error; an
             /// unknown type is `Other`.
+            ///
+            /// # Errors
+            ///
+            /// A [`serde_json::Error`] for an entry of a known type with a
+            /// field its struct does not have, a field of the wrong shape, or a
+            /// required field missing.
             pub fn from_value(v: Value) -> Result<Self, serde_json::Error> {
                 let ty = v.get("LedgerEntryType").and_then(Value::as_str).map(str::to_owned);
                 let entry = match ty.as_deref() {
@@ -71,6 +77,12 @@ macro_rules! ledger_object_enum {
             }
 
             /// Back to rippled's JSON, `LedgerEntryType` included.
+            ///
+            /// # Errors
+            ///
+            /// A [`serde_json::Error`] if a field of a typed entry does not
+            /// serialize (for example a hand-built `Currency::Standard` code
+            /// that is not UTF-8); `Other` and `Unparsed` never fail.
             pub fn to_value(&self) -> Result<Value, serde_json::Error> {
                 let mut v = match self {
                     $(LedgerObject::$name(o) => serde_json::to_value(o)?,)*

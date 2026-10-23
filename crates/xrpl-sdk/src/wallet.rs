@@ -64,11 +64,20 @@ impl Wallet {
     }
 
     /// Create a wallet from a base58-encoded seed string.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if `seed_str` is not a seed: not base58, a
+    /// checksum that does not match, or the wrong length or prefix.
     pub fn from_seed(seed_str: &str) -> Result<Self, CoreError> {
         Self::from_seed_value(Seed::from_base58(seed_str)?)
     }
 
     /// Alias for `from_seed` — XRPL often uses "secret" to mean seed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::from_seed`].
     pub fn from_secret(secret: &str) -> Result<Self, CoreError> {
         Self::from_seed(secret)
     }
@@ -223,6 +232,16 @@ impl Wallet {
     /// Sign a `Batch` as one of its participants (an account with an inner
     /// transaction that is not the batch's own account): the `BatchSigner`
     /// to add with `transaction::batch::add_batch_signers`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of
+    /// [`batch_signing_data`](xrpl_core::transaction::batch::batch_signing_data):
+    /// [`CoreError::ValidationError`] for a `batch` with no `Account`, no
+    /// `Sequence` or `TicketSequence`, no `RawTransactions`, or an inner
+    /// transaction neither signed nor marked `tfInnerBatchTxn`; an address
+    /// error for an `Account` that is not a classic address; and a codec
+    /// error for an inner transaction that does not encode.
     pub fn sign_batch(
         &self,
         batch: &serde_json::Value,
@@ -233,6 +252,12 @@ impl Wallet {
     /// Sign a `Batch` for `account`, an account whose regular key this
     /// wallet holds: the `BatchSigner` to add with
     /// `transaction::batch::add_batch_signers`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_batch`], and an address error
+    /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`)
+    /// for an `account` that is not a classic address.
     pub fn sign_batch_as(
         &self,
         batch: &serde_json::Value,
@@ -243,6 +268,12 @@ impl Wallet {
 
     /// Sign a `Batch` for `batch_signer`, an account whose signer list this
     /// wallet is on: one of the `Signers` of its multi-signed `BatchSigner`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_batch`], and an address error
+    /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`)
+    /// for a `batch_signer` that is not a classic address.
     pub fn sign_batch_for(
         &self,
         batch: &serde_json::Value,
@@ -253,6 +284,10 @@ impl Wallet {
 
     /// Sign a payment channel claim for `amount_drops` (the channel's total
     /// paid out, not an increment) with this wallet's key.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `channel_id` is not 32 bytes of hex.
     pub fn sign_payment_channel_claim(
         &self,
         channel_id: &str,
@@ -301,11 +336,22 @@ impl Wallet {
 
     /// Sign a transaction (JSON). Returns the signed tx JSON with
     /// SigningPubKey and TxnSignature fields set.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::CodecError`] if `tx` is not a JSON object,
+    /// [`CoreError::ValidationError`] if it has `Signers` (see
+    /// [`Wallet::sign_for_multisigning`]), and the errors of
+    /// [`encode_transaction_json`] for a field that does not encode.
     pub fn sign_transaction(&self, tx: &serde_json::Value) -> Result<serde_json::Value, CoreError> {
         sign_transaction(tx, &self.keypair)
     }
 
     /// Sign a transaction and return the hex-encoded blob ready for submission.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_transaction`].
     pub fn sign_and_encode(&self, tx: &serde_json::Value) -> Result<String, CoreError> {
         let signed = sign_transaction(tx, &self.keypair)?;
         let encoded = encode_transaction_json(&signed, false)?;
@@ -326,6 +372,14 @@ impl Wallet {
     /// [`collect_signers`]. The transaction is signed with an empty
     /// `SigningPubKey` (a missing one counts as empty; a non-empty one is an
     /// error), as `rippled`'s `sign_for` does.
+    ///
+    /// # Errors
+    ///
+    /// The errors of
+    /// [`encode_for_multisigning`](xrpl_core::codec::encode_for_multisigning):
+    /// [`CoreError::ValidationError`] for a non-empty `SigningPubKey`, and
+    /// the errors of [`encode_transaction_json`] for a field that does not
+    /// encode.
     pub fn sign_for_multisigning(
         &self,
         tx: &serde_json::Value,
@@ -353,6 +407,19 @@ impl Wallet {
 /// order); an account may sign once; at most [`MAX_MULTISIGNERS`] may sign.
 /// `SigningPubKey` is set empty; a `TxnSignature` (a single signature) is an
 /// error.
+///
+/// # Errors
+///
+/// - [`CoreError::ValidationError`] for no signers or more than
+///   [`MAX_MULTISIGNERS`], a transaction with a `TxnSignature`, a `Signer`
+///   entry without its `Account`, `SigningPubKey` or `TxnSignature`, a
+///   signature that is not for this transaction, or an account that signs
+///   twice.
+/// - [`CoreError::InvalidHex`], [`CoreError::InvalidKeyLength`] or
+///   [`CoreError::SigningFailed`] for a key or signature that is malformed.
+/// - The errors of
+///   [`encode_for_multisigning`](xrpl_core::codec::encode_for_multisigning)
+///   for the transaction or a signer's `Account`.
 pub fn collect_signers(
     tx: &mut serde_json::Value,
     signers: Vec<serde_json::Value>,

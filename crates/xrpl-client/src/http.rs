@@ -270,6 +270,11 @@ impl std::fmt::Debug for XrplHttpClient {
 impl XrplHttpClient {
     /// Create a new HTTP client connecting to the given XRPL node URL, with
     /// the default settings (see [`XrplHttpClient::builder`]).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Http`] if the HTTP stack cannot start. The URL is not
+    /// checked here: a bad one fails the first request.
     pub fn new(url: &str) -> Result<Self, ClientError> {
         Self::builder(url).build()
     }

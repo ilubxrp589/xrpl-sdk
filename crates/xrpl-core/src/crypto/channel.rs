@@ -22,6 +22,11 @@ fn claim_data(channel_id: &str, amount_drops: u64) -> Result<Vec<u8>, CoreError>
 /// Sign a claim for `amount_drops` (the total the destination may have taken
 /// from the channel, not an increment) with the channel's public key's pair.
 /// Returns the signature in hex, for PaymentChannelClaim's `Signature`.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidHex`] if `channel_id` is not 32 bytes in hex;
+/// otherwise only as [`Keypair::sign_signing_data`].
 pub fn sign_payment_channel_claim(
     channel_id: &str,
     amount_drops: u64,
@@ -33,6 +38,12 @@ pub fn sign_payment_channel_claim(
 
 /// Whether `signature` is the channel key's (`public_key`, hex) claim for
 /// `amount_drops`. A well-formed signature that does not match is `Ok(false)`.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidHex`] if `channel_id` is not 32 bytes in hex, or
+/// `signature` or `public_key` is not hex; and the errors of
+/// [`verify_signing_data`] for a malformed key or signature.
 pub fn verify_payment_channel_claim(
     channel_id: &str,
     amount_drops: u64,

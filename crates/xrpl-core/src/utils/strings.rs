@@ -9,6 +9,11 @@ pub fn str_to_hex(text: &str) -> String {
 }
 
 /// Hex → UTF-8 text. Errors on bad hex or bytes that are not UTF-8.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidHex`] if `hex_text` is not hex;
+/// [`CoreError::ValidationError`] if the bytes are not UTF-8.
 pub fn hex_to_str(hex_text: &str) -> Result<String, CoreError> {
     let bytes = hex::decode(hex_text).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
     String::from_utf8(bytes).map_err(|e| CoreError::ValidationError(format!("not UTF-8: {e}")))

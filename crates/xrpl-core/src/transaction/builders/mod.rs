@@ -31,6 +31,14 @@ pub trait Transaction {
     fn to_json(&self) -> Value;
 
     /// Validate that all required fields are present and valid.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] when a field breaks a rule the builder
+    /// checks (each builder's `build` lists its rules); some builders also pass
+    /// on [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// for an address, or [`CoreError::InvalidAmount`] for an amount, that does
+    /// not parse.
     fn validate(&self) -> Result<(), CoreError>;
 }
 

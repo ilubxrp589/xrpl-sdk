@@ -163,6 +163,12 @@ impl AccountSetBuilder {
     }
 
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `SetFlag` and `ClearFlag` are the same
+    /// flag, `TickSize` or `TransferRate` is out of range, or `Domain`,
+    /// `MessageKey` or `EmailHash` is not hex of the right length.
     pub fn build(self) -> Result<AccountSet, CoreError> {
         let tx = AccountSet {
             common: self.common,

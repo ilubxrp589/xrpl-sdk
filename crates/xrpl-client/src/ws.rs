@@ -434,6 +434,11 @@ impl XrplWsClient {
 
     /// Connect to an XRPL WebSocket endpoint (within 15 s) with automatic
     /// reconnection and the default settings (see [`XrplWsClient::builder`]).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Timeout`] when the connection does not open within
+    /// 15 s, and [`ClientError::UnexpectedResponse`] when it is refused.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
         Self::builder(url).connect().await
     }
@@ -488,11 +493,24 @@ impl XrplWsClient {
     /// book snapshot, for instance) and a [`Subscription`] to **every** event
     /// the connection carries (unfiltered: other subscriptions' too). The
     /// subscription is restored after a reconnect.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the subscription;
+    /// [`ClientError::Disconnected`] when there is no connection within the
+    /// request timeout, or it drops before the reply; and
+    /// [`ClientError::Timeout`] when no reply comes within the request
+    /// timeout.
     pub async fn subscribe(&self, params: Value) -> Result<(Value, Subscription), ClientError> {
         self.subscribe_with(params, |_| true).await
     }
 
     /// Undo a [`XrplWsClient::subscribe`] with the same parameters.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`], for the `unsubscribe`
+    /// request.
     pub async fn unsubscribe(&self, params: Value) -> Result<(), ClientError> {
         self.shared.request("unsubscribe", params.clone()).await?;
         self.shared
@@ -515,6 +533,10 @@ impl XrplWsClient {
     }
 
     /// Subscribe to ledger closes ([`WsEvent::Ledger`] only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_ledger(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("ledger", |e| matches!(e, WsEvent::Ledger(_)))
             .await
@@ -522,18 +544,30 @@ impl XrplWsClient {
 
     /// Subscribe to validations from every validator the server hears
     /// ([`WsEvent::Validation`] only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_validations(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("validations", |e| matches!(e, WsEvent::Validation(_)))
             .await
     }
 
     /// Subscribe to the server's load and fee changes ([`WsEvent::Server`] only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_server(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("server", |e| matches!(e, WsEvent::Server(_)))
             .await
     }
 
     /// Subscribe to consensus phase changes ([`WsEvent::Consensus`] only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_consensus(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("consensus", |e| matches!(e, WsEvent::Consensus(_)))
             .await
@@ -541,12 +575,20 @@ impl XrplWsClient {
 
     /// Subscribe to each validated ledger's order-book trading
     /// ([`WsEvent::BookChanges`] only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_book_changes(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("book_changes", |e| matches!(e, WsEvent::BookChanges(_)))
             .await
     }
 
     /// Subscribe to validator manifests ([`WsEvent::Manifest`] only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_manifests(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("manifests", |e| matches!(e, WsEvent::Manifest(_)))
             .await
@@ -557,6 +599,12 @@ impl XrplWsClient {
     /// subscription's). `taker_gets` / `taker_pays` are `{"currency": "XRP"}`
     /// or `{"currency", "issuer"}`. With `snapshot`, returns the book's
     /// current offers first (`both` adds the other side).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`] (the server refuses a book it
+    /// cannot read), and [`ClientError::Json`] when the reply does not decode
+    /// as an [`OrderBookSnapshot`].
     pub async fn subscribe_order_book(
         &self,
         taker_gets: Value,
@@ -575,6 +623,10 @@ impl XrplWsClient {
 
     /// Subscribe to every validated transaction on the network
     /// ([`WsEvent::Transaction`] with `validated: true` only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_transactions(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream(
             "transactions",
@@ -585,6 +637,10 @@ impl XrplWsClient {
 
     /// Subscribe to transactions as they are proposed, before validation
     /// (preliminary results; [`WsEvent::Transaction`], `validated: false`).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`].
     pub async fn subscribe_transactions_proposed(&self) -> Result<Subscription, ClientError> {
         self.subscribe_stream("transactions_proposed", |e| {
             matches!(e, WsEvent::Transaction(_))
@@ -596,6 +652,11 @@ impl XrplWsClient {
     /// receiver gets only those ([`WsEvent::Transaction`] with
     /// `validated: true` naming the account in the transaction or its
     /// metadata), never another subscription's.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe`] ([`ClientError::RpcError`]
+    /// `actMalformed` for an address that is not valid).
     pub async fn subscribe_account(&self, account: &str) -> Result<Subscription, ClientError> {
         let who = account.to_string();
         Ok(self
@@ -608,6 +669,10 @@ impl XrplWsClient {
     }
 
     /// Unsubscribe from ledger closes.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::unsubscribe`].
     pub async fn unsubscribe_ledger(&self) -> Result<(), ClientError> {
         self.unsubscribe(json!({"streams": ["ledger"]})).await
     }

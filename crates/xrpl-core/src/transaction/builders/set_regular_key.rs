@@ -71,6 +71,12 @@ impl SetRegularKeyBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if the regular key is the account's own
+    /// address; an address error ([`CoreError::InvalidAddress`],
+    /// `InvalidBase58` or `InvalidChecksum`) if it is not a classic address.
     pub fn build(self) -> Result<SetRegularKey, CoreError> {
         let tx = SetRegularKey {
             common: self.common,

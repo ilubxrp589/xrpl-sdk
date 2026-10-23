@@ -166,6 +166,10 @@ pub fn lookup_field_def_by_id(type_code: u16, field_code: u16) -> Option<&'stati
 }
 
 /// Convert transaction type name to numeric code.
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] for a name the definitions do not hold.
 pub fn transaction_type_code(name: &str) -> Result<u16, CoreError> {
     TRANSACTION_TYPES
         .get(name)
@@ -174,6 +178,10 @@ pub fn transaction_type_code(name: &str) -> Result<u16, CoreError> {
 }
 
 /// Convert ledger entry type name to numeric code.
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] for a name the definitions do not hold.
 pub fn ledger_entry_type_code(name: &str) -> Result<u16, CoreError> {
     LEDGER_ENTRY_TYPES
         .get(name)
@@ -210,6 +218,11 @@ pub fn granular_permission_name(code: u32) -> Option<&'static str> {
 
 /// Resolve a PermissionValue string to its u32 code.
 /// Checks granular permissions first, then falls back to transaction type + 1.
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] if `name` is neither a granular permission
+/// nor a transaction type.
 pub fn permission_value_code(name: &str) -> Result<u32, CoreError> {
     if let Some(&code) = GRANULAR_PERMISSIONS.get(name) {
         return Ok(code);

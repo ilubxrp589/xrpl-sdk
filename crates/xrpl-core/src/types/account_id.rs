@@ -38,6 +38,11 @@ impl AccountId {
     }
 
     /// Decode from classic address string.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAddress`](crate::CoreError::InvalidAddress) (or
+    /// `InvalidBase58`, `InvalidChecksum`) if `addr` is not a classic address.
     pub fn from_address(addr: &str) -> Result<Self, crate::CoreError> {
         let bytes = crate::address::decode_account_id(addr)?;
         Ok(Self(bytes))

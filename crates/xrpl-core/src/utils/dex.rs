@@ -18,6 +18,12 @@ pub fn offer_quality_xrp(taker_pays_drops: u64, taker_gets_drops: u64) -> Option
 
 /// An amount as an approximate `f64`, for display: XRP (a string of drops)
 /// in XRP, a token in its value. Not for amounts you sign.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] for a string that is not a whole number of
+/// drops, an object without a `value` that parses as a number, or any other
+/// JSON value.
 pub fn amount_to_f64(amount: &serde_json::Value) -> Result<f64, CoreError> {
     match amount {
         serde_json::Value::String(s) => {
@@ -74,6 +80,12 @@ fn amount_decimal(amount: &serde_json::Value) -> Result<Decimal, CoreError> {
 /// `max_quality` is in the same units as their `quality` (TakerPays per
 /// TakerGets, drops for an XRP side). An offer counts what its owner can
 /// fund (`taker_gets_funded`, when the server sent it), not what it names.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if `max_quality` or an offer's `quality` is not
+/// a decimal number, or a counted offer's `taker_gets` (or `taker_gets_funded`)
+/// is not an amount with a decimal value.
 pub fn liquidity_at_price(
     offers: &[serde_json::Value],
     max_quality: &str,

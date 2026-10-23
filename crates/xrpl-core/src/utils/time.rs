@@ -15,6 +15,10 @@ pub fn ripple_time_to_unix(ripple_time: u32) -> i64 {
 
 /// Unix seconds → ledger time. Errors before 2000 or after the last second a
 /// `u32` ledger time can hold (2136-02-07T06:28:15Z).
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for a time outside that range.
 pub fn unix_to_ripple_time(unix_seconds: i64) -> Result<u32, CoreError> {
     unix_seconds
         .checked_sub(RIPPLE_EPOCH_UNIX)
@@ -32,6 +36,11 @@ pub fn ripple_time_to_system_time(ripple_time: u32) -> SystemTime {
 }
 
 /// `SystemTime` → ledger time, truncated to the second.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for a time before 2000 or after
+/// 2136-02-07T06:28:15Z.
 pub fn system_time_to_ripple_time(time: SystemTime) -> Result<u32, CoreError> {
     let secs = time
         .duration_since(UNIX_EPOCH)
@@ -60,6 +69,12 @@ pub fn ripple_time_to_iso8601(ripple_time: u32) -> String {
 
 /// ISO 8601 in UTC (`"2024-06-01T12:00:00Z"`, `"…:00.250Z"`, `"…:00+00:00"`)
 /// → ledger time. A fraction of a second is dropped.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for text not in that form (or not a real date
+/// and time), or a time outside ledger time (2000-01-01 to
+/// 2136-02-07T06:28:15Z).
 pub fn iso8601_to_ripple_time(iso: &str) -> Result<u32, CoreError> {
     let bad = || CoreError::ValidationError(format!("not a UTC ISO 8601 time: {iso:?}"));
     let body = iso
