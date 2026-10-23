@@ -41,6 +41,7 @@ below says how to update.
     metadata). *Update:* `meta["TransactionResult"]` →
     `meta.transaction_result`; for JSON you hold,
     `serde_json::from_value::<TransactionMetadata>(json)?`.
+  - `WsEvent::PathFind` holds a typed `PathFindResult` (it held JSON).
   - Transaction stream events: `TransactionEvent::transaction` →
     `tx_json`, with `hash` beside it.
   - `AccountInfo::signer_lists` is the only place signer lists are
@@ -224,6 +225,17 @@ below says how to update.
   form the ledger takes, and `AccountId::from_public_key` gives a key's
   address. Example: `remote_signer` (a stand-in signing service).
 - `MaybeSend` / `MaybeSync` are in `xrpl_core` (the client re-exports them).
+- **`Client::order_book(base, quote, limit)`**: both sides of a book from
+  one validated ledger, asks lowest first and bids highest first, as an
+  `OrderBook` with `best_ask`, `best_bid`, `spread` and `midpoint` (prices in
+  the quote per base, display units; approximations for display, the offers
+  themselves exact). `BlockingClient::order_book` too, and
+  `Amount::to_f64` (an approximate value for display).
+- **Typed `path_find`**: `XrplWsClient::path_find(&PathFindRequest)`
+  returns the first answer and a subscription to the updates;
+  `path_find_close` ends the search. Answers and updates are
+  `PathFindResult` (checked against a search recorded from `rippled`
+  3.4.1).
 
 ### Changed
 - **Licence: Apache-2.0.** The crates are now licensed under the Apache

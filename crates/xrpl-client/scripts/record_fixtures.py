@@ -80,6 +80,46 @@ async def snapshot(websockets, url):
     print("books_snapshot.json: recorded")
 
 
+async def path_find(websockets, url):
+    """A path_find search from an XRP holder to an RLUSD holder: its first
+    answer (rippled/path_find.json) and two updates (streams/path_find.json),
+    then closed."""
+    rlusd = {"currency": "524C555344000000000000000000000000000000",
+             "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De"}
+
+    async def answer(ws, request_id):
+        while True:
+            message = json.loads(await ws.recv())
+            if message.get("id") == request_id:
+                return message["result"]
+
+    async with websockets.connect(url, max_size=2**25) as ws:
+        # Someone selling RLUSD holds it (and so trusts it): pay them some.
+        await ws.send(json.dumps({"id": 1, "command": "book_offers", "api_version": API_VERSION,
+                                  "taker_gets": rlusd, "taker_pays": {"currency": "XRP"},
+                                  "limit": 1}))
+        holder = (await answer(ws, 1))["offers"][0]["Account"]
+        params = {"subcommand": "create", "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+                  "destination_account": holder, "destination_amount": dict(rlusd, value="1"),
+                  "api_version": API_VERSION}
+        await ws.send(json.dumps(dict(params, id=2, command="path_find")))
+        first = await answer(ws, 2)
+        updates = []
+        while len(updates) < 2:
+            message = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
+            if message.get("type") == "path_find":
+                updates.append(message)
+        await ws.send(json.dumps({"id": 3, "command": "path_find", "subcommand": "close",
+                                  "api_version": API_VERSION}))
+        await answer(ws, 3)
+    if not first["alternatives"]:
+        sys.exit("path_find: no alternatives; try again")
+    write(HERE / "rippled" / "path_find.json",
+          {"method": "path_find", "params": params, "result": first})
+    write(HERE / "streams" / "path_find.json", updates)
+    print("path_find.json: recorded (first answer and 2 updates)")
+
+
 async def collect(websockets, url, streams, wanted, seconds):
     """Up to `wanted[kind]` messages of each kind from one connection to
     `streams`, one transaction of each type. Messages are read as fast as
@@ -114,6 +154,7 @@ async def streams(args):
     import websockets  # pip install websockets
 
     await snapshot(websockets, args.ws)
+    await path_find(websockets, args.ws)
     # One connection per group, so no connection carries more than it can
     # read: the proposed transactions alone are hundreds a second.
     groups = [

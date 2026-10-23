@@ -1,0 +1,190 @@
+[
+ {
+  "alternatives": [
+   {
+    "paths_computed": [
+     [
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": "767241"
+   },
+   {
+    "paths_computed": [
+     [
+      {
+       "account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+       "type": 1
+      },
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "BTC",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "0.00001232603855028556"
+    }
+   },
+   {
+    "paths_computed": [
+     [
+      {
+       "account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+       "type": 1
+      },
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "ETH",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "0.0004191361772984209"
+    }
+   },
+   {
+    "paths_computed": [],
+    "source_amount": {
+     "currency": "524C555344000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1"
+    }
+   },
+   {
+    "paths_computed": [
+     [
+      {
+       "account": "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE",
+       "type": 1
+      },
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "5553444300000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1.000000998990569"
+    }
+   }
+  ],
+  "destination_account": "rpYNm4xpK7aPC9EVqdpkdrTZjCLUVGc4kA",
+  "destination_amount": {
+   "currency": "524C555344000000000000000000000000000000",
+   "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+   "value": "1"
+  },
+  "full_reply": true,
+  "id": 2,
+  "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "type": "path_find"
+ },
+ {
+  "alternatives": [
+   {
+    "paths_computed": [
+     [
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": "767241"
+   },
+   {
+    "paths_computed": [
+     [
+      {
+       "account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+       "type": 1
+      },
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "BTC",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "0.00001232603855028556"
+    }
+   },
+   {
+    "paths_computed": [
+     [
+      {
+       "account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+       "type": 1
+      },
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "ETH",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "0.0004191361772984209"
+    }
+   },
+   {
+    "paths_computed": [],
+    "source_amount": {
+     "currency": "524C555344000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1"
+    }
+   },
+   {
+    "paths_computed": [
+     [
+      {
+       "account": "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE",
+       "type": 1
+      },
+      {
+       "currency": "524C555344000000000000000000000000000000",
+       "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+       "type": 48
+      }
+     ]
+    ],
+    "source_amount": {
+     "currency": "5553444300000000000000000000000000000000",
+     "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+     "value": "1.000000998990569"
+    }
+   }
+  ],
+  "destination_account": "rpYNm4xpK7aPC9EVqdpkdrTZjCLUVGc4kA",
+  "destination_amount": {
+   "currency": "524C555344000000000000000000000000000000",
+   "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+   "value": "1"
+  },
+  "full_reply": true,
+  "id": 2,
+  "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+  "type": "path_find"
+ }
+]

@@ -240,6 +240,9 @@ fn main() -> Result<(), xrpl_core::CoreError> {
 - A typed request and response for every public `rippled` method and the Clio-only ones (43),
   each response checked against one recorded from a real server; `request_all` follows markers
 - `simulate` (dry-run a transaction) and `submit_multisigned`
+- `order_book`: both sides of a book from one ledger, with best bid, best ask and spread; typed
+  `path_find` searches over WebSocket, updated with every ledger
+- `rippled`'s API version 2 for every request, with typed transaction metadata
 - WebSocket client: each subscription hears only its own stream; automatic reconnection that
   resubscribes and reports it (`Disconnected`, `Reconnected`, `ResubscribeFailed`), silent
   connections replaced, the connection closed on drop; typed events for every rippled stream

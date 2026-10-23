@@ -30,6 +30,77 @@ pub struct BookOffersResult {
     pub validated: Option<bool>,
 }
 
+/// Both sides of an order book, from one ledger:
+/// [`Client::order_book`](crate::Client::order_book). Prices are in `quote`
+/// per `base`, in display units (XRP, not drops), as approximate `f64`s for
+/// display and estimates; the offers themselves are exact.
+///
+/// ```no_run
+/// # async fn run(client: impl xrpl_client::Client) -> Result<(), Box<dyn std::error::Error>> {
+/// use xrpl_core::types::Asset;
+///
+/// let rlusd = Asset::token("RLUSD", "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De")?;
+/// let book = client.order_book(&Asset::xrp(), &rlusd, 20).await?;
+/// println!(
+///     "XRP/RLUSD bid {:?} ask {:?} spread {:?}",
+///     book.best_bid(),
+///     book.best_ask(),
+///     book.spread()
+/// );
+/// # Ok(()) }
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct OrderBook {
+    /// What is bought and sold.
+    pub base: xrpl_core::types::Asset,
+    /// What it is priced in.
+    pub quote: xrpl_core::types::Asset,
+    /// Offers selling `base` for `quote` (their `TakerGets` is `base`),
+    /// lowest price first.
+    pub asks: Vec<BookOffer>,
+    /// Offers buying `base` with `quote` (their `TakerPays` is `base`),
+    /// highest price first.
+    pub bids: Vec<BookOffer>,
+    /// The ledger both sides are from.
+    pub ledger_index: u32,
+    /// Whether that ledger is validated.
+    pub validated: bool,
+}
+
+impl OrderBook {
+    /// An ask's price: what it asks in `quote` per `base` it sells.
+    pub fn ask_price(offer: &BookOffer) -> f64 {
+        offer.taker_pays.to_f64() / offer.taker_gets.to_f64()
+    }
+
+    /// A bid's price: what it pays in `quote` per `base` it buys.
+    pub fn bid_price(offer: &BookOffer) -> f64 {
+        offer.taker_gets.to_f64() / offer.taker_pays.to_f64()
+    }
+
+    /// The lowest price anyone sells `base` at.
+    pub fn best_ask(&self) -> Option<f64> {
+        self.asks.first().map(Self::ask_price)
+    }
+
+    /// The highest price anyone buys `base` at.
+    pub fn best_bid(&self) -> Option<f64> {
+        self.bids.first().map(Self::bid_price)
+    }
+
+    /// The best ask less the best bid (negative when the book is crossed,
+    /// which the ledger settles as soon as an offer crosses).
+    pub fn spread(&self) -> Option<f64> {
+        Some(self.best_ask()? - self.best_bid()?)
+    }
+
+    /// Halfway between the best bid and the best ask.
+    pub fn midpoint(&self) -> Option<f64> {
+        Some((self.best_ask()? + self.best_bid()?) / 2.0)
+    }
+}
+
 /// One offer of an order book: its `Offer` entry plus what the owner can
 /// actually fund.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -377,6 +448,31 @@ pub struct RipplePathFindResult {
     /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,
+}
+
+/// An answer of [`path_find`](crate::requests::PathFindRequest): the first
+/// one, each update (as [`WsEvent::PathFind`](crate::stream::WsEvent::PathFind)),
+/// and the last (`closed`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PathFindResult {
+    /// The ways to pay, best first.
+    pub alternatives: Vec<PathAlternative>,
+    /// The receiving account.
+    pub destination_account: String,
+    /// What the destination receives.
+    pub destination_amount: Amount,
+    /// The sending account.
+    pub source_account: String,
+    /// Whether the search is complete (the first answer often is not; an
+    /// update completes it).
+    pub full_reply: bool,
+    /// The request's `id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<Value>,
+    /// Whether the search was closed (the answer to `close`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
 }
 
 /// One way to pay: the paths to put in the Payment's `Paths`, and the most it

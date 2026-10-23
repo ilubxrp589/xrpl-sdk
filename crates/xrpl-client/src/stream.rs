@@ -15,7 +15,7 @@
 //! Each event type is checked against messages recorded from `rippled` 3.4.1
 //! on mainnet (`tests/stream_events.rs`): it must parse, and keep every field.
 
-use crate::types::{count_as_string, BookChange, BookOffer};
+use crate::types::{count_as_string, BookChange, BookOffer, PathFindResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use xrpl_core::transaction::{models::Tx, TransactionMetadata};
@@ -40,8 +40,9 @@ pub enum WsEvent {
     Manifest(ManifestEvent),
     /// A peer's ledger state changed (`peer_status` stream, admin).
     PeerStatus(PeerStatusEvent),
-    /// An update of an open `path_find` request.
-    PathFind(Value),
+    /// An update of the connection's `path_find` search: the paths as the
+    /// latest ledger has them.
+    PathFind(Box<PathFindResult>),
     /// A message of a type this crate does not know, as JSON.
     Other(Value),
     /// A message of a type this crate knows that did not parse (a field a
@@ -127,7 +128,7 @@ impl WsEvent {
             "bookChanges" => typed(&message, WsEvent::BookChanges),
             "manifestReceived" => typed(&message, WsEvent::Manifest),
             "peerStatusChange" => typed(&message, WsEvent::PeerStatus),
-            "path_find" => WsEvent::PathFind(message),
+            "path_find" => typed(&message, |p: PathFindResult| WsEvent::PathFind(Box::new(p))),
             _ => WsEvent::Other(message),
         })
     }

@@ -255,6 +255,26 @@ impl Amount {
         matches!(self, Amount::Xrp(_))
     }
 
+    /// The amount as an approximate `f64`, in display units: XRP (not
+    /// drops), a token's value, an MPT's integer value. For display and
+    /// estimates (prices, spreads) only: never sign an amount computed from
+    /// it.
+    ///
+    /// ```
+    /// use xrpl_core::types::Amount;
+    ///
+    /// assert_eq!(Amount::xrp(1_500_000)?.to_f64(), 1.5);
+    /// assert_eq!(Amount::token("0.25", "USD", "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq")?.to_f64(), 0.25);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    pub fn to_f64(&self) -> f64 {
+        match self {
+            Amount::Xrp(drops) => *drops as f64 / 1_000_000.0,
+            Amount::Iou { value, .. } => value.to_decimal().parse().unwrap_or(f64::NAN),
+            Amount::Mpt { value, .. } => *value as f64,
+        }
+    }
+
     /// A token amount: `value` in decimal, a currency code and its issuer.
     /// Codes longer than three characters (`"RLUSD"`) are written as hex,
     /// as the ledger stores them; 40 hex digits are taken as they are.

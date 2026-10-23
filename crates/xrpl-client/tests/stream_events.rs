@@ -63,6 +63,7 @@ fn every_recorded_stream_message_is_typed_and_keeps_every_field() {
         "consensusPhase.json",
         "bookChanges.json",
         "peerStatusChange.json",
+        "path_find.json",
     ] {
         for m in messages(file) {
             match WsEvent::from_message(m.clone()).unwrap() {
@@ -80,6 +81,10 @@ fn every_recorded_stream_message_is_typed_and_keeps_every_field() {
                 WsEvent::Consensus(e) => keeps_every_field(file, &m, &e),
                 WsEvent::BookChanges(e) => keeps_every_field(file, &m, &e),
                 WsEvent::PeerStatus(e) => keeps_every_field(file, &m, &e),
+                WsEvent::PathFind(e) => {
+                    assert!(!e.alternatives.is_empty(), "{file}: no alternatives");
+                    keeps_every_field(file, &m, &e);
+                }
                 other => panic!("{file}: not typed: {other:?}"),
             }
             count += 1;

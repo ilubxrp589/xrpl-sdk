@@ -117,6 +117,7 @@ fn every_recorded_response_parses_and_keeps_every_field() {
         GetAggregatePriceRequest => "get_aggregate_price.json";
         NftSellOffersRequest => "nft_sell_offers.json";
         RipplePathFindRequest => "ripple_path_find.json";
+        PathFindRequest => "path_find.json";
         ChannelVerifyRequest => "channel_verify.json";
         FeeRequest => "fee.json";
         FeatureRequest => "feature.json";

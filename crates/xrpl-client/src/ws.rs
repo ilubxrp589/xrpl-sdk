@@ -677,6 +677,69 @@ impl XrplWsClient {
         self.unsubscribe(json!({"streams": ["ledger"]})).await
     }
 
+    /// Search for payment paths and keep the answer up to date: the first
+    /// answer, and a [`Subscription`] to the updates ([`WsEvent::PathFind`],
+    /// one per ledger while the paths change). One search per connection: a
+    /// new one replaces the last; [`XrplWsClient::path_find_close`] ends it.
+    /// A reconnect ends it too (search again after
+    /// [`WsEvent::Reconnected`]).
+    ///
+    /// ```no_run
+    /// # async fn run(ws: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::requests::PathFindRequest;
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let usd = serde_json::json!({"currency": "USD", "issuer": "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq", "value": "10"});
+    /// let (first, mut updates) = ws
+    ///     .path_find(&PathFindRequest::new("rSender…", "rReceiver…", usd))
+    ///     .await?;
+    /// println!("{} ways to pay", first.alternatives.len());
+    /// while let Some(WsEvent::PathFind(update)) = updates.recv().await {
+    ///     if update.full_reply {
+    ///         println!("best: {:?}", update.alternatives.first().map(|a| &a.source_amount));
+    ///         break;
+    ///     }
+    /// }
+    /// ws.path_find_close().await?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the search (an
+    /// account it does not know, an amount it cannot read), the errors of
+    /// [`XrplWsClient::subscribe`] for the connection, and
+    /// [`ClientError::Json`] when the answer does not decode.
+    pub async fn path_find(
+        &self,
+        request: &crate::requests::PathFindRequest,
+    ) -> Result<(crate::types::PathFindResult, Subscription), ClientError> {
+        // Listen before asking, so no update between the reply and the
+        // receiver is lost.
+        let updates = self.subscription(|e| matches!(e, WsEvent::PathFind(_)));
+        let reply = self
+            .shared
+            .request("path_find", serde_json::to_value(request)?)
+            .await?;
+        Ok((serde_json::from_value(reply)?, updates))
+    }
+
+    /// End the connection's [`XrplWsClient::path_find`] search.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`noPathRequest`) when no search is open,
+    /// and the errors of [`XrplWsClient::subscribe`] for the connection.
+    pub async fn path_find_close(&self) -> Result<(), ClientError> {
+        self.shared
+            .request(
+                "path_find",
+                serde_json::to_value(crate::requests::PathFindRequest::close())?,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Every event the connection carries, from now on.
     pub fn events(&self) -> Subscription {
         self.subscription(|_| true)

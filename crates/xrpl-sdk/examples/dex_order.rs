@@ -44,22 +44,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let order = OfferCreate::new(maker.classic_address(), Amount::Xrp(25_000_000), usd("50")?);
     send(&client, &maker, order.to_json()?).await?;
 
-    // 2. The order book: offers selling USD for XRP, best first.
-    let book = client
-        .book_offers(
-            &Asset::token("USD", issuer.classic_address())?, // the offers give USD
-            &Asset::xrp(),                                   // and want XRP
-        )
-        .await?;
-    for offer in &book.offers {
+    // 2. The USD/XRP order book, both sides from one ledger, best first.
+    let usd_asset = Asset::token("USD", issuer.classic_address())?;
+    let book = client.order_book(&usd_asset, &Asset::xrp(), 10).await?;
+    for offer in &book.asks {
         println!(
-            "  book: {} sells {} for {} (quality {})",
+            "  ask: {} sells {} for {} ({} XRP per USD)",
             offer.account,
             offer.taker_gets,
             offer.taker_pays,
-            offer.quality.as_deref().unwrap_or("?")
+            OrderBook::ask_price(offer)
         );
     }
+    println!(
+        "  best ask {:?}, best bid {:?} (XRP per USD), ledger {}",
+        book.best_ask(),
+        book.best_bid(),
+        book.ledger_index
+    );
 
     // 3. The taker buys 20 USD for 10 XRP, now or not at all.
     let mut buy = OfferCreate::new(taker.classic_address(), usd("20")?, Amount::Xrp(10_000_000));

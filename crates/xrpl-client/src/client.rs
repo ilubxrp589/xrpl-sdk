@@ -689,6 +689,52 @@ pub trait Client: Transport {
         }
     }
 
+    /// Both sides of the order book for `base` priced in `quote`, from one
+    /// validated ledger: the asks (offers selling `base` for `quote`) and
+    /// the bids (offers buying `base` with `quote`), best first, up to
+    /// `limit` offers a side. See [`OrderBook`] for prices and the spread.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the request, and the
+    /// errors of [`Client::request`]; [`ClientError::UnexpectedResponse`]
+    /// when the server names no ledger for the first side.
+    fn order_book<'a>(
+        &'a self,
+        base: &'a xrpl_core::types::Asset,
+        quote: &'a xrpl_core::types::Asset,
+        limit: u32,
+    ) -> impl Future<Output = Result<OrderBook, ClientError>> + MaybeSend + 'a {
+        async move {
+            let asks = self
+                .request(
+                    &BookOffersRequest::new(base.clone(), quote.clone())
+                        .with_limit(limit)
+                        .with_ledger_index(LedgerIndex::Validated),
+                )
+                .await?;
+            let ledger_index = asks.ledger_index.ok_or_else(|| {
+                ClientError::UnexpectedResponse("book_offers named no validated ledger".into())
+            })?;
+            // The other side from the same ledger.
+            let bids = self
+                .request(
+                    &BookOffersRequest::new(quote.clone(), base.clone())
+                        .with_limit(limit)
+                        .with_ledger_index(LedgerIndex::Index(ledger_index)),
+                )
+                .await?;
+            Ok(OrderBook {
+                base: base.clone(),
+                quote: quote.clone(),
+                asks: asks.offers,
+                bids: bids.offers,
+                ledger_index,
+                validated: asks.validated.unwrap_or(false) && bids.validated.unwrap_or(false),
+            })
+        }
+    }
+
     /// Get AMM pool information.
     ///
     /// # Errors
@@ -1943,6 +1989,49 @@ mod tests {
             .unwrap()
             .to_string();
         (blob, hash)
+    }
+
+    /// An order book's two sides come from one ledger, asks lowest first
+    /// and bids highest first, priced in the quote per base.
+    #[tokio::test]
+    async fn an_order_book_is_both_sides_of_one_ledger() {
+        let usd =
+            xrpl_core::types::Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
+        let offer = |gets: Value, pays: Value| {
+            json!({"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+                "TakerGets": gets, "TakerPays": pays})
+        };
+        let usd_amount = |v: &str| json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": v});
+        let mock = Mock::default()
+            .reply(
+                "book_offers",
+                json!({"ledger_index": 77, "validated": true, "offers": [
+                    // Selling 10 XRP for 5 USD: 0.5 USD per XRP.
+                    offer(json!("10000000"), usd_amount("5")),
+                    offer(json!("10000000"), usd_amount("6")),
+                ]}),
+            )
+            .reply(
+                "book_offers",
+                json!({"ledger_index": 77, "validated": true, "offers": [
+                    // Paying 4.5 USD for 10 XRP: 0.45 USD per XRP.
+                    offer(usd_amount("4.5"), json!("10000000")),
+                ]}),
+            );
+        let book = mock
+            .order_book(&xrpl_core::types::Asset::xrp(), &usd, 10)
+            .await
+            .unwrap();
+        assert_eq!((book.asks.len(), book.bids.len()), (2, 1));
+        assert_eq!(book.best_ask(), Some(0.5));
+        assert_eq!(book.best_bid(), Some(0.45));
+        assert!((book.spread().unwrap() - 0.05).abs() < 1e-12);
+        assert!(book.validated);
+        let calls = mock.calls();
+        assert_eq!(calls[0].1["ledger_index"], "validated");
+        assert_eq!(calls[0].1["taker_gets"], json!({"currency": "XRP"}));
+        assert_eq!(calls[1].1["ledger_index"], 77);
+        assert_eq!(calls[1].1["taker_pays"], json!({"currency": "XRP"}));
     }
 
     fn validated(mock: Mock, indexes: &[u32]) -> Mock {

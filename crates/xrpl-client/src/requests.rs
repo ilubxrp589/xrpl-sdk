@@ -11,7 +11,7 @@
 //! | Account | [`AccountChannelsRequest`], [`AccountCurrenciesRequest`], [`AccountInfoRequest`], [`AccountLinesRequest`], [`AccountNftsRequest`], [`AccountObjectsRequest`], [`AccountOffersRequest`], [`AccountTxRequest`], [`GatewayBalancesRequest`], [`NoRippleCheckRequest`] |
 //! | Ledger | [`LedgerRequest`], [`LedgerClosedRequest`], [`LedgerCurrentRequest`], [`LedgerDataRequest`], [`LedgerEntryRequest`] |
 //! | Transaction | [`SimulateRequest`], [`SubmitRequest`], [`SubmitMultisignedRequest`], [`TransactionEntryRequest`], [`TxRequest`] |
-//! | Path and order book | [`AmmInfoRequest`], [`BookChangesRequest`], [`BookOffersRequest`], [`DepositAuthorizedRequest`], [`GetAggregatePriceRequest`], [`NftBuyOffersRequest`], [`NftSellOffersRequest`], [`RipplePathFindRequest`] |
+//! | Path and order book | [`AmmInfoRequest`], [`BookChangesRequest`], [`BookOffersRequest`], [`DepositAuthorizedRequest`], [`GetAggregatePriceRequest`], [`NftBuyOffersRequest`], [`NftSellOffersRequest`], [`PathFindRequest`] (WebSocket), [`RipplePathFindRequest`] |
 //! | Payment channel | [`ChannelVerifyRequest`] |
 //! | Server info | [`FeeRequest`], [`FeatureRequest`], [`ManifestRequest`], [`ServerDefinitionsRequest`], [`ServerInfoRequest`], [`ServerStateRequest`], [`VersionRequest`] |
 //! | Utility | [`PingRequest`], [`RandomRequest`] |
@@ -1566,6 +1566,103 @@ impl RipplePathFindRequest {
     }
 }
 request!(RipplePathFindRequest => "ripple_path_find", RipplePathFindResult);
+
+/// [`path_find`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/path_find)
+/// (WebSocket only): ask for paths that deliver `destination_amount`, kept
+/// up to date with each ledger. [`PathFindRequest::new`] creates the search;
+/// its first answer comes back, and the updates arrive as
+/// [`WsEvent::PathFind`](crate::stream::WsEvent::PathFind) (see
+/// `XrplWsClient::path_find`). One search per connection: a new one
+/// replaces the last. [`PathFindRequest::close`] ends it,
+/// [`PathFindRequest::status`] asks for the latest answer.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct PathFindRequest {
+    /// `create`, `close` or `status`.
+    pub subcommand: String,
+    /// The sending account.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_account: Option<String>,
+    /// The receiving account.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination_account: Option<String>,
+    /// Drops as a string, or `{"currency", "issuer", "value"}`; `"-1"` / value
+    /// `"-1"` for as much as possible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination_amount: Option<Value>,
+    /// The most the source will spend.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub send_max: Option<Value>,
+    /// Paths to start the search from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paths: Option<Vec<Vec<PathStep>>>,
+    /// Only paths through this permissioned domain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+}
+impl PathFindRequest {
+    /// Start a search for paths from `source_account` that deliver
+    /// `destination_amount` to `destination_account` (`create`).
+    pub fn new(
+        source_account: impl Into<String>,
+        destination_account: impl Into<String>,
+        destination_amount: Value,
+    ) -> Self {
+        Self {
+            subcommand: "create".into(),
+            source_account: Some(source_account.into()),
+            destination_account: Some(destination_account.into()),
+            destination_amount: Some(destination_amount),
+            send_max: None,
+            paths: None,
+            domain: None,
+        }
+    }
+
+    /// End the connection's search (`close`).
+    pub fn close() -> Self {
+        Self::subcommand("close")
+    }
+
+    /// The connection's search's latest answer (`status`).
+    pub fn status() -> Self {
+        Self::subcommand("status")
+    }
+
+    fn subcommand(subcommand: &str) -> Self {
+        Self {
+            subcommand: subcommand.into(),
+            source_account: None,
+            destination_account: None,
+            destination_amount: None,
+            send_max: None,
+            paths: None,
+            domain: None,
+        }
+    }
+
+    /// The most the source will spend (`send_max`).
+    #[must_use]
+    pub fn with_send_max(mut self, value: impl Into<Value>) -> Self {
+        self.send_max = Some(value.into());
+        self
+    }
+
+    /// Paths to start the search from (`paths`).
+    #[must_use]
+    pub fn with_paths(mut self, value: impl Into<Vec<Vec<PathStep>>>) -> Self {
+        self.paths = Some(value.into());
+        self
+    }
+
+    /// Only paths through this permissioned domain (`domain`).
+    #[must_use]
+    pub fn with_domain(mut self, value: impl Into<String>) -> Self {
+        self.domain = Some(value.into());
+        self
+    }
+}
+request!(PathFindRequest => "path_find", PathFindResult);
 
 // -------------------------------------------------------- payment channel
 

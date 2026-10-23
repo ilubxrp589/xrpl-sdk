@@ -628,6 +628,21 @@ impl<C: Client> BlockingClient<C> {
         self.call(|c| c.book_offers(taker_gets, taker_pays))
     }
 
+    /// [`Client::order_book`].
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::order_book`].
+    pub fn order_book(
+        &self,
+        base: &xrpl_core::types::Asset,
+        quote: &xrpl_core::types::Asset,
+        limit: u32,
+    ) -> Result<OrderBook, ClientError> {
+        self.call(|c| c.order_book(base, quote, limit))
+    }
+
     /// [`Client::gateway_balances`].
     ///
     /// # Errors
