@@ -11,6 +11,29 @@ may break the API, and says so under "Changed (breaking)").
 below says how to update.
 
 ### Changed (breaking)
+- **Room to grow: protocol types are `#[non_exhaustive]`.** The transaction
+  models, their nested types (`Memo`, `Signer`, `SignerEntry`, `PathStep`,
+  …), `Common`, `Tx`, the ledger entry types and `LedgerObject`, every
+  request and every response. A field or type `rippled` adds later is then
+  not a breaking change. Fields stay public to read and change; what changes
+  is building one with a struct literal outside the crate. *Update:*
+  - Requests: `new(required…)` then `with_…` for each optional parameter
+    (98 setters): `AccountLinesRequest::new(addr).with_limit(100u32)`
+    instead of `AccountLinesRequest { limit: Some(100), ..AccountLinesRequest::new(addr) }`.
+    Requests without parameters have `new()` (`FeeRequest::new()` instead
+    of `FeeRequest {}`); `TxRequest::by_ctid` looks one up by its CTID.
+  - Transactions: `new(required…)` then `with_…` for each optional field
+    (179 setters, generated) and, on every type through `TxModel`,
+    `with_fee`, `with_sequence`, `with_ticket_sequence`,
+    `with_last_ledger_sequence`, `with_flags`, `with_source_tag`,
+    `with_network_id`, `with_memo` and `with_delegate`. Or set the public
+    fields after `new`, as before.
+  - Nested types have constructors: `Memo::text("…")` / `Memo::new()`,
+    `SignerEntry::new(account, weight)`, `Signer::new`, `PriceData::new`,
+    `AuthAccount::new`, `Permission::new`, `CredentialSpec::new`,
+    `BatchSigner::new`, `XChainBridge::new`, `PathStep::account` /
+    `currency` / `mpt`.
+  - A `match` on `Tx` or `LedgerObject` needs a `_` arm.
 - **`Client` is every method on any `Transport`.** A transport implements
   one method, `Transport::send_raw` (object safe: `Arc<dyn Transport>` and
   `Box<dyn Transport>` are clients), plus `max_fee_drops`; `Client` has every
