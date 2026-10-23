@@ -1,32 +1,26 @@
-//! Transactions, three ways:
+//! Transactions:
 //!
 //! - [`models`]: a typed struct for each of `rippled` 3.4.1's 82 transaction
-//!   types, generated from its own definitions, with every field and flag.
+//!   types, generated from its own definitions, with every field and flag,
+//!   `new` for the required fields and `with_…` for the rest, and
+//!   [`models::TxModel::validate`] for `rippled`'s checks that need no ledger.
 //! - [`batch`]: `Batch` (XLS-56) — inner transactions, `BatchSigners`, the fee.
-//! - [`builders`]: fluent builders for common transactions that check their
-//!   required fields.
+//! - [`cost`]: what `rippled` charges for a transaction.
 //!
 //! Any transaction can also be written directly as `rippled`'s JSON.
 
 #[cfg(feature = "std")]
 pub mod batch;
-/// Fluent builders for common transactions, with required-field checks.
-#[cfg(feature = "std")]
-pub mod builders;
-mod common;
 #[cfg(feature = "std")]
 pub mod cost;
 #[cfg(feature = "std")]
 pub mod models;
-mod types;
-
-#[cfg(feature = "std")]
-pub use builders::*;
 
 /// A transaction in any form this crate builds, as the `rippled` JSON the
 /// signers, `autofill` and the codec take: a typed model
-/// ([`models::Payment`], …), a [`models::Tx`], a builder ([`Payment`], …,
-/// checked with its `validate` first) or JSON (`serde_json::Value`, as is).
+/// ([`models::Payment`], …) or a [`models::Tx`], each checked with
+/// [`models::TxModel::validate`] first, or JSON (`serde_json::Value`, as
+/// is).
 ///
 /// ```
 /// use xrpl_core::transaction::models;
@@ -49,8 +43,8 @@ pub trait ToTxJson {
     ///
     /// # Errors
     ///
-    /// A [`CoreError`](crate::CoreError) when a model does not serialize or
-    /// a builder fails its checks.
+    /// A [`CoreError`](crate::CoreError) when a model fails its checks
+    /// ([`models::TxModel::validate`]) or does not serialize.
     fn to_tx_json(&self) -> Result<serde_json::Value, crate::CoreError>;
 }
 
@@ -64,6 +58,7 @@ impl ToTxJson for serde_json::Value {
 #[cfg(feature = "std")]
 impl ToTxJson for models::Tx {
     fn to_tx_json(&self) -> Result<serde_json::Value, crate::CoreError> {
+        self.validate()?;
         self.to_value()
     }
 }
@@ -71,55 +66,7 @@ impl ToTxJson for models::Tx {
 #[cfg(feature = "std")]
 impl<T: models::TxModel> ToTxJson for T {
     fn to_tx_json(&self) -> Result<serde_json::Value, crate::CoreError> {
+        self.validate()?;
         self.to_json()
     }
 }
-
-/// Builders are checked (`validate`) before they become JSON.
-#[cfg(feature = "std")]
-macro_rules! builder_to_tx_json {
-    ($($name:ident),* $(,)?) => {$(
-        impl ToTxJson for builders::$name {
-            fn to_tx_json(&self) -> Result<serde_json::Value, crate::CoreError> {
-                builders::Transaction::validate(self)?;
-                Ok(builders::Transaction::to_json(self))
-            }
-        }
-    )*};
-}
-
-#[cfg(feature = "std")]
-builder_to_tx_json!(
-    AccountSet,
-    AMMBid,
-    AMMCreate,
-    AMMDeposit,
-    AMMVote,
-    AMMWithdraw,
-    CheckCancel,
-    CheckCash,
-    CheckCreate,
-    Clawback,
-    DelegateSet,
-    EscrowCancel,
-    EscrowCreate,
-    EscrowFinish,
-    NFTokenAcceptOffer,
-    NFTokenBurn,
-    NFTokenCancelOffer,
-    NFTokenCreateOffer,
-    NFTokenMint,
-    OfferCancel,
-    OfferCreate,
-    Payment,
-    PaymentChannelClaim,
-    PaymentChannelCreate,
-    PaymentChannelFund,
-    SetRegularKey,
-    SignerListSet,
-    TrustSet,
-);
-#[allow(deprecated)]
-pub use common::CommonFields;
-#[allow(deprecated)]
-pub use types::TransactionType;

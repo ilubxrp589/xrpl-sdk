@@ -1,11 +1,9 @@
-//! Mint an NFT on testnet using typed transaction builders.
-//!
-//! Demonstrates using NFTokenMint builder with autofill.
+//! Mint an NFT on testnet with a typed transaction and autofill.
 //!
 //! Usage: cargo run --example mint_nft
 
-use xrpl_sdk::transactions::{NFTokenMint, Transaction};
-use xrpl_sdk::{autofill_and_sign, Client, Wallet, XrplHttpClient};
+use xrpl_sdk::models::NFTokenMint;
+use xrpl_sdk::{autofill_and_sign, Client, ToTxJson, TxModel, Wallet, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,17 +20,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = XrplHttpClient::new(&url)?;
 
-    // Build NFTokenMint with typed builder
-    let nft_tx = NFTokenMint::builder(wallet.classic_address())
-        .nf_token_taxon(0)
-        .uri("68747470733A2F2F6578616D706C652E636F6D2F6E66742E6A736F6E")
-        .flags(8) // tfTransferable
-        .build()?;
+    // The typed transaction: required fields in `new`, the rest with `with_…`.
+    let nft_tx = NFTokenMint::new(wallet.classic_address(), 0)
+        .with_uri("68747470733A2F2F6578616D706C652E636F6D2F6E66742E6A736F6E")
+        .with_flags(NFTokenMint::TF_TRANSFERABLE);
 
-    println!("Transaction type: {}", nft_tx.transaction_type());
-
-    // Convert to JSON for autofill
-    let mut tx_json = nft_tx.to_json();
+    // As JSON for autofill (checked with `validate` first).
+    let mut tx_json = nft_tx.to_tx_json()?;
 
     let blob = autofill_and_sign(&client, &mut tx_json, &wallet).await?;
     println!("Signed blob length: {} chars", blob.len());

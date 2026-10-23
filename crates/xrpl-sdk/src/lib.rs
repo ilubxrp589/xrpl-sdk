@@ -138,13 +138,15 @@
 //!
 //! Or use the typed models ([`models`]): a struct for each of the 82 types,
 //! generated from `rippled`'s definitions, with every field and every flag
-//! as a constant. `to_json` gives the JSON to autofill, sign and submit:
+//! as a constant: `new` takes the required fields, `with_…` sets the others,
+//! and `validate` runs `rippled`'s checks that need no ledger (signing runs
+//! it too). `to_json` gives the JSON to autofill, sign and submit:
 //!
 //! ```
 //! use xrpl_sdk::{models::{Payment, TrustSet}, Amount, TxModel};
 //!
-//! let mut pay = Payment::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", Amount::Xrp(2_000_000));
-//! pay.destination_tag = Some(77);
+//! let pay = Payment::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", Amount::Xrp(2_000_000))
+//!     .with_destination_tag(77u32);
 //! assert_eq!(pay.to_json()?["DestinationTag"], 77);
 //!
 //! let mut line = TrustSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
@@ -154,21 +156,6 @@
 //! line.common.flags = Some(TrustSet::TF_SET_NO_RIPPLE);
 //! assert_eq!(line.to_json()?["LimitAmount"]["value"], "1000");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
-//!
-//! For common transactions there are also fluent builders that check
-//! required fields ([`transactions`]):
-//!
-//! ```
-//! use xrpl_sdk::transactions::{Payment, Transaction};
-//!
-//! let tx = Payment::builder("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
-//!     .amount(serde_json::json!("1000000"))
-//!     .destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
-//!     .build()?
-//!     .to_json();
-//! assert_eq!(tx["TransactionType"], "Payment");
-//! # Ok::<(), xrpl_sdk::CoreError>(())
 //! ```
 //!
 //! ### Batch: several transactions at once
@@ -537,7 +524,6 @@ pub use xrpl_core::crypto::{
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::batch;
-pub use xrpl_core::transaction::builders::{self as transactions, Transaction, TxCommon};
 pub use xrpl_core::transaction::models::{self, Tx, TxModel};
 pub use xrpl_core::types::*;
 pub use xrpl_core::utils;
@@ -576,7 +562,7 @@ pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, Cl
     Ok(wallet)
 }
 
-/// Autofill a copy of `tx` (a typed transaction, a builder or JSON), sign it
+/// Autofill a copy of `tx` (a typed transaction or JSON), sign it
 /// with `wallet`, submit it and wait for the final outcome: `Ok` only for a
 /// transaction validated with `tesSUCCESS`; every other ending is an error
 /// (see [`Client::submit_and_wait`]: on [`ClientError::OutcomeUnknown`] look

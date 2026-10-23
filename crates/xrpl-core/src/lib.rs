@@ -20,7 +20,7 @@
 //! | [`codec`] | JSON ↔ binary for transactions and ledger entries, driven by `rippled` 3.4.1's definitions |
 //! | [`hashes`] | transaction IDs, and [`hashes::keylet`]: the ID of every kind of ledger entry |
 //! | [`types`] | [`Amount`] (XRP, token, MPT), [`AccountId`], [`Currency`], hashes, and [`LedgerObject`]: all 31 ledger entry types, typed |
-//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); builders for common transactions |
+//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); [`transaction::cost`]: what `rippled` charges |
 //! | [`utils`] | XRP ↔ drops, ledger time, text ↔ hex, rates, NFTokenIDs, balance changes, reserves |
 //! | [`error`] | [`CoreError`] |
 //!

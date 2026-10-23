@@ -92,6 +92,14 @@ def rust_ty(name):
     return RUST.get(ftype.get(name, ""), "Value")
 
 
+# The types with preflight checks in models/validate.rs, and their function.
+VALIDATED = {
+    "AccountSet": "account_set", "AMMCreate": "amm_create", "AMMDeposit": "amm_deposit",
+    "AMMWithdraw": "amm_withdraw", "AMMVote": "amm_vote", "AMMBid": "amm_bid",
+    "Clawback": "clawback", "DelegateSet": "delegate_set", "SignerListSet": "signer_list_set",
+    "TrustSet": "trust_set", "NFTokenAcceptOffer": "nf_token_accept_offer",
+}
+
 names = sorted(k for k in formats if k != "common")
 out = [
     "// @generated from rippled 3.4.1's server_definitions (TRANSACTION_FORMATS, TRANSACTION_FLAGS,",
@@ -197,6 +205,10 @@ for n in names:
     out.append("")
     out.append(f"impl TxModel for {n} {{")
     out.append(f'    const TRANSACTION_TYPE: &\'static str = "{n}";')
+    if n in VALIDATED:
+        out.append("    fn validate(&self) -> Result<(), CoreError> {")
+        out.append(f"        super::validate::{VALIDATED[n]}(self)")
+        out.append("    }")
     out.append("    fn common(&self) -> &Common {")
     out.append("        &self.common")
     out.append("    }")

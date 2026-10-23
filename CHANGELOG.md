@@ -11,6 +11,20 @@ may break the API, and says so under "Changed (breaking)").
 below says how to update.
 
 ### Changed (breaking)
+- **One way to build a transaction: the typed models.** The 28 hand-written
+  builders (`transaction::builders`, re-exported as `xrpl_sdk::transactions`,
+  with the `Transaction` trait and `TxCommon`) are removed, and so are the
+  deprecated `CommonFields` and `TransactionType`. Their checks moved to the
+  models: `TxModel::validate()` (and `Tx::validate()`) runs `rippled`'s
+  preflight rules that need no ledger for `AccountSet`, the five AMM types,
+  `Clawback`, `DelegateSet`, `SignerListSet`, `TrustSet` and
+  `NFTokenAcceptOffer`, and `Wallet::sign` / `ToTxJson` run it before
+  signing, so a transaction `rippled` would refuse (`tem…`) is refused here
+  first, saying why. With typed fields the checks are stricter: `AMMCreate`
+  compares the two assets (it compared JSON), and `TrustSet` and `Clawback`
+  check the amount's kind. *Update:*
+  `Payment::builder(a).destination(d).amount(json!("1000000")).fee("12").build()?`
+  becomes `models::Payment::new(a, d, Amount::xrp(1_000_000)?).with_fee(12)`.
 - **Room to grow: protocol types are `#[non_exhaustive]`.** The transaction
   models, their nested types (`Memo`, `Signer`, `SignerEntry`, `PathStep`,
   …), `Common`, `Tx`, the ledger entry types and `LedgerObject`, every

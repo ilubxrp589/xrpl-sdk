@@ -759,11 +759,12 @@ mod tests {
         // Ed25519 public key starts with 0xED
         assert!(ed.public_key_hex().starts_with("ED"));
     }
-    /// `sign` takes a typed model, a builder or JSON and signs the same
-    /// transaction from each; the hash is the blob's ID.
+    /// `sign` takes a typed model, a `Tx` or JSON and signs the same
+    /// transaction from each; the hash is the blob's ID; a model `rippled`
+    /// would refuse is refused before signing.
     #[test]
     fn sign_takes_every_form_of_a_transaction() {
-        use xrpl_core::transaction::{builders, models};
+        use xrpl_core::transaction::models::{self, TxModel};
         use xrpl_core::types::Amount;
         let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r").unwrap();
         let destination = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
@@ -775,23 +776,25 @@ mod tests {
             "Fee": "12",
             "Sequence": 1,
         });
-        let mut model = models::Payment::new(
+        let model = models::Payment::new(
             wallet.classic_address(),
             destination,
             Amount::xrp(1_000_000).unwrap(),
-        );
-        model.common.fee = Some("12".into());
-        model.common.sequence = Some(1);
-        let builder = builders::Payment::builder(wallet.classic_address())
-            .destination(destination)
-            .amount(serde_json::json!("1000000"))
-            .fee("12")
-            .sequence(1)
-            .build()
-            .unwrap();
+        )
+        .with_fee(12)
+        .with_sequence(1);
         let from_json = wallet.sign(&json).unwrap();
         assert_eq!(wallet.sign(&model).unwrap(), from_json);
-        assert_eq!(wallet.sign(&builder).unwrap(), from_json);
+        let refused = models::AMMVote::new(
+            wallet.classic_address(),
+            models::Asset::xrp(),
+            models::Asset::token("USD", destination),
+            1500,
+        )
+        .with_fee(12)
+        .with_sequence(1);
+        let err = wallet.sign(&refused).unwrap_err();
+        assert!(err.to_string().contains("TradingFee"), "{err}");
         assert_eq!(wallet.sign(&models::Tx::Payment(model)).unwrap(), from_json);
         assert_eq!(from_json.tx_blob, wallet.sign_and_encode(&json).unwrap());
         assert_eq!(

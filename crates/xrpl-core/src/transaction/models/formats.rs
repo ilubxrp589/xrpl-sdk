@@ -84,6 +84,9 @@ impl AMMBid {
 
 impl TxModel for AMMBid {
     const TRANSACTION_TYPE: &'static str = "AMMBid";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_bid(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -209,6 +212,9 @@ impl AMMCreate {
 
 impl TxModel for AMMCreate {
     const TRANSACTION_TYPE: &'static str = "AMMCreate";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_create(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -378,6 +384,9 @@ impl AMMDeposit {
 
 impl TxModel for AMMDeposit {
     const TRANSACTION_TYPE: &'static str = "AMMDeposit";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_deposit(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -429,6 +438,9 @@ impl AMMVote {
 
 impl TxModel for AMMVote {
     const TRANSACTION_TYPE: &'static str = "AMMVote";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_vote(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -534,6 +546,9 @@ impl AMMWithdraw {
 
 impl TxModel for AMMWithdraw {
     const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_withdraw(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -820,6 +835,9 @@ impl AccountSet {
 
 impl TxModel for AccountSet {
     const TRANSACTION_TYPE: &'static str = "AccountSet";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::account_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1145,6 +1163,9 @@ impl Clawback {
 
 impl TxModel for Clawback {
     const TRANSACTION_TYPE: &'static str = "Clawback";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::clawback(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1932,6 +1953,9 @@ impl DelegateSet {
 
 impl TxModel for DelegateSet {
     const TRANSACTION_TYPE: &'static str = "DelegateSet";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::delegate_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3662,6 +3686,9 @@ impl NFTokenAcceptOffer {
 
 impl TxModel for NFTokenAcceptOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenAcceptOffer";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::nf_token_accept_offer(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5111,6 +5138,9 @@ impl SignerListSet {
 
 impl TxModel for SignerListSet {
     const TRANSACTION_TYPE: &'static str = "SignerListSet";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::signer_list_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5431,6 +5461,9 @@ impl TrustSet {
 
 impl TxModel for TrustSet {
     const TRANSACTION_TYPE: &'static str = "TrustSet";
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::trust_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }

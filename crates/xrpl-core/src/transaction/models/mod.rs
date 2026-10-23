@@ -41,6 +41,7 @@
 //! lenient: what does not fit stays available as [`Tx::Other`].
 
 mod formats;
+mod validate;
 
 pub use formats::*;
 
@@ -75,6 +76,29 @@ pub trait TxModel: Serialize + Into<Tx> + Clone {
             );
         }
         Ok(v)
+    }
+
+    /// The checks `rippled` makes before applying the transaction that need
+    /// nothing from the ledger (its `preflight`): an AMM deposit's amounts
+    /// fit its mode flag, a signer list's weights reach its quorum, a
+    /// `TickSize` is in range, and so on. [`ToTxJson`](crate::transaction::ToTxJson)
+    /// and so `Wallet::sign` run it, so a transaction that `rippled` would
+    /// refuse (`tem…`) is refused here, saying why, before it is signed.
+    ///
+    /// ```
+    /// use xrpl_core::transaction::models::{AMMVote, Asset, TxModel};
+    ///
+    /// let vote = AMMVote::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", Asset::xrp(),
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"), 1500);
+    /// assert!(vote.validate().is_err()); // at most 1000 (1%)
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] naming the type and the rule broken,
+    /// and the address errors of a field that holds an account.
+    fn validate(&self) -> Result<(), CoreError> {
+        Ok(())
     }
 
     /// With `Fee` set, in drops.
@@ -821,6 +845,19 @@ macro_rules! tx_enum {
         }
 
         impl Tx {
+            /// [`TxModel::validate`] for the transaction's type (`Other` and
+            /// `Unparsed` pass: there is nothing typed to check).
+            ///
+            /// # Errors
+            ///
+            /// As [`TxModel::validate`].
+            pub fn validate(&self) -> Result<(), CoreError> {
+                match self {
+                    $(Tx::$name(t) => t.validate(),)*
+                    _ => Ok(()),
+                }
+            }
+
             /// The `TransactionType`.
             pub fn transaction_type(&self) -> &str {
                 match self {

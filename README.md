@@ -17,7 +17,7 @@ Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and Web
 
 | Crate | Description | `no_std` |
 |-------|-------------|----------|
-| `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
+| `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), typed transactions | Yes (types + crypto) |
 | `halcyon-xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
 | `halcyon-xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
 | `halcyon-xrpl-cli` | `hxrpl`, the command line: wallets, faucet, queries, signing, sending, live streams | — |
@@ -168,22 +168,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Typed Transaction Builders
+### Typed Transactions
+
+Every transaction type, with `new` for the required fields and `with_…` for the rest.
+`validate` runs `rippled`'s checks that need no ledger, and signing runs it for you.
 
 ```rust
-use xrpl_core::transaction::builders::{Payment, Transaction};
-use serde_json::json;
+use xrpl_core::transaction::models::{Memo, Payment, TxModel};
+use xrpl_core::types::Amount;
 
-let tx = Payment::builder("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
-    .amount(json!("1000000"))
-    .destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
-    .fee("12")
-    .sequence(1)
-    .build()
-    .unwrap();
+fn main() -> Result<(), xrpl_core::CoreError> {
+    let tx = Payment::new(
+        "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        Amount::xrp(1_000_000)?,
+    )
+    .with_destination_tag(7u32)
+    .with_memo(Memo::text("invoice 17"));
 
-let json = tx.to_json();
-assert_eq!(json["TransactionType"], "Payment");
+    tx.validate()?;
+    let json = tx.to_json()?;
+    assert_eq!(json["TransactionType"], "Payment");
+    Ok(())
+}
 ```
 
 ## Features
@@ -205,8 +212,8 @@ assert_eq!(json["TransactionType"], "Payment");
   `new` with the required ones, and every flag as a constant (`Payment::TF_PARTIAL_PAYMENT`)
 - **Batch (XLS-56)**: inner transactions, `BatchSigners` from other accounts (single or multi-signed),
   the batch fee, and `autofill` that numbers and prices a batch
-- Fluent builders for 28 common transaction types; `build()` checks the rules rippled checks before
-  applying (AMM mode flags, signer lists, TickSize, TransferRate, …)
+- `validate` on every transaction: the rules rippled checks before applying that need no ledger (AMM
+  mode flags, signer lists, TickSize, TransferRate, clawback holders, …), run before signing
 - Transaction hashes (`hash_signed_tx`, `hash_signed_tx_blob`) and ledger entry IDs for every entry
   type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, `bridge`,
   `book_directory`, …), each matching the index rippled computes
@@ -249,7 +256,7 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `halcyon-xrpl-sdk`
 
-- `Wallet` — generate, from_seed, seed, `sign` (a typed transaction, a builder or JSON → signed
+- `Wallet` — generate, from_seed, seed, `sign` (a typed transaction or JSON → signed
   JSON, blob and hash), sign_and_encode, sign_payment_channel_claim
 - `sign_and_submit` — autofill, sign, submit and wait, for a typed transaction or JSON
 - Open an existing wallet from its backup: `Wallet::from_mnemonic` (BIP-39 phrase),
