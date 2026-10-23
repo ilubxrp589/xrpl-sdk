@@ -9,7 +9,6 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use serde_json::json;
 use xrpl_sdk::models::{OfferCancel, OfferCreate, OfferCreateFlags, Payment, TrustSet};
 use xrpl_sdk::*;
 
@@ -48,8 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. The order book: offers selling USD for XRP, best first.
     let book = client
         .book_offers(
-            &json!({"currency": "XRP"}),
-            &json!({"currency": "USD", "issuer": issuer.classic_address()}),
+            &Asset::token("USD", issuer.classic_address())?, // the offers give USD
+            &Asset::xrp(),                                   // and want XRP
         )
         .await?;
     for offer in &book.offers {

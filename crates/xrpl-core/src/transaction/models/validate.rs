@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn amm() {
-        let (xrp, token) = (Asset::xrp(), Asset::token("USD", B));
+        let (xrp, token) = (Asset::xrp(), Asset::token("USD", B).unwrap());
         assert!(AMMCreate::new(A, Amount::Xrp(10), usd("1", B), 500)
             .validate()
             .is_ok());
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn a_tx_runs_its_type_check() {
-        let vote: Tx = AMMVote::new(A, Asset::xrp(), Asset::token("USD", B), 1500).into();
+        let vote: Tx = AMMVote::new(A, Asset::xrp(), Asset::token("USD", B).unwrap(), 1500).into();
         refused(vote.validate(), "TradingFee");
         assert!(Tx::Other(serde_json::json!({"TransactionType": "Future"}))
             .validate()

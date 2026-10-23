@@ -5,7 +5,8 @@
 use crate::address::decode_account_id;
 use crate::codec::{decode_transaction_binary, encode_transaction_json};
 use crate::crypto::sha512_half;
-use crate::types::{Currency, Hash192, Hash256};
+use crate::transaction::models::XChainBridge;
+use crate::types::{Asset, Currency, Hash192, Hash256};
 use crate::CoreError;
 use serde_json::Value;
 
@@ -107,20 +108,6 @@ fn require_signed(tx: &Value) -> Result<(), CoreError> {
 pub mod keylet {
     use super::*;
 
-    /// An asset: one side of an AMM pool, an order book or a bridge.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub enum Issue<'a> {
-        /// XRP.
-        Xrp,
-        /// A token: its currency code (3 letters or 40 hex digits) and issuer.
-        Token {
-            /// Its currency code (3 letters or 40 hex digits).
-            currency: &'a str,
-            /// Its issuer.
-            issuer: &'a str,
-        },
-    }
-
     /// SHA-512Half(namespace ‖ parts), rippled's `indexHash`.
     fn index_hash(space: u8, parts: &[&[u8]]) -> Hash256 {
         let mut data = vec![0, space];
@@ -144,14 +131,13 @@ pub mod keylet {
         Ok(Currency::from_code(code)?.to_bytes())
     }
 
-    /// An Issue as rippled hashes one: currency, then issuer (both all zero for XRP).
-    fn issue_bytes(issue: Issue<'_>) -> Result<([u8; 20], [u8; 20]), CoreError> {
-        match issue {
-            Issue::Xrp => Ok(([0; 20], [0; 20])),
-            Issue::Token {
-                currency: c,
-                issuer,
-            } => Ok((currency(c)?, id(issuer)?)),
+    /// A token or XRP as rippled hashes an Issue: currency, then issuer
+    /// (both all zero for XRP). `None` for an MPT.
+    fn issue_bytes(asset: &Asset) -> Option<([u8; 20], [u8; 20])> {
+        match asset {
+            Asset::Xrp => Some(([0; 20], [0; 20])),
+            Asset::Token { currency, issuer } => Some((currency.to_bytes(), issuer.0)),
+            _ => None,
         }
     }
 
@@ -310,28 +296,40 @@ pub mod keylet {
         Ok(index_hash(b'i', &[&hash256(nftoken_id)?]))
     }
 
-    /// `AMM`: the pool for two assets (in either order).
+    /// `AMM`: the pool of `asset1` and `asset2` (in either order), as
+    /// `rippled` 3.4.1 hashes it: the smaller asset first (MPTs before XRP
+    /// and tokens), a token as issuer then currency, an MPT as its ID.
     ///
-    /// # Errors
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::types::Asset;
     ///
-    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
-    /// are not hex) for a currency code that does not parse;
-    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
-    /// for an issuer that is not a classic address.
-    pub fn amm(asset1: Issue<'_>, asset2: Issue<'_>) -> Result<Hash256, CoreError> {
-        // rippled orders Issues by currency, then issuer; XRP is all zeros.
-        let key = |i: Issue<'_>| -> Result<([u8; 20], [u8; 20]), CoreError> {
-            match i {
-                Issue::Xrp => Ok(([0; 20], [0; 20])),
-                Issue::Token {
-                    currency: c,
-                    issuer,
-                } => Ok((currency(c)?, id(issuer)?)),
-            }
+    /// let usd = Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// assert_eq!(keylet::amm(&Asset::xrp(), &usd), keylet::amm(&usd, &Asset::xrp()));
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    pub fn amm(asset1: &Asset, asset2: &Asset) -> Hash256 {
+        let (low, high) = if asset1 <= asset2 {
+            (asset1, asset2)
+        } else {
+            (asset2, asset1)
         };
-        let (a, b) = (key(asset1)?, key(asset2)?);
-        let ((c1, i1), (c2, i2)) = if a <= b { (a, b) } else { (b, a) };
-        Ok(index_hash(b'A', &[&i1, &c1, &i2, &c2]))
+        // rippled's four branches (Indexes.cpp `amm`); its ordering puts an
+        // MPT first, so the token-then-MPT one is there for completeness.
+        match (issue_bytes(low), issue_bytes(high)) {
+            (Some((c1, i1)), Some((c2, i2))) => index_hash(b'A', &[&i1, &c1, &i2, &c2]),
+            (Some((c1, i1)), None) => index_hash(b'A', &[&i1, &c1, &mpt_id(high)]),
+            (None, Some((c2, i2))) => index_hash(b'A', &[&mpt_id(low), &i2, &c2]),
+            (None, None) => index_hash(b'A', &[&mpt_id(low), &mpt_id(high)]),
+        }
+    }
+
+    /// An MPT's issuance ID (zero for XRP and tokens).
+    fn mpt_id(asset: &Asset) -> [u8; 24] {
+        match asset {
+            Asset::Mpt { issuance_id } => issuance_id.0,
+            _ => [0; 24],
+        }
     }
 
     /// `DID`.
@@ -460,18 +458,11 @@ pub mod keylet {
         ))
     }
 
-    /// A cross-chain bridge (`XChainBridge`): each chain's door account and
-    /// asset.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct Bridge<'a> {
-        /// The door account on the locking chain.
-        pub locking_chain_door: &'a str,
-        /// The asset on the locking chain.
-        pub locking_chain_issue: Issue<'a>,
-        /// The door account on the issuing chain.
-        pub issuing_chain_door: &'a str,
-        /// The asset on the issuing chain.
-        pub issuing_chain_issue: Issue<'a>,
+    /// A bridge asset's (currency, issuer) as `rippled` hashes an Issue.
+    fn bridge_issue(asset: &Asset) -> Result<([u8; 20], [u8; 20]), CoreError> {
+        issue_bytes(asset).ok_or_else(|| {
+            CoreError::ValidationError("a bridge's asset is XRP or a token, not an MPT".into())
+        })
     }
 
     /// `Bridge`, as the ledger of `door` (one of the bridge's two doors)
@@ -480,34 +471,32 @@ pub mod keylet {
     /// # Errors
     ///
     /// [`CoreError::ValidationError`] if `door` is neither of the bridge's
-    /// doors; [`CoreError::InvalidAddress`] (or `InvalidBase58`,
-    /// `InvalidChecksum`) if `door` or its asset's issuer is not a classic
-    /// address; [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40
-    /// characters that are not hex) for a currency code that does not parse.
-    pub fn bridge(bridge: &Bridge<'_>, door: &str) -> Result<Hash256, CoreError> {
+    /// doors or its asset is an MPT; [`CoreError::InvalidAddress`] (or
+    /// `InvalidBase58`, `InvalidChecksum`) if `door` is not a classic address.
+    pub fn bridge(bridge: &XChainBridge, door: &str) -> Result<Hash256, CoreError> {
         let issue = if door == bridge.locking_chain_door {
-            bridge.locking_chain_issue
+            &bridge.locking_chain_issue
         } else if door == bridge.issuing_chain_door {
-            bridge.issuing_chain_issue
+            &bridge.issuing_chain_issue
         } else {
             return Err(CoreError::ValidationError(format!(
                 "{door} is neither of the bridge's doors"
             )));
         };
-        let (currency, _) = issue_bytes(issue)?;
+        let (currency, _) = bridge_issue(issue)?;
         Ok(index_hash(b'H', &[&id(door)?, &currency]))
     }
 
-    fn bridge_claim(space: u8, bridge: &Bridge<'_>, sequence: u64) -> Result<Hash256, CoreError> {
-        let (lc, li) = issue_bytes(bridge.locking_chain_issue)?;
-        let (ic, ii) = issue_bytes(bridge.issuing_chain_issue)?;
+    fn bridge_claim(space: u8, bridge: &XChainBridge, sequence: u64) -> Result<Hash256, CoreError> {
+        let (lc, li) = bridge_issue(&bridge.locking_chain_issue)?;
+        let (ic, ii) = bridge_issue(&bridge.issuing_chain_issue)?;
         Ok(index_hash(
             space,
             &[
-                &id(bridge.locking_chain_door)?,
+                &id(&bridge.locking_chain_door)?,
                 &lc,
                 &li,
-                &id(bridge.issuing_chain_door)?,
+                &id(&bridge.issuing_chain_door)?,
                 &ic,
                 &ii,
                 &sequence.to_be_bytes(),
@@ -520,10 +509,12 @@ pub mod keylet {
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
-    /// if a door or issuer in `bridge` is not a classic address;
-    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
-    /// are not hex) for a currency code that does not parse.
-    pub fn xchain_owned_claim_id(bridge: &Bridge<'_>, claim_id: u64) -> Result<Hash256, CoreError> {
+    /// if a door in `bridge` is not a classic address;
+    /// [`CoreError::ValidationError`] if an asset of `bridge` is an MPT.
+    pub fn xchain_owned_claim_id(
+        bridge: &XChainBridge,
+        claim_id: u64,
+    ) -> Result<Hash256, CoreError> {
         bridge_claim(b'Q', bridge, claim_id)
     }
 
@@ -532,11 +523,10 @@ pub mod keylet {
     /// # Errors
     ///
     /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
-    /// if a door or issuer in `bridge` is not a classic address;
-    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
-    /// are not hex) for a currency code that does not parse.
+    /// if a door in `bridge` is not a classic address;
+    /// [`CoreError::ValidationError`] if an asset of `bridge` is an MPT.
     pub fn xchain_owned_create_account_claim_id(
-        bridge: &Bridge<'_>,
+        bridge: &XChainBridge,
         create_count: u64,
     ) -> Result<Hash256, CoreError> {
         bridge_claim(b'K', bridge, create_count)
@@ -596,44 +586,64 @@ pub mod keylet {
         Ok(index_hash(b'>', &[&id(sponsor)?, &id(sponsee)?]))
     }
 
-    /// An order book's first directory (`getBookBase`): offers that take
-    /// `taker_pays` and give `taker_gets`, with quality 0. Offers at a given
-    /// quality are in [`book_directory`].
+    /// The base of the order book whose offers take `taker_pays` and give
+    /// `taker_gets` (quality 0; offers at a quality are in
+    /// [`book_directory`]), in the permissioned DEX `domain` if given, as
+    /// `rippled` 3.4.1 hashes it (`getBookBase`): currencies then issuers
+    /// for two tokens or XRP, and for a book with an MPT a one-byte tag (1:
+    /// token to MPT, 2: MPT to token, 3: MPT to MPT) before the parts. The
+    /// token-and-XRP form is checked against mainnet order books; the MPT
+    /// and domain forms follow `rippled`'s source.
     ///
-    /// # Errors
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::types::Asset;
     ///
-    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
-    /// are not hex) for a currency code that does not parse;
-    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
-    /// for an issuer that is not a classic address.
-    pub fn book_base(taker_pays: Issue<'_>, taker_gets: Issue<'_>) -> Result<Hash256, CoreError> {
-        let (pc, pi) = issue_bytes(taker_pays)?;
-        let (gc, gi) = issue_bytes(taker_gets)?;
-        Ok(book_directory_at(
-            index_hash(b'B', &[&pc, &gc, &pi, &gi]),
-            0,
-        ))
+    /// let usd = Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// let base = keylet::book_base(&usd, &Asset::xrp(), None);
+    /// assert_eq!(keylet::book_directory(&usd, &Asset::xrp(), None, 0), base);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    pub fn book_base(taker_pays: &Asset, taker_gets: &Asset, domain: Option<&Hash256>) -> Hash256 {
+        let mut parts: Vec<Vec<u8>> = match (issue_bytes(taker_pays), issue_bytes(taker_gets)) {
+            (Some((pc, pi)), Some((gc, gi))) => {
+                vec![pc.to_vec(), gc.to_vec(), pi.to_vec(), gi.to_vec()]
+            }
+            (Some((pc, pi)), None) => vec![
+                vec![0x01],
+                pc.to_vec(),
+                mpt_id(taker_gets).to_vec(),
+                pi.to_vec(),
+            ],
+            (None, Some((gc, gi))) => vec![
+                vec![0x02],
+                mpt_id(taker_pays).to_vec(),
+                gc.to_vec(),
+                gi.to_vec(),
+            ],
+            (None, None) => vec![
+                vec![0x03],
+                mpt_id(taker_pays).to_vec(),
+                mpt_id(taker_gets).to_vec(),
+            ],
+        };
+        if let Some(domain) = domain {
+            parts.push(domain.0.to_vec());
+        }
+        let parts: Vec<&[u8]> = parts.iter().map(Vec::as_slice).collect();
+        book_directory_at(index_hash(b'B', &parts), 0)
     }
 
     /// The order-book directory for `quality` (a `DirectoryNode`'s
     /// `ExchangeRate`, as a number): the book base with the quality in its
     /// last eight bytes.
-    ///
-    /// # Errors
-    ///
-    /// [`CoreError::InvalidCurrency`] (or `InvalidHex`, for 40 characters that
-    /// are not hex) for a currency code that does not parse;
-    /// [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
-    /// for an issuer that is not a classic address.
     pub fn book_directory(
-        taker_pays: Issue<'_>,
-        taker_gets: Issue<'_>,
+        taker_pays: &Asset,
+        taker_gets: &Asset,
+        domain: Option<&Hash256>,
         quality: u64,
-    ) -> Result<Hash256, CoreError> {
-        Ok(book_directory_at(
-            book_base(taker_pays, taker_gets)?,
-            quality,
-        ))
+    ) -> Hash256 {
+        book_directory_at(book_base(taker_pays, taker_gets, domain), quality)
     }
 
     fn book_directory_at(base: Hash256, quality: u64) -> Hash256 {
@@ -699,7 +709,7 @@ pub mod keylet {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
-    use super::keylet::{self, Issue};
+    use super::keylet;
     use super::*;
 
     fn s(h: Hash256) -> String {
@@ -777,14 +787,8 @@ mod tests {
 
     /// Every entry in the mainnet sample whose ID its own fields determine must
     /// hash to the `index` rippled gave it.
-    fn issue(a: &Value) -> Issue<'_> {
-        match a["currency"].as_str().unwrap() {
-            "XRP" => Issue::Xrp,
-            c => Issue::Token {
-                currency: c,
-                issuer: a["issuer"].as_str().unwrap(),
-            },
-        }
+    fn issue(a: &Value) -> Asset {
+        serde_json::from_value(a.clone()).unwrap()
     }
 
     #[test]
@@ -811,7 +815,7 @@ mod tests {
                     o["Balance"]["currency"].as_str().unwrap(),
                 )
                 .unwrap(),
-                "AMM" => keylet::amm(issue(&o["Asset"]), issue(&o["Asset2"])).unwrap(),
+                "AMM" => keylet::amm(&issue(&o["Asset"]), &issue(&o["Asset2"])),
                 "Amendments" => keylet::amendments(),
                 "FeeSettings" => keylet::fee_settings(),
                 "LedgerHashes" => keylet::ledger_hashes(),
@@ -879,24 +883,62 @@ mod tests {
         let root = keylet::owner_dir("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
         assert_eq!(keylet::dir_page(&root, 0), root);
         assert_ne!(keylet::dir_page(&root, 1), root);
+        let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
         assert_eq!(
-            keylet::amm(
-                Issue::Xrp,
-                Issue::Token {
-                    currency: "USD",
-                    issuer: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
-                }
-            )
-            .unwrap(),
-            keylet::amm(
-                Issue::Token {
-                    currency: "USD",
-                    issuer: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
-                },
-                Issue::Xrp
-            )
-            .unwrap()
+            keylet::amm(&Asset::xrp(), &usd),
+            keylet::amm(&usd, &Asset::xrp())
         );
+    }
+
+    /// AMM IDs with MPTs, as `rippled` 3.4.1's `ledger_entry` computes them
+    /// (it names the ID even for a pool that does not exist; recorded on
+    /// mainnet 2026-10-23).
+    #[test]
+    fn amm_ids_with_mpts_match_rippled() {
+        let mpt = Asset::mpt("000004C463C52827307480341125DA0577DEFC38405B0E3E").unwrap();
+        let mpt2 = Asset::mpt("00000001B5F762798A53D543A014CAF8B297CFF8F2F937E8").unwrap();
+        let usd = Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").unwrap();
+        for (a, b, id) in [
+            (
+                &mpt,
+                &Asset::xrp(),
+                "35E60BFF6FFB5DA64851F85529A4AD21DCE2F52216033C5FF19D6B6CD1D66A58",
+            ),
+            (
+                &Asset::xrp(),
+                &mpt,
+                "35E60BFF6FFB5DA64851F85529A4AD21DCE2F52216033C5FF19D6B6CD1D66A58",
+            ),
+            (
+                &mpt,
+                &usd,
+                "CC7C63472530979D2754287C561FB395F7F197931022D83D94BC3864FBF885BF",
+            ),
+            (
+                &mpt,
+                &mpt2,
+                "FB25D090299975784793F31F4FFAB3C56D3CDF3B1C118A83454320A30589FCE3",
+            ),
+            (
+                &Asset::xrp(),
+                &usd,
+                "FB7275EDC1C45EA2C6C1BB7D312D1EC35367EF11A2BD3C666636260F45A4A3A1",
+            ),
+        ] {
+            assert_eq!(keylet::amm(a, b).to_string(), id, "{a} / {b}");
+            assert_eq!(keylet::amm(b, a).to_string(), id, "{b} / {a}");
+        }
+        // The MPT book forms differ from each other and from the token form.
+        let books = [
+            keylet::book_base(&usd, &mpt, None),
+            keylet::book_base(&mpt, &usd, None),
+            keylet::book_base(&mpt, &mpt2, None),
+            keylet::book_base(&usd, &Asset::xrp(), None),
+            keylet::book_base(&usd, &Asset::xrp(), Some(&Hash256([7; 32]))),
+        ];
+        for (i, a) in books.iter().enumerate() {
+            assert!(books.iter().skip(i + 1).all(|b| b != a));
+        }
     }
 
     /// rippled's ID is the hash of its own re-serialization: a signed blob
@@ -934,12 +976,7 @@ mod tests {
                 "3769E2AD8BC6BCD48242A1FF7DBFE667A5CD78376B9704A0E4744BD3D81DB382"
             );
         }
-        let xrp_bridge = keylet::Bridge {
-            locking_chain_door: A,
-            locking_chain_issue: Issue::Xrp,
-            issuing_chain_door: B,
-            issuing_chain_issue: Issue::Xrp,
-        };
+        let xrp_bridge = XChainBridge::new(A, Asset::xrp(), B, Asset::xrp());
         assert_eq!(
             s(keylet::bridge(&xrp_bridge, A).unwrap()),
             "20C736B81A2632BE6A0FCE130FC3649334A041B79C6017896709F39B6059DB92"
@@ -949,18 +986,14 @@ mod tests {
             "5CE45F9906FC077A90654A76C4B60302CC2F75ACE80F8DC8BCA7482AE782EA74"
         );
         assert!(keylet::bridge(&xrp_bridge, C).is_err());
-        let token_bridge = keylet::Bridge {
-            locking_chain_door: A,
-            locking_chain_issue: Issue::Token {
-                currency: "USD",
-                issuer: C,
-            },
-            issuing_chain_door: B,
-            issuing_chain_issue: Issue::Token {
-                currency: "USD",
-                issuer: B,
-            },
-        };
+        let token_bridge = XChainBridge::new(
+            A,
+            Asset::token("USD", C).unwrap(),
+            B,
+            Asset::token("USD", B).unwrap(),
+        );
+        let mpt = Asset::mpt("000004C463C52827307480341125DA0577DEFC38405B0E3E").unwrap();
+        assert!(keylet::bridge(&XChainBridge::new(A, mpt, B, Asset::xrp()), A).is_err());
         assert_eq!(
             s(keylet::bridge(&token_bridge, A).unwrap()),
             "75705E90AEF08673970F9A5D1F7CB2EFA26426CAEACB3AB7DBB04724E2CAED04"
@@ -998,14 +1031,11 @@ mod tests {
         let quality = u64::from_str_radix(dir["ExchangeRate"].as_str().unwrap(), 16).unwrap();
         assert_eq!(
             s(keylet::book_directory(
-                Issue::Token {
-                    currency: dir["TakerPaysCurrency"].as_str().unwrap(),
-                    issuer: &issuer
-                },
-                Issue::Xrp,
+                &Asset::token(dir["TakerPaysCurrency"].as_str().unwrap(), &issuer).unwrap(),
+                &Asset::xrp(),
+                None,
                 quality
-            )
-            .unwrap()),
+            )),
             dir["RootIndex"].as_str().unwrap()
         );
         assert!(s(keylet::nftoken_page_min(A).unwrap()).ends_with(&"0".repeat(24)));

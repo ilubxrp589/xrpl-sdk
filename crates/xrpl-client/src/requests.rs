@@ -39,6 +39,7 @@ use crate::types::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use xrpl_core::types::Asset;
 
 /// A typed `rippled` request: the method it calls and the type of its `result`.
 pub trait Request: Serialize + crate::client::MaybeSend + crate::client::MaybeSync {
@@ -1150,10 +1151,10 @@ request!(TxRequest => "tx", TxResult);
 pub struct AmmInfoRequest {
     /// `{"currency": "XRP"}` or `{"currency", "issuer"}`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub asset: Option<Value>,
+    pub asset: Option<Asset>,
     /// The pool's second asset (`Asset2`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub asset2: Option<Value>,
+    pub asset2: Option<Asset>,
     /// The AMM's account, instead of the assets.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amm_account: Option<String>,
@@ -1166,10 +1167,18 @@ pub struct AmmInfoRequest {
 }
 impl AmmInfoRequest {
     /// The request with its required parameters set and every optional one unset.
-    pub fn new(asset: Value, asset2: Value) -> Self {
+    pub fn new(asset: Asset, asset2: Asset) -> Self {
         Self {
             asset: Some(asset),
             asset2: Some(asset2),
+            ..Default::default()
+        }
+    }
+
+    /// The pool with this AMM account, instead of its assets.
+    pub fn by_account(amm_account: impl Into<String>) -> Self {
+        Self {
+            amm_account: Some(amm_account.into()),
             ..Default::default()
         }
     }
@@ -1216,13 +1225,13 @@ request!(BookChangesRequest => "book_changes", BookChangesResult);
 /// [`book_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_offers):
 /// an order book. `taker_gets` / `taker_pays` are what an offer's taker would
 /// get and pay: `{"currency": "XRP"}` or `{"currency", "issuer"}`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct BookOffersRequest {
     /// What the offer wants in return (`TakerPays`).
-    pub taker_pays: Value,
+    pub taker_pays: Asset,
     /// What the offer gives (`TakerGets`).
-    pub taker_gets: Value,
+    pub taker_gets: Asset,
     /// The most entries per page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
@@ -1238,11 +1247,14 @@ pub struct BookOffersRequest {
 }
 impl BookOffersRequest {
     /// The request with its required parameters set and every optional one unset.
-    pub fn new(taker_gets: Value, taker_pays: Value) -> Self {
+    pub fn new(taker_gets: Asset, taker_pays: Asset) -> Self {
         Self {
             taker_gets,
             taker_pays,
-            ..Default::default()
+            limit: None,
+            taker: None,
+            domain: None,
+            ledger_index: None,
         }
     }
 

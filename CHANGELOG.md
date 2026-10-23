@@ -11,6 +11,25 @@ may break the API, and says so under "Changed (breaking)").
 below says how to update.
 
 ### Changed (breaking)
+- **One `Asset` type.** `xrpl_core::types::Asset` (`Xrp`, `Token { currency,
+  issuer }`, `Mpt { issuance_id }`), checked when built
+  (`Asset::token("USD", issuer)?`, `Asset::mpt(id)?`), written as
+  `rippled`'s JSON, ordered as `rippled` orders assets, and read from and
+  written as text (`XRP`, `USD.r…`, `MPT:<id>`); `Amount::asset()` gives an
+  amount's. It replaces the transaction models' `Asset` (three optional
+  strings; `models::Asset` is now this type), `keylet::Issue` and the raw
+  JSON that `book_offers`, `amm_info`, `BookOffersRequest`,
+  `AmmInfoRequest` and `subscribe_order_book` took (`AmmInfoRequest::by_account`
+  for a pool named by its account).
+  - **`Client::book_offers(taker_gets, taker_pays)`** now takes what the
+    offers give first, as `BookOffersRequest::new` and `rippled` do (it took
+    `taker_pays` first, so the two were easy to swap). *Update:* swap the
+    arguments when you change them to `Asset`s.
+  - Keylets: `keylet::amm(&a, &b)` and `book_base` / `book_directory` take
+    `&Asset` and cannot fail; they compute MPT pools and books as `rippled`
+    3.4.1 does (MPT AMM IDs checked against `rippled`'s `ledger_entry`), and
+    `book_base` / `book_directory` take an optional permissioned-DEX
+    `domain`. The bridge keylets take a `models::XChainBridge`.
 - **Typed flags.** Each transaction type has its own flags type
   (`PaymentFlags`, `OfferCreateFlags`, …; `UniversalFlags` for types with
   none of their own, each including `FULLY_CANONICAL_SIG` and

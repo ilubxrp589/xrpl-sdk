@@ -10,7 +10,6 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use serde_json::json;
 use xrpl_sdk::models::{
     AMMCreate, AccountSet, AccountSetFlag, OfferCreate, OfferCreateFlags, Payment, TrustSet,
 };
@@ -59,10 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .to_json()?;
     send(&client, &provider, tx).await?;
 
-    let (xrp, token) = (
-        json!({"currency": "XRP"}),
-        json!({"currency": "USD", "issuer": issuer.classic_address()}),
-    );
+    let (xrp, token) = (Asset::xrp(), Asset::token("USD", issuer.classic_address())?);
     let before = client.amm_info(&xrp, &token).await?.amm;
     println!(
         "  pool: {} and {}, fee {}",

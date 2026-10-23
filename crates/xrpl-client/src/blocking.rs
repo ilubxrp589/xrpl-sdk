@@ -610,7 +610,11 @@ impl<C: Client> BlockingClient<C> {
     /// otherwise the errors of [`Client::amm_info`]: [`ClientError::RpcError`]
     /// (`actNotFound`) when no pool holds the pair, and a [`ClientError`] when
     /// the request fails.
-    pub fn amm_info(&self, asset: &Value, asset2: &Value) -> Result<AmmInfoResult, ClientError> {
+    pub fn amm_info(
+        &self,
+        asset: &xrpl_core::types::Asset,
+        asset2: &xrpl_core::types::Asset,
+    ) -> Result<AmmInfoResult, ClientError> {
         self.call(|c| c.amm_info(asset, asset2))
     }
 
@@ -640,10 +644,10 @@ impl<C: Client> BlockingClient<C> {
     /// the request fails.
     pub fn book_offers(
         &self,
-        taker_pays: &Value,
-        taker_gets: &Value,
+        taker_gets: &xrpl_core::types::Asset,
+        taker_pays: &xrpl_core::types::Asset,
     ) -> Result<BookOffersResult, ClientError> {
-        self.call(|c| c.book_offers(taker_pays, taker_gets))
+        self.call(|c| c.book_offers(taker_gets, taker_pays))
     }
 
     /// [`Client::gateway_balances`].

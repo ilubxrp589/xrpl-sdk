@@ -788,7 +788,7 @@ mod tests {
         let refused = models::AMMVote::new(
             wallet.classic_address(),
             models::Asset::xrp(),
-            models::Asset::token("USD", destination),
+            models::Asset::token("USD", destination).unwrap(),
             1500,
         )
         .with_fee(12)

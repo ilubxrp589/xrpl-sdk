@@ -380,14 +380,8 @@ fn currency_code(code: &str) -> Res<String> {
 }
 
 /// `XRP` → `{"currency":"XRP"}`; `USD.rIssuer` → `{"currency":"USD","issuer":"rIssuer"}`.
-fn asset(spec: &str) -> Res<Value> {
-    match spec.split_once('.') {
-        None if spec.eq_ignore_ascii_case("XRP") => Ok(json!({"currency": "XRP"})),
-        Some((currency, issuer)) => {
-            Ok(json!({"currency": currency_code(currency)?, "issuer": issuer}))
-        }
-        None => Err(format!("{spec}: expected XRP or CURRENCY.rIssuer").into()),
-    }
+fn asset(spec: &str) -> Res<Asset> {
+    Ok(spec.parse::<Asset>()?)
 }
 
 fn ledger_index(s: &str) -> Res<LedgerIndex> {

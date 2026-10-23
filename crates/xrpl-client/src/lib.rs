@@ -70,11 +70,8 @@
 //! let book = client
 //!     .request(
 //!         &BookOffersRequest::new(
-//!             serde_json::json!({"currency": "XRP"}),
-//!             serde_json::json!({
-//!                 "currency": "524C555344000000000000000000000000000000",
-//!                 "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De"
-//!             }),
+//!             xrpl_core::types::Asset::xrp(),
+//!             xrpl_core::types::Asset::token("RLUSD", "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De")?,
 //!         )
 //!         .with_limit(10u32),
 //!     )

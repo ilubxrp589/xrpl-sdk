@@ -45,6 +45,7 @@ mod validate;
 
 pub use formats::*;
 
+pub use crate::types::Asset;
 use crate::types::{Amount, Hash128, Hash192, Hash256};
 use crate::CoreError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -92,8 +93,9 @@ pub trait TxModel: Serialize + Into<Tx> + Clone {
     /// use xrpl_core::transaction::models::{AMMVote, Asset, TxModel};
     ///
     /// let vote = AMMVote::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", Asset::xrp(),
-    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"), 1500);
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?, 1500);
     /// assert!(vote.validate().is_err()); // at most 1000 (1%)
+    /// # Ok::<(), xrpl_core::CoreError>(())
     /// ```
     ///
     /// # Errors
@@ -469,47 +471,6 @@ pub struct BatchSigner {
         with = "signers_opt"
     )]
     pub signers: Option<Vec<Signer>>,
-}
-
-/// An asset: XRP, a token (currency + issuer) or an MPT. `rippled` writes
-/// `{"currency": "XRP"}`, `{"currency", "issuer"}` or `{"mpt_issuance_id"}`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct Asset {
-    /// The currency code (`currency`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub currency: Option<String>,
-    /// The issuer (`Issuer`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issuer: Option<String>,
-    /// The MPT issuance's ID (`mpt_issuance_id`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mpt_issuance_id: Option<String>,
-}
-
-impl Asset {
-    /// XRP.
-    pub fn xrp() -> Self {
-        Self {
-            currency: Some("XRP".into()),
-            ..Default::default()
-        }
-    }
-    /// A token: currency code and issuer.
-    pub fn token(currency: impl Into<String>, issuer: impl Into<String>) -> Self {
-        Self {
-            currency: Some(currency.into()),
-            issuer: Some(issuer.into()),
-            ..Default::default()
-        }
-    }
-    /// An MPT, by MPTokenIssuanceID.
-    pub fn mpt(mpt_issuance_id: impl Into<String>) -> Self {
-        Self {
-            mpt_issuance_id: Some(mpt_issuance_id.into()),
-            ..Default::default()
-        }
-    }
 }
 
 /// A cross-chain bridge: its door accounts and assets on each chain.

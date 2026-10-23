@@ -672,23 +672,23 @@ pub trait Client: Transport {
         async move { self.request(&account_nfts_request(account, ledger)).await }
     }
 
-    /// Get order book offers (up to 20).
+    /// The best offers (up to 20) that give `taker_gets` for `taker_pays`:
+    /// the same order as [`BookOffersRequest::new`] and `rippled`'s
+    /// `book_offers` (what the offer gives, then what it wants).
     ///
     /// # Errors
     ///
-    /// [`ClientError::RpcError`] when the server refuses the request (a
-    /// currency or issuer it cannot read, for one), and the errors of
-    /// [`Client::request`].
+    /// [`ClientError::RpcError`] when the server refuses the request, and the
+    /// errors of [`Client::request`].
     fn book_offers(
         &self,
-        taker_pays: &Value,
-        taker_gets: &Value,
+        taker_gets: &xrpl_core::types::Asset,
+        taker_pays: &xrpl_core::types::Asset,
     ) -> impl Future<Output = Result<BookOffersResult, ClientError>> + MaybeSend {
         async move {
-            self.request(&BookOffersRequest {
-                limit: Some(20),
-                ..BookOffersRequest::new(taker_gets.clone(), taker_pays.clone())
-            })
+            self.request(
+                &BookOffersRequest::new(taker_gets.clone(), taker_pays.clone()).with_limit(20u32),
+            )
             .await
         }
     }
@@ -701,8 +701,8 @@ pub trait Client: Transport {
     /// of assets, and the errors of [`Client::request`].
     fn amm_info(
         &self,
-        asset: &Value,
-        asset2: &Value,
+        asset: &xrpl_core::types::Asset,
+        asset2: &xrpl_core::types::Asset,
     ) -> impl Future<Output = Result<AmmInfoResult, ClientError>> + MaybeSend {
         async move {
             self.request(&AmmInfoRequest::new(asset.clone(), asset2.clone()))

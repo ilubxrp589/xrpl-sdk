@@ -607,8 +607,8 @@ impl XrplWsClient {
     /// as an [`OrderBookSnapshot`].
     pub async fn subscribe_order_book(
         &self,
-        taker_gets: Value,
-        taker_pays: Value,
+        taker_gets: &xrpl_core::types::Asset,
+        taker_pays: &xrpl_core::types::Asset,
         snapshot: bool,
         both: bool,
     ) -> Result<(OrderBookSnapshot, Subscription), ClientError> {
