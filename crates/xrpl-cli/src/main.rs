@@ -528,8 +528,8 @@ async fn run(cli: Cli) -> Res {
                 if autofill {
                     client()?.autofill(&mut tx).await?;
                 }
-                let blob = wallet.sign_and_encode(&tx)?;
-                print(&json!({"tx_blob": blob, "hash": hash_signed_tx_blob(&blob)?.to_string()}))?;
+                let signed = wallet.sign(&tx)?;
+                print(&json!({"tx_blob": signed.tx_blob, "hash": signed.hash.to_string()}))?;
             }
             TxCmd::Simulate { json } => print(&client()?.simulate(&read_json(&json)?).await?)?,
             TxCmd::Submit { blob, wait, yes } => {
@@ -568,7 +568,7 @@ async fn run(cli: Cli) -> Res {
                     tx.get("Fee").and_then(Value::as_str).unwrap_or("?"),
                 );
                 needs_yes_unless_test_network(&c, cli.network, yes).await?;
-                let blob = wallet.sign_and_encode(&tx)?;
+                let blob = wallet.sign(&tx)?.tx_blob;
                 let result = outcome(c.submit_and_wait(&blob).await)?;
                 print(
                     &json!({"hash": result.hash(), "result": result.transaction_result(), "ledger_index": result.ledger_index}),

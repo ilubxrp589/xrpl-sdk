@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Bob approves (his payment is inside); then Alice signs the batch.
     let approval = bob.sign_batch(&tx)?;
     batch::add_batch_signers(&mut tx, vec![approval])?;
-    let blob = alice.sign_and_encode(&tx)?;
+    let blob = alice.sign(&tx)?.tx_blob;
     let result = client.submit_and_wait(&blob).await?;
     println!(
         "  Batch                    {}",

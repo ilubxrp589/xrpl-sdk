@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-sdk = "0.7"
+//! halcyon-xrpl-sdk = "0.8"
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! serde_json = "1"
 //! ```
@@ -29,7 +29,7 @@
 //!
 //! [`generate_faucet_wallet`] makes a new wallet on this machine and asks the
 //! Testnet faucet to fund it. Only the address is sent; the seed never leaves.
-//! [`submit_transaction`] fills in `Sequence`, `Fee` and `LastLedgerSequence`,
+//! [`sign_and_submit`] fills in `Sequence`, `Fee` and `LastLedgerSequence`,
 //! signs, submits, and waits until a validated ledger includes the
 //! transaction.
 //!
@@ -41,13 +41,12 @@
 //!     let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
 //!     let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
 //!
-//!     let mut tx = serde_json::json!({
-//!         "TransactionType": "Payment",
-//!         "Account": wallet.classic_address(),
-//!         "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-//!         "Amount": utils::xrp_to_drops("1.5")?.to_string(), // "1500000" drops
-//!     });
-//!     let result = submit_transaction(&client, &mut tx, &wallet).await?;
+//!     let payment = models::Payment::new(
+//!         wallet.classic_address(),
+//!         "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+//!         Amount::xrp(utils::xrp_to_drops("1.5")?)?, // 1,500,000 drops
+//!     );
+//!     let result = sign_and_submit(&client, &payment, &wallet).await?;
 //!
 //!     let meta = result.meta.as_ref().expect("a validated transaction has metadata");
 //!     println!("result: {}", meta["TransactionResult"]);
@@ -91,13 +90,26 @@
 //!     "Sequence": 1,
 //!     "Flags": 0,
 //! });
-//! let blob = wallet.sign_and_encode(&tx)?; // hex, ready for `submit`
+//! let signed = wallet.sign(&tx)?; // signed JSON, the blob for `submit`, and the ID
 //! assert_eq!(
-//!     hash_signed_tx_blob(&blob)?.to_string(),
+//!     signed.hash.to_string(),
 //!     "05DD129B3CBA984E7DEB24FA2522C9DA9AAF4A518F1A01C78F2BD35B46298BF3",
 //! );
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
+//!
+//! ### Keys that stay in an HSM, a KMS or a hardware wallet
+//!
+//! Anything that signs as `rippled` verifies can sign: implement
+//! [`SigningKey`] for a key you reach synchronously (an HSM, a hardware
+//! wallet) or [`AsyncSigningKey`] for a remote one (a cloud KMS, a signing
+//! service), and pass it wherever a [`Wallet`] goes: [`sign`],
+//! [`sign_async`], [`sign_and_submit`], [`sign_for_multisigning`], batch and
+//! channel-claim signing. A secp256k1 signature with a high S (as AWS KMS
+//! returns half the time) is turned into the low-S form `rippled` requires,
+//! and a remote key's signature is checked against its public key before
+//! anything is submitted. `examples/remote_signer.rs` signs and submits
+//! through a stand-in remote key: `cargo run --example remote_signer`.
 //!
 //! ### Multi-signing
 //!
@@ -179,8 +191,8 @@
 //! client.autofill(&mut tx).await?;                         // inner sequences and the batch fee
 //! let approval = bob.sign_batch(&tx)?;                       // Bob approves
 //! batch::add_batch_signers(&mut tx, vec![approval])?;
-//! let blob = alice.sign_and_encode(&tx)?;                   // Alice signs the batch
-//! client.submit_and_wait(&blob).await?;
+//! let signed = alice.sign(&tx)?;                            // Alice signs the batch
+//! client.submit_and_wait(&signed.tx_blob).await?;
 //! for id in batch::inner_transaction_ids(&tx)? {
 //!     println!("inner transaction {id}");                  // each is on the ledger under this ID
 //! }
@@ -191,14 +203,14 @@
 //!
 //! | Function | What it does |
 //! |---|---|
-//! | [`submit_transaction`] | autofill, sign, submit, wait for the final outcome |
-//! | [`autofill_and_sign`] | autofill and sign; returns the blob |
+//! | [`sign_and_submit`] | autofill, sign (with any key), submit, wait for the final outcome |
+//! | [`Wallet::sign`], [`sign`], [`sign_async`] | sign; returns the signed JSON, the blob and the ID |
 //! | [`Client::autofill`] | fill `Sequence`, `Fee` (capped), `LastLedgerSequence` and `NetworkID` where missing |
 //! | [`Client::autofill_for_multisigning`] | the same, with the fee for a number of signers |
 //! | [`Client::submit`] | submit a signed blob once; the answer is preliminary |
 //! | [`Client::submit_and_wait`] | submit, then wait until it is validated or provably in no ledger |
 //!
-//! [`Client::submit_and_wait`], and so [`submit_transaction`], answers only
+//! [`Client::submit_and_wait`], and so [`sign_and_submit`], answers only
 //! with a final outcome:
 //!
 //! | Outcome | Meaning | Sign a replacement? |
@@ -475,7 +487,7 @@
 //! - **Ledger entry IDs**: every kind, including bridges, credential
 //!   preauthorizations and order-book directories, matches the index
 //!   `rippled` 3.4.1 computes.
-//! - **Robustness**: eight fuzz targets, seeded with all of the above, run in
+//! - **Robustness**: nine fuzz targets, seeded with all of the above, run in
 //!   CI on every change: nothing panics, and decode → encode → decode is stable.
 //!
 //! Every check, with its numbers and how to repeat it, is in the
@@ -518,8 +530,9 @@ pub use xrpl_core::address::KeyType;
 pub use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
 pub use xrpl_core::crypto::{hd::DerivationPath, mnemonic::Mnemonic};
 pub use xrpl_core::crypto::{
-    sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, verify_transaction,
-    Keypair, Seed,
+    sign_for_multisigning, sign_for_multisigning_async, sign_payment_channel_claim,
+    sign_transaction, sign_transaction_async, verify_payment_channel_claim, verify_transaction,
+    AsyncSigningKey, Keypair, Seed, SigningKey,
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::batch;
@@ -542,7 +555,7 @@ pub use xrpl_client::{Client, Transport, TransportFuture};
 #[cfg(not(target_arch = "wasm32"))]
 pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
 
-pub use wallet::{SignedTransaction, Wallet};
+pub use wallet::{sign, sign_async, SignedTransaction, Wallet};
 pub use xrpl_core::transaction::ToTxJson;
 
 /// Generate a new wallet (Ed25519) and fund it with test XRP from `network`'s
@@ -561,11 +574,16 @@ pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, Cl
     Ok(wallet)
 }
 
-/// Autofill a copy of `tx` (a typed transaction or JSON), sign it
-/// with `wallet`, submit it and wait for the final outcome: `Ok` only for a
+/// Autofill a copy of `tx` (a typed transaction or JSON), sign it with
+/// `key`, submit it and wait for the final outcome: `Ok` only for a
 /// transaction validated with `tesSUCCESS`; every other ending is an error
 /// (see [`Client::submit_and_wait`]: on [`ClientError::OutcomeUnknown`] look
 /// the transaction up by its hash before sending it again).
+///
+/// `key` is a [`Wallet`], a [`Keypair`], or a key of your own: one that
+/// never leaves an HSM ([`SigningKey`]) or a remote one, a cloud KMS
+/// ([`AsyncSigningKey`]), whose signature is checked against its public key
+/// before it is submitted.
 ///
 /// ```no_run
 /// use xrpl_sdk::*;
@@ -587,54 +605,16 @@ pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, Cl
 /// # Errors
 ///
 /// [`ClientError`]: the transaction could not be filled in, signed or
-/// encoded, the fee is above the client's cap, or it did not end validated
-/// with `tesSUCCESS`.
-pub async fn sign_and_submit(
+/// encoded, the fee is above the client's cap, the key failed
+/// ([`CoreError::SigningKeyFailed`] in [`ClientError::Core`]), or it did not
+/// end validated with `tesSUCCESS`.
+pub async fn sign_and_submit<K: AsyncSigningKey + ?Sized>(
     client: &impl Client,
     tx: &impl ToTxJson,
-    wallet: &Wallet,
+    key: &K,
 ) -> Result<TxResult, ClientError> {
     let mut json = tx.to_tx_json()?;
     client.autofill(&mut json).await?;
-    let signed = wallet.sign(&json)?;
+    let signed = sign_async(&json, key).await?;
     client.submit_and_wait(&signed.tx_blob).await
-}
-
-/// Autofill a transaction, sign it, and return the hex-encoded blob.
-///
-/// # Errors
-///
-/// The errors of [`Client::autofill`] ([`ClientError::FeeTooHigh`] above
-/// the client's fee cap, among them), and [`ClientError::Core`] when the
-/// filled transaction cannot be signed or encoded (see
-/// [`Wallet::sign_and_encode`]).
-pub async fn autofill_and_sign(
-    client: &impl Client,
-    tx: &mut serde_json::Value,
-    wallet: &Wallet,
-) -> Result<String, ClientError> {
-    client.autofill(tx).await?;
-    let blob = wallet.sign_and_encode(tx).map_err(ClientError::Core)?;
-    Ok(blob)
-}
-
-/// Autofill, sign, submit, and wait for the final outcome: `Ok` only for a
-/// transaction validated with `tesSUCCESS`. Every other ending is an error;
-/// see [`Client::submit_and_wait`] for which ones are final and which
-/// ([`ClientError::OutcomeUnknown`]) mean "look it up before replacing it".
-///
-/// # Errors
-///
-/// The errors of [`Client::autofill`] ([`ClientError::FeeTooHigh`] above
-/// the client's fee cap, among them); [`ClientError::Core`] when the
-/// transaction cannot be signed or encoded; and every ending of
-/// [`Client::submit_and_wait`] but a validated `tesSUCCESS`.
-pub async fn submit_transaction(
-    client: &impl Client,
-    tx: &mut serde_json::Value,
-    wallet: &Wallet,
-) -> Result<TxResult, ClientError> {
-    client.autofill(tx).await?;
-    let blob = wallet.sign_and_encode(tx).map_err(ClientError::Core)?;
-    client.submit_and_wait(&blob).await
 }

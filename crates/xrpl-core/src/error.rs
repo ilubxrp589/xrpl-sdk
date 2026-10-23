@@ -1,7 +1,7 @@
 //! The error type of every fallible function in this crate.
 
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::{boxed::Box, string::String};
 
 /// Everything a core function can fail with. New variants may be added
 /// in minor releases (`#[non_exhaustive]`): match with a `_` arm.
@@ -57,6 +57,14 @@ pub enum CoreError {
     /// Signing or verifying failed.
     #[error("signing failed: {0}")]
     SigningFailed(String),
+
+    /// A [`SigningKey`](crate::crypto::SigningKey) or
+    /// [`AsyncSigningKey`](crate::crypto::AsyncSigningKey) of your own
+    /// failed (a KMS that refused, a device that was unplugged: wrap its
+    /// error with `.into()`), gave a public key that is not one the XRP
+    /// Ledger takes, or gave a signature that does not verify.
+    #[error("the signing key failed: {0}")]
+    SigningKeyFailed(Box<dyn core::error::Error + Send + Sync + 'static>),
 
     /// A key (public or secret) of the wrong length.
     #[error("invalid key length: expected {expected} bytes, got {got}")]

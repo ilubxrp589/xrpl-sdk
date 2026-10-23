@@ -261,11 +261,13 @@ be refreshed from a live network.
 
 ## 6. Fuzzing
 
-Eight libFuzzer targets (`fuzz/`) run with AddressSanitizer, from a corpus
+Nine libFuzzer targets (`fuzz/`) run with AddressSanitizer, from a corpus
 seeded with all the real data above (`fuzz/seed_corpus.py`). They require:
 
-- the decoder, encoder, amount codec, address and seed parsers, hashes, Batch
-  helpers, typed models and utilities never panic on any input;
+- the decoder, encoder, amount codec, address and seed parsers, key backup
+  readers (secret numbers, RFC 1751 words, BIP-39 phrases, derivation
+  paths), hashes, Batch helpers, typed models and utilities never panic on
+  any input;
 - a typed transaction writes back what it read;
 - whatever decodes encodes again, and decoding that gives the same JSON.
 

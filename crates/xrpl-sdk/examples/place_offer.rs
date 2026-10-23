@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Flags": 0
     });
 
-    let blob = wallet.sign_and_encode(&tx)?;
+    let blob = wallet.sign(&tx)?.tx_blob;
     println!("Submitting OfferCreate...");
     let result = client.submit(&blob).await?;
     println!(

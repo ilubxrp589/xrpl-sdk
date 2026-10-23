@@ -267,31 +267,9 @@ fn capped_fee(fee: u64, max: u64) -> Result<u64, ClientError> {
     Ok(fee)
 }
 
-/// `Send` on native targets, so a client's futures can move between
-/// threads (`tokio::spawn`); nothing on `wasm32`, where JavaScript values are
-/// not `Send`. Implemented for every type that qualifies.
-#[cfg(not(target_arch = "wasm32"))]
-pub trait MaybeSend: Send {}
-#[cfg(not(target_arch = "wasm32"))]
-impl<T: Send + ?Sized> MaybeSend for T {}
-/// `Send` on native targets, so a client's futures can move between
-/// threads (`tokio::spawn`); nothing on `wasm32`, where JavaScript values are
-/// not `Send`. Implemented for every type that qualifies.
-#[cfg(target_arch = "wasm32")]
-pub trait MaybeSend {}
-#[cfg(target_arch = "wasm32")]
-impl<T: ?Sized> MaybeSend for T {}
-
-/// `Sync` on native targets; nothing on `wasm32` (see [`MaybeSend`]).
-#[cfg(not(target_arch = "wasm32"))]
-pub trait MaybeSync: Sync {}
-#[cfg(not(target_arch = "wasm32"))]
-impl<T: Sync + ?Sized> MaybeSync for T {}
-/// `Sync` on native targets; nothing on `wasm32` (see [`MaybeSend`]).
-#[cfg(target_arch = "wasm32")]
-pub trait MaybeSync {}
-#[cfg(target_arch = "wasm32")]
-impl<T: ?Sized> MaybeSync for T {}
+/// `Send` on native targets, nothing on `wasm32` (re-exported from
+/// `halcyon-xrpl-core`, where signing keys use it too).
+pub use xrpl_core::{MaybeSend, MaybeSync};
 
 /// The future [`Transport::send_raw`] returns: boxed, and `Send` on
 /// native targets.

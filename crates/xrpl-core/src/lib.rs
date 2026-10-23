@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.7"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.8"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -142,7 +142,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.7", default-features = false }
+//! halcyon-xrpl-core = { version = "0.8", default-features = false }
 //! ```
 //!
 //! ## How it is checked
@@ -162,7 +162,7 @@
 //! does; the few deliberate differences (each safer than `rippled`'s JSON reader) are listed in
 //! the parity report. A field name `rippled` does not define, or an integer too large for its
 //! field, is an error, never dropped or wrapped.
-//! Eight fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
+//! Nine fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
 //! it, is in the [parity report](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md);
 //! speed against xrpl-rust is in the
 //! [benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md).
@@ -189,6 +189,7 @@ pub mod flags;
 pub mod hashes;
 #[cfg(feature = "std")]
 pub mod ledger;
+mod maybe_send;
 mod number_text;
 pub mod transaction;
 pub mod types;
@@ -197,4 +198,5 @@ pub mod utils;
 pub mod wasm_bindgen_exports;
 
 pub use error::CoreError;
+pub use maybe_send::{MaybeSend, MaybeSync};
 pub use types::*;

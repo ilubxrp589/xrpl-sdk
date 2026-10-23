@@ -8,7 +8,7 @@
 //!
 //! Usage: cargo run --example send_payment
 
-use xrpl_sdk::{autofill_and_sign, Client, Wallet, XrplHttpClient};
+use xrpl_sdk::{Client, Wallet, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +38,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     println!("Autofilling and signing...");
-    let blob = autofill_and_sign(&client, &mut tx, &wallet).await?;
+    client.autofill(&mut tx).await?;
+    let blob = wallet.sign(&tx)?.tx_blob;
     println!(
         "Signed blob: {}...{}",
         &blob[..40],

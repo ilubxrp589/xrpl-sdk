@@ -55,9 +55,10 @@ use super::models::{BatchSigner, Signer};
 const TF_INNER_BATCH_TXN: u32 = 0x4000_0000;
 use crate::address::decode_account_id;
 use crate::codec::encode::read_uint32;
-use crate::crypto::{verify_signing_data, Keypair};
+use crate::crypto::signing::public_key_to_account_id;
+use crate::crypto::{verify_signing_data, SigningKey};
 use crate::hashes::hash_signed_tx;
-use crate::types::Hash256;
+use crate::types::{AccountId, Hash256};
 use crate::CoreError;
 use serde_json::Value;
 
@@ -189,19 +190,31 @@ pub fn batch_signing_data(batch: &Value) -> Result<Vec<u8>, CoreError> {
     Ok(data)
 }
 
-/// Sign `batch` as one of its participants with a single key: the
+/// Sign `batch` as one of its participants with a single key (a
+/// [`Keypair`](crate::crypto::Keypair) or any [`SigningKey`]): the
 /// `BatchSigner` to add with [`add_batch_signers`]. The key is the account's
 /// master key; for an account that signs with a regular key, use
 /// [`sign_batch_as`].
 ///
 /// # Errors
 ///
-/// The errors of [`batch_signing_data`].
-pub fn sign_batch(batch: &Value, keypair: &Keypair) -> Result<BatchSigner, CoreError> {
-    sign_batch_as(batch, &keypair.classic_address(), keypair)
+/// The errors of [`batch_signing_data`], and the key's own
+/// ([`CoreError::SigningKeyFailed`] for a public key the XRP Ledger does not
+/// take).
+pub fn sign_batch<K: SigningKey + ?Sized>(
+    batch: &Value,
+    key: &K,
+) -> Result<BatchSigner, CoreError> {
+    sign_batch_as(batch, &key_account(key)?.to_address(), key)
 }
 
-/// Sign `batch` for `account` with `keypair`, the account's master key or its
+/// The account a key is the master key of.
+fn key_account<K: SigningKey + ?Sized>(key: &K) -> Result<AccountId, CoreError> {
+    let public_key = crate::crypto::signing_key::checked_public_key(SigningKey::public_key(key))?;
+    Ok(AccountId::from_bytes(public_key_to_account_id(public_key)))
+}
+
+/// Sign `batch` for `account` with `key`, the account's master key or its
 /// regular key: the `BatchSigner` to add with [`add_batch_signers`].
 /// (`rippled` appends the signing account, not the key's address, to the
 /// data each batch signature covers.)
@@ -211,17 +224,18 @@ pub fn sign_batch(batch: &Value, keypair: &Keypair) -> Result<BatchSigner, CoreE
 /// The errors of [`batch_signing_data`], and an address error
 /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for an
 /// `account` that is not a classic address.
-pub fn sign_batch_as(
+pub fn sign_batch_as<K: SigningKey + ?Sized>(
     batch: &Value,
     account: &str,
-    keypair: &Keypair,
+    key: &K,
 ) -> Result<BatchSigner, CoreError> {
     let mut data = batch_signing_data(batch)?;
     data.extend_from_slice(&decode_account_id(account)?);
+    let signature = crate::crypto::signing_key::sign_with(key, &data)?;
     Ok(BatchSigner {
         account: account.to_string(),
-        signing_pub_key: hex::encode_upper(keypair.public_key()),
-        txn_signature: Some(hex::encode_upper(keypair.sign_signing_data(&data)?)),
+        signing_pub_key: hex::encode_upper(SigningKey::public_key(key)),
+        txn_signature: Some(hex::encode_upper(signature)),
         signers: None,
     })
 }
@@ -235,19 +249,21 @@ pub fn sign_batch_as(
 /// The errors of [`batch_signing_data`], and an address error
 /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for a
 /// `batch_signer` that is not a classic address.
-pub fn sign_batch_for(
+pub fn sign_batch_for<K: SigningKey + ?Sized>(
     batch: &Value,
     batch_signer: &str,
-    keypair: &Keypair,
+    key: &K,
 ) -> Result<Signer, CoreError> {
+    let account = key_account(key)?;
     let mut data = batch_signing_data(batch)?;
     data.extend_from_slice(&decode_account_id(batch_signer)?);
-    data.extend_from_slice(&keypair.account_id().0);
-    Ok(Signer {
-        account: keypair.classic_address(),
-        signing_pub_key: hex::encode_upper(keypair.public_key()),
-        txn_signature: hex::encode_upper(keypair.sign_signing_data(&data)?),
-    })
+    data.extend_from_slice(&account.0);
+    let signature = crate::crypto::signing_key::sign_with(key, &data)?;
+    Ok(Signer::new(
+        account.to_address(),
+        hex::encode_upper(SigningKey::public_key(key)),
+        hex::encode_upper(signature),
+    ))
 }
 
 /// A multi-signed `BatchSigner` for `batch_signer` from its signers'
@@ -486,6 +502,7 @@ pub fn batch_fee(base_fee_drops: u64, inner_transactions: usize, batch_signature
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::crypto::Keypair;
     use crate::transaction::models::BatchFlags;
 
     /// Every `Batch` with `BatchSigners` in the recorded sample (mainnet and

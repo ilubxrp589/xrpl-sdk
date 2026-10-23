@@ -3,7 +3,7 @@
 //! Usage: cargo run --example mint_nft
 
 use xrpl_sdk::models::{NFTokenMint, NFTokenMintFlags};
-use xrpl_sdk::{autofill_and_sign, Client, ToTxJson, TxModel, Wallet, XrplHttpClient};
+use xrpl_sdk::{Client, ToTxJson, TxModel, Wallet, XrplHttpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,10 +28,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // As JSON for autofill (checked with `validate` first).
     let mut tx_json = nft_tx.to_tx_json()?;
 
-    let blob = autofill_and_sign(&client, &mut tx_json, &wallet).await?;
-    println!("Signed blob length: {} chars", blob.len());
+    client.autofill(&mut tx_json).await?;
+    let signed = wallet.sign(&tx_json)?;
+    println!("Signed blob length: {} chars", signed.tx_blob.len());
 
-    let result = client.submit(&blob).await?;
+    let result = client.submit(&signed.tx_blob).await?;
     println!("Engine result: {}", result.engine_result);
     println!("Message: {}", result.engine_result_message);
 

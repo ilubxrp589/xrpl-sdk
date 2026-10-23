@@ -134,6 +134,18 @@ below says how to update.
   TransportFuture<'a> { Box::pin(async move { … }) }`. `max_fee_drops` is on
   `Transport` (bring it into scope to call it). Request types must be
   `Send + Sync` (all of this crate's are).
+- **One way to sign, too.** `Wallet::sign` (a typed transaction or JSON →
+  signed JSON, blob and ID) and `sign_and_submit` cover what four other
+  helpers did, so these are removed: `Wallet::sign_transaction(&json)` →
+  `wallet.sign(&json)?.tx_json`; `Wallet::sign_and_encode(&json)` →
+  `wallet.sign(&json)?.tx_blob`; `submit_transaction(&client, &mut json,
+  &wallet)` → `sign_and_submit(&client, &json, &wallet)` (it autofills a
+  copy; call `client.autofill(&mut json)` first if you need the filled
+  fields); `autofill_and_sign(&client, &mut json, &wallet)` →
+  `client.autofill(&mut json).await?` then `wallet.sign(&json)?.tx_blob`.
+  `Keypair::sign` and `Keypair::verify`, deprecated since 0.6.0, are removed:
+  use `sign_message` / `verify_message` (careful: for secp256k1 the old
+  `sign` took a 32-byte hash, `sign_message` hashes the message itself).
 - **Client errors.**
   - `ClientError::Http(reqwest::Error)` is gone: reqwest is no longer part
     of the public API, so a reqwest upgrade cannot break your code. A
@@ -151,6 +163,28 @@ below says how to update.
     but no longer returns it as `source()`; `ClientError::Core` shows the
     core error as itself. So a chain printed with its sources (`anyhow`'s
     `{:#}`) no longer repeats each message.
+
+### Added
+- **Keys that never leave an HSM, a cloud KMS or a hardware wallet can
+  sign.** `xrpl_core::crypto::SigningKey` (a key reached synchronously) and
+  `AsyncSigningKey` (a remote one; implement it with `async fn`) say what a
+  key is: its public key, and how it signs XRPL signing data. `Keypair` and
+  `Wallet` implement both, and every signing function takes any key:
+  `sign_transaction`, `sign_payment_channel_claim`, the batch signing
+  functions, and `sign_and_submit` (code that passes a `Keypair` or a
+  `Wallet` is unchanged). New: `sign_transaction_async`,
+  `sign_for_multisigning` / `sign_for_multisigning_async` (for an account
+  named, so a regular key can sign for its account), and in the SDK `sign` /
+  `sign_async`, which return a `SignedTransaction`. A secp256k1 signature
+  with a high S (as AWS KMS returns half the time) is turned into the low-S
+  form `rippled` requires, and a remote key's signature is checked against
+  its public key before it is used, so a key that signs the wrong thing (the
+  data where it should sign the digest) is an error
+  (`CoreError::SigningKeyFailed`) before anything is submitted.
+  `secp256k1::compressed_public_key` turns a KMS's uncompressed key into the
+  form the ledger takes, and `AccountId::from_public_key` gives a key's
+  address. Example: `remote_signer` (a stand-in signing service).
+- `MaybeSend` / `MaybeSync` are in `xrpl_core` (the client re-exports them).
 
 ### Changed
 - **Licence: Apache-2.0.** The crates are now licensed under the Apache

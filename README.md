@@ -30,12 +30,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.7"
+halcyon-xrpl-sdk = "0.8"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.7"      # types + codec + crypto only
-halcyon-xrpl-client = "0.7"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.8"      # types + codec + crypto only
+halcyon-xrpl-client = "0.8"    # HTTP + WebSocket clients
 ```
 
 ### Minimum supported Rust version
@@ -106,6 +106,7 @@ below was run against Testnet (and `watch_streams` against mainnet) before relea
 | `checks` | write a check and cash part of it |
 | `payment_channel` | open a channel, pay with off-ledger signed claims, redeem one |
 | `multisign` | a signer list of two, a transaction signed by both, `submit_multisigned` |
+| `remote_signer` | sign and submit with a key held elsewhere (a stand-in for a KMS), through `AsyncSigningKey` |
 | `batch` | two accounts' payments in one all-or-nothing Batch, co-signed |
 | `mpt` | create a Multi-Purpose Token, opt in, send it |
 | `blocking` | the same, with no async: `BlockingClient` |
@@ -257,13 +258,15 @@ fn main() -> Result<(), xrpl_core::CoreError> {
 ### `halcyon-xrpl-sdk`
 
 - `Wallet` — generate, from_seed, seed, `sign` (a typed transaction or JSON → signed
-  JSON, blob and hash), sign_and_encode, sign_payment_channel_claim
+  JSON, blob and hash), sign_payment_channel_claim
 - `sign_and_submit` — autofill, sign, submit and wait, for a typed transaction or JSON
+- Keys that never leave an HSM, a cloud KMS or a hardware wallet: implement `SigningKey` (or
+  `AsyncSigningKey` for a remote one) and pass it wherever a `Wallet` goes; high-S signatures
+  are made low-S, and a remote key's signature is checked before anything is submitted
 - Open an existing wallet from its backup: `Wallet::from_mnemonic` (BIP-39 phrase),
   `from_secret_numbers` (Xaman), `from_rfc1751` (`rippled`'s `master_key`)
 - `generate_faucet_wallet` — a funded Testnet / Devnet wallet in one call
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
-- `autofill_and_sign` / `submit_transaction` convenience functions
 - Full re-exports from core + client
 
 ## How it is checked
@@ -282,7 +285,7 @@ itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and h
 | Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
 | Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet: each must parse, and serializing it back must keep all 2,521 field paths |
 | End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
-| Robustness | 8 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |
+| Robustness | 9 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |
 
 ## Performance
 

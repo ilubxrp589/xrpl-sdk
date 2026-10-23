@@ -58,7 +58,7 @@ async fn wait_validated(client: &XrplHttpClient, hash: &str) -> Value {
 /// the transaction's amendment (temDISABLED); panics on any other failure.
 async fn submit(client: &XrplHttpClient, wallet: &Wallet, mut tx: Value) -> Option<Value> {
     client.autofill(&mut tx).await.unwrap();
-    let blob = wallet.sign_and_encode(&tx).unwrap();
+    let blob = wallet.sign(&tx).unwrap().tx_blob;
     let our_hash = hash_signed_tx_blob(&blob).unwrap().to_string();
     let result = match client.submit_and_wait(&blob).await {
         Ok(r) => r,
@@ -101,7 +101,7 @@ async fn submit_batch(
         client.autofill(batch_tx).await.unwrap();
     }
     let ids = batch::inner_transaction_ids(batch_tx).unwrap();
-    let blob = wallet.sign_and_encode(batch_tx).unwrap();
+    let blob = wallet.sign(&*batch_tx).unwrap().tx_blob;
     match client.submit_and_wait(&blob).await {
         Ok(r) => assert_eq!(r.meta.unwrap()["TransactionResult"], "tesSUCCESS", "Batch"),
         Err(ClientError::TransactionFailed { engine_result, .. })
@@ -159,7 +159,7 @@ async fn keylets_and_helpers_match_testnet() {
     let mut pay =
         json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "1000000"});
     client.autofill(&mut pay).await.unwrap();
-    let blob = alice.sign_and_encode(&pay).unwrap();
+    let blob = alice.sign(&pay).unwrap().tx_blob;
     let submitted = query(&client, &SubmitRequest::new(blob.clone()), "submit").await;
     assert_eq!(submitted.engine_result, "tesSUCCESS");
     pay["meta"] = wait_validated(&client, &hash_signed_tx_blob(&blob).unwrap().to_string()).await;

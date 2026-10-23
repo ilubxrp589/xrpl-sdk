@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Amount": utils::xrp_to_drops("2.5")?.to_string(),
     });
     client.autofill(&mut tx)?;
-    let blob = wallet.sign_and_encode(&tx)?;
+    let blob = wallet.sign(&tx)?.tx_blob;
     let result = client.submit_and_wait(&blob)?;
     println!(
         "  Payment {}: {}",

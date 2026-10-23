@@ -2,7 +2,7 @@ use xrpl_core::address::KeyType;
 use xrpl_core::codec::encode_transaction_json;
 use xrpl_core::crypto::hd::DerivationPath;
 use xrpl_core::crypto::mnemonic::Mnemonic;
-use xrpl_core::crypto::{sign_transaction, verify_signing_data, Keypair, Seed};
+use xrpl_core::crypto::{verify_signing_data, AsyncSigningKey, Keypair, Seed, SigningKey};
 use xrpl_core::transaction::ToTxJson;
 use xrpl_core::types::AccountId;
 use xrpl_core::types::Hash256;
@@ -13,7 +13,8 @@ use zeroize::Zeroizing;
 /// `STTx::maxMultiSigners`).
 pub const MAX_MULTISIGNERS: usize = 32;
 
-/// A signed transaction: what [`Wallet::sign`] returns.
+/// A signed transaction: what [`Wallet::sign`], [`sign`] and [`sign_async`]
+/// return.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct SignedTransaction {
@@ -297,23 +298,23 @@ impl Wallet {
     }
 
     /// Sign `tx` as it is: a typed transaction
-    /// ([`models`](xrpl_core::transaction::models)), a builder (checked
-    /// first) or JSON. Fill in `Fee`, `Sequence` and `LastLedgerSequence`
-    /// before (`Client::autofill`), or use [`crate::sign_and_submit`], which
-    /// does it all. Returns the signed JSON, the blob to submit and the
-    /// transaction's ID.
+    /// ([`models`](xrpl_core::transaction::models), checked first) or JSON.
+    /// Fill in `Fee`, `Sequence` and `LastLedgerSequence` before
+    /// (`Client::autofill`), or use [`crate::sign_and_submit`], which does it
+    /// all. Returns the signed JSON, the blob to submit and the transaction's
+    /// ID. (The same as [`sign`]`(tx, &wallet)`.)
     ///
     /// ```
-    /// use xrpl_sdk::{models, Amount, Wallet};
+    /// use xrpl_sdk::{models, Amount, TxModel, Wallet};
     ///
     /// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
-    /// let mut payment = models::Payment::new(
+    /// let payment = models::Payment::new(
     ///     wallet.classic_address(),
     ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
     ///     Amount::xrp(1_000_000)?,
-    /// );
-    /// payment.common.fee = Some("12".into());
-    /// payment.common.sequence = Some(1);
+    /// )
+    /// .with_fee(12)
+    /// .with_sequence(1);
     /// let signed = wallet.sign(&payment)?;
     /// assert_eq!(signed.hash, xrpl_sdk::hash_signed_tx_blob(&signed.tx_blob)?);
     /// # Ok::<(), xrpl_sdk::CoreError>(())
@@ -321,41 +322,11 @@ impl Wallet {
     ///
     /// # Errors
     ///
-    /// A [`CoreError`] when the transaction does not encode (an unknown
-    /// field, a value that does not fit) or is multi-signed (`Signers` set:
-    /// see [`Wallet::sign_for_multisigning`]).
+    /// A [`CoreError`] when the transaction fails its checks, does not
+    /// encode (an unknown field, a value that does not fit) or is
+    /// multi-signed (`Signers` set: see [`Wallet::sign_for_multisigning`]).
     pub fn sign(&self, tx: &impl ToTxJson) -> Result<SignedTransaction, CoreError> {
-        let tx_json = sign_transaction(&tx.to_tx_json()?, &self.keypair)?;
-        let blob = encode_transaction_json(&tx_json)?;
-        Ok(SignedTransaction {
-            hash: xrpl_core::hashes::transaction_id(&blob),
-            tx_blob: hex::encode_upper(&blob),
-            tx_json,
-        })
-    }
-
-    /// Sign a transaction (JSON). Returns the signed tx JSON with
-    /// SigningPubKey and TxnSignature fields set.
-    ///
-    /// # Errors
-    ///
-    /// [`CoreError::CodecError`] if `tx` is not a JSON object,
-    /// [`CoreError::ValidationError`] if it has `Signers` (see
-    /// [`Wallet::sign_for_multisigning`]), and the errors of
-    /// [`encode_transaction_json`] for a field that does not encode.
-    pub fn sign_transaction(&self, tx: &serde_json::Value) -> Result<serde_json::Value, CoreError> {
-        sign_transaction(tx, &self.keypair)
-    }
-
-    /// Sign a transaction and return the hex-encoded blob ready for submission.
-    ///
-    /// # Errors
-    ///
-    /// As [`Wallet::sign_transaction`].
-    pub fn sign_and_encode(&self, tx: &serde_json::Value) -> Result<String, CoreError> {
-        let signed = sign_transaction(tx, &self.keypair)?;
-        let encoded = encode_transaction_json(&signed)?;
-        Ok(hex::encode_upper(&encoded))
+        sign(tx, self)
     }
 
     /// Get the classic address (starts with 'r').
@@ -363,7 +334,12 @@ impl Wallet {
         &self.address
     }
 
-    /// Get the public key as hex string.
+    /// The public key as the XRP Ledger writes it (33 bytes).
+    pub fn public_key(&self) -> &[u8] {
+        self.keypair.public_key()
+    }
+
+    /// The public key in upper-case hex, as `SigningPubKey` holds it.
     pub fn public_key_hex(&self) -> String {
         hex::encode_upper(self.keypair.public_key())
     }
@@ -385,14 +361,60 @@ impl Wallet {
         &self,
         tx: &impl ToTxJson,
     ) -> Result<xrpl_core::transaction::models::Signer, CoreError> {
-        let encoded = xrpl_core::codec::encode_for_multisigning(&tx.to_tx_json()?, &self.address)?;
-        let signature = self.keypair.sign_signing_data(&encoded)?;
-        Ok(xrpl_core::transaction::models::Signer::new(
-            self.address.clone(),
-            self.public_key_hex(),
-            hex::encode_upper(&signature),
-        ))
+        xrpl_core::crypto::sign_for_multisigning(&tx.to_tx_json()?, &self.address, self)
     }
+}
+
+impl SigningKey for Wallet {
+    fn public_key(&self) -> &[u8] {
+        self.keypair.public_key()
+    }
+
+    fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
+        self.keypair.sign_signing_data(data)
+    }
+}
+
+/// Sign `tx` (a typed transaction, checked first, or JSON) with `key`: a
+/// [`Wallet`], a [`Keypair`], or a key of your own that never leaves an HSM
+/// or a hardware wallet ([`SigningKey`]). Returns the signed JSON, the blob
+/// to submit and the transaction's ID.
+///
+/// # Errors
+///
+/// As [`Wallet::sign`], and the key's own errors
+/// ([`CoreError::SigningKeyFailed`]).
+pub fn sign<K: SigningKey + ?Sized>(
+    tx: &impl ToTxJson,
+    key: &K,
+) -> Result<SignedTransaction, CoreError> {
+    signed(xrpl_core::crypto::sign_transaction(&tx.to_tx_json()?, key)?)
+}
+
+/// [`sign`] with an [`AsyncSigningKey`]: a remote key (a cloud KMS, a
+/// signing service). The signature is checked against the key's public key
+/// before it is used, so a key that signs the wrong thing is an error here,
+/// not a refusal from the network.
+///
+/// # Errors
+///
+/// As [`sign`], and [`CoreError::SigningKeyFailed`] for a signature that
+/// does not verify.
+pub async fn sign_async<K: AsyncSigningKey + ?Sized>(
+    tx: &impl ToTxJson,
+    key: &K,
+) -> Result<SignedTransaction, CoreError> {
+    signed(xrpl_core::crypto::sign_transaction_async(&tx.to_tx_json()?, key).await?)
+}
+
+/// A signed transaction's JSON with its blob and ID.
+fn signed(tx_json: serde_json::Value) -> Result<SignedTransaction, CoreError> {
+    let blob = encode_transaction_json(&tx_json)?;
+    Ok(SignedTransaction {
+        hash: xrpl_core::hashes::transaction_id(&blob),
+        tx_blob: hex::encode_upper(&blob),
+        tx_json,
+    })
 }
 
 /// Put the `Signer` entries from [`Wallet::sign_for_multisigning`] on a
@@ -543,21 +565,46 @@ mod tests {
             "Flags": 0
         });
 
-        let signed = wallet.sign_transaction(&tx).unwrap();
+        let signed = wallet.sign(&tx).unwrap().tx_json;
         assert!(signed["TxnSignature"].is_string());
         assert!(signed["SigningPubKey"].is_string());
         // Round-trip: same seed produces identical signature
         let wallet2 = Wallet::from_seed(&seed_str).unwrap();
-        let signed2 = wallet2.sign_transaction(&tx).unwrap();
+        let signed2 = wallet2.sign(&tx).unwrap().tx_json;
         assert_eq!(
             signed["TxnSignature"].as_str().unwrap(),
             signed2["TxnSignature"].as_str().unwrap()
         );
     }
 
-    #[test]
-    fn wallet_sign_and_encode() {
-        let wallet = Wallet::generate();
+    /// A key of one's own, synchronous or remote, signs as the wallet does;
+    /// a remote one that signs the wrong thing is refused before anything
+    /// is submitted.
+    #[tokio::test]
+    async fn any_signing_key_signs_as_the_wallet_does() {
+        use xrpl_core::crypto::{secp256k1, sha512_half};
+
+        struct Remote {
+            public_key: Vec<u8>,
+            secret: Vec<u8>,
+            hash_first: bool,
+        }
+        impl AsyncSigningKey for Remote {
+            fn public_key(&self) -> &[u8] {
+                &self.public_key
+            }
+            async fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
+                tokio::task::yield_now().await;
+                if self.hash_first {
+                    secp256k1::sign(&self.secret, &sha512_half(data))
+                } else {
+                    // The mistake a KMS integration makes: no SHA-512Half.
+                    secp256k1::sign(&self.secret, &data[data.len() - 32..])
+                }
+            }
+        }
+
+        let wallet = Wallet::generate_with_type(KeyType::Secp256k1);
         let tx = serde_json::json!({
             "TransactionType": "Payment",
             "Account": wallet.classic_address(),
@@ -565,13 +612,31 @@ mod tests {
             "Amount": "500000",
             "Fee": "12",
             "Sequence": 1,
-            "Flags": 0
         });
-
-        let blob = wallet.sign_and_encode(&tx).unwrap();
-        assert!(!blob.is_empty());
-        // Should be valid hex
-        assert!(hex::decode(&blob).is_ok());
+        let expected = wallet.sign(&tx).unwrap();
+        assert_eq!(sign(&tx, wallet.keypair()).unwrap(), expected);
+        assert_eq!(sign_async(&tx, &wallet).await.unwrap(), expected);
+        let remote = |hash_first| Remote {
+            public_key: wallet.public_key().to_vec(),
+            secret: wallet.keypair().private_key().to_vec(),
+            hash_first,
+        };
+        assert_eq!(sign_async(&tx, &remote(true)).await.unwrap(), expected);
+        let refused = sign_async(&tx, &remote(false)).await.unwrap_err();
+        assert!(
+            matches!(refused, CoreError::SigningKeyFailed(_)),
+            "{refused}"
+        );
+        // A key whose public key the XRP Ledger does not take is refused.
+        let mut uncompressed = remote(true);
+        uncompressed.public_key = vec![0x04; 65];
+        assert!(matches!(
+            sign_async(&tx, &uncompressed).await,
+            Err(CoreError::SigningKeyFailed(_))
+        ));
+        // A boxed key works too.
+        let boxed: Box<dyn SigningKey> = Box::new(wallet.keypair().clone());
+        assert_eq!(sign(&tx, &*boxed).unwrap(), expected);
     }
 
     #[test]
@@ -784,14 +849,13 @@ mod tests {
         let err = wallet.sign(&refused).unwrap_err();
         assert!(err.to_string().contains("TradingFee"), "{err}");
         assert_eq!(wallet.sign(&models::Tx::Payment(model)).unwrap(), from_json);
-        assert_eq!(from_json.tx_blob, wallet.sign_and_encode(&json).unwrap());
         assert_eq!(
             from_json.hash,
             xrpl_core::hashes::hash_signed_tx_blob(&from_json.tx_blob).unwrap()
         );
         assert_eq!(
-            from_json.tx_json["TxnSignature"],
-            wallet.sign_transaction(&json).unwrap()["TxnSignature"]
+            from_json.tx_json,
+            xrpl_core::crypto::sign_transaction(&json, &wallet).unwrap()
         );
         // A multi-signed transaction is refused, as sign_transaction refuses it.
         let mut multi = json.clone();
