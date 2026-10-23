@@ -6,7 +6,7 @@
 [![downloads](https://img.shields.io/crates/d/halcyon-xrpl-sdk.svg)](https://crates.io/crates/halcyon-xrpl-sdk)
 [![Fuzz](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/fuzz.yml/badge.svg)](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/fuzz.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.85%20core%20%C2%B7%201.88-orange.svg)](#minimum-supported-rust-version)
-[![license](https://img.shields.io/badge/license-MIT%20%2B%20attribution-blue.svg)](LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
@@ -289,4 +289,7 @@ give identical results ([docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method 
 
 ## License
 
-MIT, with an attribution requirement: if you use, copy or modify this code, credit James Turner with a link to https://github.com/ilubxrp589/xrpl-sdk. See [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) that must be kept with any redistribution or
+derived work (section 4(d)). If you use, copy or modify this code, please credit James Turner with a
+link to https://github.com/ilubxrp589/xrpl-sdk in your README, documentation or About section.
+Releases up to 0.7.0 were licensed MIT with an attribution clause, and stay so.

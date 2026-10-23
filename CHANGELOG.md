@@ -7,6 +7,14 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Changed
+- **Licence: Apache-2.0.** The crates are now licensed under the Apache
+  License 2.0 (`license = "Apache-2.0"` on crates.io, a standard SPDX
+  identifier that licence scanners accept), with a NOTICE that crediting
+  James Turner must travel with any redistribution or derived work (section
+  4(d)). Each crate carries LICENSE and NOTICE. Releases up to 0.7.0 keep
+  their licence (MIT with an attribution clause).
+
 ## [v0.7.0] (2026-10-23)
 
 Complete and professional, with no breaking changes: code that builds
