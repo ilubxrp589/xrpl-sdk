@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Subscribed to ledger events. Waiting for ledger closes...\n");
 
     let mut count = 0;
-    while let Ok(event) = rx.recv().await {
+    while let Some(event) = rx.recv().await {
         match event {
             WsEvent::Ledger(le) => {
                 println!(

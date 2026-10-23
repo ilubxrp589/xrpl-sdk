@@ -7,6 +7,53 @@ use serde_json::{json, Value};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
+/// The largest response body read (128 MiB): a `ledger` with every
+/// transaction expanded fits many times over; a server that sends more is
+/// refused rather than allowed to fill memory.
+pub const MAX_RESPONSE_BYTES: usize = 128 * 1024 * 1024;
+
+/// A transport error without the request URL, which may carry an API key.
+pub(crate) fn http_error(e: reqwest::Error) -> ClientError {
+    ClientError::Http(e.without_url())
+}
+
+/// The body, as text, refused past `max` bytes.
+pub(crate) async fn read_capped(
+    response: reqwest::Response,
+    max: usize,
+) -> Result<String, ClientError> {
+    let too_big = || ClientError::UnexpectedResponse(format!("a response over {max} bytes"));
+    if response
+        .content_length()
+        .is_some_and(|n| usize::try_from(n).map_or(true, |n| n > max))
+    {
+        return Err(too_big());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let body = {
+        let mut response = response;
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(http_error)? {
+            if body.len() + chunk.len() > max {
+                return Err(too_big());
+            }
+            body.extend_from_slice(&chunk);
+        }
+        body
+    };
+    // The browser's fetch has already read the body; refuse it all the same.
+    #[cfg(target_arch = "wasm32")]
+    let body = {
+        let body = response.bytes().await.map_err(http_error)?.to_vec();
+        if body.len() > max {
+            return Err(too_big());
+        }
+        body
+    };
+    String::from_utf8(body)
+        .map_err(|_| ClientError::UnexpectedResponse("a response that is not UTF-8".into()))
+}
+
 /// HTTP JSON-RPC client for XRPL nodes.
 pub struct XrplHttpClient {
     base_url: String,
@@ -21,10 +68,11 @@ impl XrplHttpClient {
         let inner = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent(concat!("halcyon-xrpl-client/", env!("CARGO_PKG_VERSION")))
-            .build()?;
+            .build()
+            .map_err(http_error)?;
 
         #[cfg(target_arch = "wasm32")]
-        let inner = reqwest::Client::builder().build()?;
+        let inner = reqwest::Client::builder().build().map_err(http_error)?;
 
         Ok(Self {
             base_url: url.trim_end_matches('/').to_string(),
@@ -47,17 +95,23 @@ impl Client for XrplHttpClient {
     }
 
     async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
-        tracing::debug!(method = method, url = %self.base_url, "sending RPC request");
+        tracing::debug!(method = method, "sending RPC request");
 
         let body = json!({
             "method": method,
             "params": [params]
         });
 
-        let response = self.inner.post(&self.base_url).json(&body).send().await?;
+        let response = self
+            .inner
+            .post(&self.base_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(http_error)?;
 
         let status = response.status();
-        let text = response.text().await?;
+        let text = read_capped(response, MAX_RESPONSE_BYTES).await?;
 
         if !status.is_success() {
             // At most 200 characters of the body (a char boundary, never mid-UTF-8).
@@ -249,6 +303,71 @@ mod tests {
 }
 
 // Live testnet tests — only run with `cargo test --features live-tests`
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+mod transport_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// A one-request HTTP server answering with `body` (and a
+    /// Content-Length only when `declare` is set).
+    async fn serve(body: Vec<u8>, declare: bool) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!(
+            "http://user:secret-token@{}/rpc",
+            listener.local_addr().unwrap()
+        );
+        tokio::spawn(async move {
+            let (mut tcp, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = tcp.read(&mut buf).await;
+            let head = if declare {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+            } else {
+                "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_string()
+            };
+            let _ = tcp.write_all(head.as_bytes()).await;
+            let _ = tcp.write_all(&body).await;
+        });
+        url
+    }
+
+    #[tokio::test]
+    async fn a_response_past_the_cap_is_refused() {
+        for declare in [true, false] {
+            let url = serve(vec![b'x'; 5000], declare).await;
+            let response = reqwest::Client::new().get(&url).send().await.unwrap();
+            assert!(
+                read_capped(response, 1000).await.is_err(),
+                "declared: {declare}"
+            );
+        }
+        let url = serve(b"{\"result\":{}}".to_vec(), true).await;
+        let response = reqwest::Client::new().get(&url).send().await.unwrap();
+        assert_eq!(
+            read_capped(response, 1000).await.unwrap(),
+            "{\"result\":{}}"
+        );
+    }
+
+    /// Transport errors do not carry the URL (it can hold an API key).
+    #[tokio::test]
+    async fn errors_leave_the_url_out() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener); // nothing listens there now
+        let client = XrplHttpClient::new(&format!(
+            "http://user:secret-token@{addr}/?key=secret-token"
+        ))
+        .unwrap();
+        let error = client.fee().await.unwrap_err().to_string();
+        assert!(!error.contains("secret-token"), "{error}");
+    }
+}
+
 #[cfg(all(test, feature = "live-tests"))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {

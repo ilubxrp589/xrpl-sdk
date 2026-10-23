@@ -301,7 +301,7 @@
 //! # async fn run() -> Result<(), ClientError> {
 //! let ws = XrplWsClient::connect("wss://xrplcluster.com").await?;
 //! let mut ledgers = ws.subscribe_ledger().await?;
-//! while let Ok(event) = ledgers.recv().await {
+//! while let Some(event) = ledgers.recv().await {
 //!     match event {
 //!         WsEvent::Ledger(l) => println!("ledger {} closed with {:?} transactions", l.ledger_index, l.txn_count),
 //!         WsEvent::Reconnected => println!("reconnected; subscriptions restored"),
@@ -538,7 +538,7 @@ pub use xrpl_client::Client;
 pub use xrpl_client::XrplWsClient;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use xrpl_client::ws::{LedgerEvent, TransactionEvent, WsEvent};
+pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
 
 pub use wallet::Wallet;
 

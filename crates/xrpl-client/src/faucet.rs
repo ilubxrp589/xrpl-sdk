@@ -57,29 +57,46 @@ pub struct FaucetFunding {
 /// faucet has submitted the payment, not once it is validated (see
 /// [`fund_and_wait`]).
 pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding, ClientError> {
-    let response = reqwest::Client::new()
+    use crate::http::{http_error, read_capped};
+    #[cfg(not(target_arch = "wasm32"))]
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(http_error)?;
+    #[cfg(target_arch = "wasm32")]
+    let client = reqwest::Client::new();
+    let response = client
         .post(network.faucet_url())
         .json(&json!({ "destination": address, "userAgent": concat!("halcyon-xrpl-client/", env!("CARGO_PKG_VERSION")) }))
         .send()
-        .await?;
+        .await
+        .map_err(http_error)?;
     let status = response.status();
-    let body: Value = response.json().await?;
+    let text = read_capped(response, 1024 * 1024).await?;
     if !status.is_success() {
+        let excerpt: String = text.chars().take(200).collect();
         return Err(ClientError::UnexpectedResponse(format!(
-            "faucet answered {status}: {body}"
+            "faucet answered {status}: {excerpt}"
         )));
     }
+    let body: Value = serde_json::from_str(&text)?;
     let funded = body
         .pointer("/account/classicAddress")
         .or_else(|| body.pointer("/account/address"))
         .and_then(Value::as_str)
         .unwrap_or(address);
+    if funded != address {
+        return Err(ClientError::UnexpectedResponse(format!(
+            "the faucet funded {funded}, not {address}"
+        )));
+    }
     Ok(FaucetFunding {
         address: funded.to_string(),
-        amount_xrp: body
-            .get("amount")
-            .map(|a| a.to_string())
-            .unwrap_or_default(),
+        amount_xrp: match body.get("amount") {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Number(n)) => n.to_string(),
+            _ => String::new(),
+        },
         transaction_hash: body
             .get("transactionHash")
             .and_then(Value::as_str)
@@ -87,25 +104,38 @@ pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding
     })
 }
 
-/// [`fund`], then wait (up to about 40 seconds) until a validated ledger on the
-/// network shows the account.
+/// The account's XRP balance in a validated ledger, in drops; 0 for an
+/// account that does not exist yet.
+async fn validated_balance(client: &XrplHttpClient, address: &str) -> Result<u64, ClientError> {
+    match client.account_info(address, &LedgerIndex::Validated).await {
+        Ok(info) => info.account_data.balance.parse().map_err(|_| {
+            ClientError::UnexpectedResponse("an XRP balance that is not drops".into())
+        }),
+        Err(ClientError::RpcError { ref code, .. }) if code == "actNotFound" => Ok(0),
+        Err(e) => Err(e),
+    }
+}
+
+/// [`fund`], then wait (up to about 40 seconds) until a validated ledger on
+/// the network shows the account's balance grown by the faucet's payment
+/// (an account that already existed is funded too, not just found).
 pub async fn fund_and_wait(
     network: FaucetNetwork,
     address: &str,
 ) -> Result<FaucetFunding, ClientError> {
-    let funding = fund(network, address).await?;
     let client = XrplHttpClient::new(network.rpc_url())?;
+    let before = validated_balance(&client, address).await?;
+    let funding = fund(network, address).await?;
     for _ in 0..20 {
         sleep_secs(2).await;
-        if client
-            .account_info(address, &LedgerIndex::Validated)
+        if validated_balance(&client, address)
             .await
-            .is_ok()
+            .is_ok_and(|now| now > before)
         {
             return Ok(funding);
         }
     }
     Err(ClientError::UnexpectedResponse(format!(
-        "{address} did not appear in a validated ledger after the faucet funded it"
+        "{address}'s balance did not grow in a validated ledger after the faucet funded it"
     )))
 }

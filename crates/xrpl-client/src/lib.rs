@@ -121,7 +121,7 @@
 //! # async fn run() -> Result<(), xrpl_client::ClientError> {
 //! let ws = XrplWsClient::connect("wss://xrplcluster.com").await?;
 //! let mut events = ws.subscribe_account("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").await?;
-//! while let Ok(event) = events.recv().await {
+//! while let Some(event) = events.recv().await {
 //!     if let WsEvent::Transaction(tx) = event {
 //!         println!("{tx:?}");
 //!     }
@@ -172,7 +172,7 @@ pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use ws::XrplWsClient;
+pub use ws::{Subscription, XrplWsClient};
 
 #[cfg(target_arch = "wasm32")]
-pub use ws_wasm::XrplWsClient;
+pub use ws_wasm::{Subscription, XrplWsClient};

@@ -1,4 +1,9 @@
 //! WebSocket client for WASM environments using browser-native WebSocket via web-sys.
+//!
+//! Requests time out after 30 s; a closed connection fails every request in
+//! flight and sends [`WsEvent::Disconnected`] to every subscription (the
+//! browser client does not reconnect: connect again). Dropping the client
+//! closes the socket.
 
 use crate::client::Client;
 use crate::error::ClientError;
@@ -10,8 +15,64 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{ErrorEvent, MessageEvent, WebSocket};
 
+pub use crate::stream::*;
+
 type PendingMap =
     Arc<Mutex<HashMap<u64, futures::channel::oneshot::Sender<Result<Value, ClientError>>>>>;
+
+/// How long a request waits for its reply.
+const REQUEST_TIMEOUT_SECS: u64 = 30;
+/// Events buffered per subscription before newer ones are counted as missed.
+const EVENT_BUFFER: usize = 1024;
+
+type Filter = Box<dyn Fn(&WsEvent) -> bool + Send + Sync>;
+
+/// One subscriber: its filter, its channel, and how many events it missed.
+struct Subscriber {
+    filter: Filter,
+    tx: futures::channel::mpsc::Sender<WsEvent>,
+    missed: Arc<AtomicU64>,
+}
+
+type Subscribers = Arc<Mutex<Vec<Subscriber>>>;
+
+fn deliver(subscribers: &Subscribers, event: &WsEvent) {
+    let Ok(mut subs) = subscribers.lock() else {
+        return;
+    };
+    subs.retain_mut(|s| {
+        if !(event.is_connection_event() || (s.filter)(event)) {
+            return true;
+        }
+        match s.tx.try_send(event.clone()) {
+            Ok(()) => true,
+            Err(e) if e.is_full() => {
+                s.missed.fetch_add(1, Ordering::Relaxed);
+                true
+            }
+            Err(_) => false, // the Subscription was dropped
+        }
+    });
+}
+
+/// The events of one subscription (see the native client's `Subscription`):
+/// only its own kind, plus connection events; events dropped because the
+/// receiver fell behind arrive as [`WsEvent::Missed`].
+pub struct Subscription {
+    rx: futures::channel::mpsc::Receiver<WsEvent>,
+    missed: Arc<AtomicU64>,
+}
+
+impl Subscription {
+    /// The next event; `None` once the client is dropped.
+    pub async fn recv(&mut self) -> Option<WsEvent> {
+        let missed = self.missed.swap(0, Ordering::Relaxed);
+        if missed > 0 {
+            return Some(WsEvent::Missed(missed));
+        }
+        futures::StreamExt::next(&mut self.rx).await
+    }
+}
 
 /// WebSocket client for XRPL nodes (WASM version using browser WebSocket API).
 pub struct XrplWsClient {
@@ -21,6 +82,7 @@ pub struct XrplWsClient {
     url: String,
     connected: Arc<AtomicBool>,
     active_subs: Arc<Mutex<Vec<Value>>>,
+    subscribers: Subscribers,
     max_fee_drops: u64,
     // Event closures stored to prevent GC
     _on_message: Closure<dyn FnMut(MessageEvent)>,
@@ -83,6 +145,8 @@ impl XrplWsClient {
         connected.store(true, Ordering::Relaxed);
 
         // Set up persistent message handler
+        let subscribers: Subscribers = Arc::new(Mutex::new(Vec::new()));
+        let subscribers_msg = subscribers.clone();
         let pending_msg = pending.clone();
         let on_message = Closure::wrap(Box::new(move |e: MessageEvent| {
             let text = if let Ok(s) = e.data().dyn_into::<js_sys::JsString>() {
@@ -106,6 +170,8 @@ impl XrplWsClient {
                 if let Some(sender) = map.remove(&id) {
                     let _ = sender.send(crate::client::ws_response(&value));
                 }
+            } else if let Some(event) = WsEvent::from_message(value) {
+                deliver(&subscribers_msg, &event);
             }
         }) as Box<dyn FnMut(MessageEvent)>);
 
@@ -119,8 +185,16 @@ impl XrplWsClient {
 
         // Persistent close handler
         let connected_close = connected.clone();
+        let pending_close = pending.clone();
+        let subscribers_close = subscribers.clone();
         let on_close = Closure::wrap(Box::new(move |_: web_sys::CloseEvent| {
             connected_close.store(false, Ordering::Relaxed);
+            if let Ok(mut map) = pending_close.lock() {
+                for (_, sender) in map.drain() {
+                    let _ = sender.send(Err(ClientError::Disconnected));
+                }
+            }
+            deliver(&subscribers_close, &WsEvent::Disconnected);
             web_sys::console::warn_1(&JsValue::from_str(
                 "XRPL WebSocket disconnected. Call connect() again to reconnect.",
             ));
@@ -134,6 +208,7 @@ impl XrplWsClient {
             url: url.to_string(),
             connected,
             active_subs,
+            subscribers,
             max_fee_drops: crate::client::DEFAULT_MAX_FEE_DROPS,
             _on_message: on_message,
             _on_error: on_error,
@@ -141,23 +216,28 @@ impl XrplWsClient {
         })
     }
 
-    /// Subscribe to ledger events.
-    pub async fn subscribe_ledger(&self) -> Result<(), ClientError> {
-        let params = json!({"streams": ["ledger"]});
-        self.raw_request("subscribe", params.clone()).await?;
-        let mut subs = self
-            .active_subs
-            .lock()
-            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
-        if !subs.contains(&params) {
-            subs.push(params);
+    fn subscription(
+        &self,
+        filter: impl Fn(&WsEvent) -> bool + Send + Sync + 'static,
+    ) -> Subscription {
+        let (tx, rx) = futures::channel::mpsc::channel(EVENT_BUFFER);
+        let missed = Arc::new(AtomicU64::new(0));
+        if let Ok(mut subs) = self.subscribers.lock() {
+            subs.push(Subscriber {
+                filter: Box::new(filter),
+                tx,
+                missed: missed.clone(),
+            });
         }
-        Ok(())
+        Subscription { rx, missed }
     }
 
-    /// Subscribe to all validated transactions.
-    pub async fn subscribe_transactions(&self) -> Result<(), ClientError> {
-        let params = json!({"streams": ["transactions"]});
+    async fn subscribe_with(
+        &self,
+        params: Value,
+        filter: impl Fn(&WsEvent) -> bool + Send + Sync + 'static,
+    ) -> Result<Subscription, ClientError> {
+        let events = self.subscription(filter);
         self.raw_request("subscribe", params.clone()).await?;
         let mut subs = self
             .active_subs
@@ -166,21 +246,40 @@ impl XrplWsClient {
         if !subs.contains(&params) {
             subs.push(params);
         }
-        Ok(())
+        Ok(events)
     }
 
-    /// Subscribe to a specific account's transactions.
-    pub async fn subscribe_account(&self, account: &str) -> Result<(), ClientError> {
-        let params = json!({"accounts": [account]});
-        self.raw_request("subscribe", params.clone()).await?;
-        let mut subs = self
-            .active_subs
-            .lock()
-            .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
-        if !subs.contains(&params) {
-            subs.push(params);
-        }
-        Ok(())
+    /// Subscribe to ledger closes ([`WsEvent::Ledger`] only).
+    pub async fn subscribe_ledger(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_with(json!({"streams": ["ledger"]}), |e| {
+            matches!(e, WsEvent::Ledger(_))
+        })
+        .await
+    }
+
+    /// Subscribe to every validated transaction ([`WsEvent::Transaction`],
+    /// `validated: true`, only).
+    pub async fn subscribe_transactions(&self) -> Result<Subscription, ClientError> {
+        self.subscribe_with(
+            json!({"streams": ["transactions"]}),
+            |e| matches!(e, WsEvent::Transaction(t) if t.validated),
+        )
+        .await
+    }
+
+    /// Subscribe to the validated transactions that affect `account` (only those).
+    pub async fn subscribe_account(&self, account: &str) -> Result<Subscription, ClientError> {
+        let who = account.to_string();
+        self.subscribe_with(
+            json!({"accounts": [account]}),
+            move |e| matches!(e, WsEvent::Transaction(t) if t.validated && t.affects(&who)),
+        )
+        .await
+    }
+
+    /// Every event the connection carries, from now on.
+    pub fn events(&self) -> Subscription {
+        self.subscription(|_| true)
     }
 
     /// Returns true if the WebSocket is currently connected.
@@ -191,6 +290,20 @@ impl XrplWsClient {
     /// Get the URL this client is connected to.
     pub fn url(&self) -> &str {
         &self.url
+    }
+}
+
+impl Drop for XrplWsClient {
+    fn drop(&mut self) {
+        self.ws.set_onmessage(None);
+        self.ws.set_onerror(None);
+        self.ws.set_onclose(None);
+        let _ = self.ws.close();
+        if let Ok(mut map) = self.pending.lock() {
+            for (_, sender) in map.drain() {
+                let _ = sender.send(Err(ClientError::Disconnected));
+            }
+        }
     }
 }
 
@@ -227,10 +340,26 @@ impl Client for XrplWsClient {
             json!({"command": command, "id": id})
         };
 
-        self.ws
-            .send_with_str(&msg.to_string())
-            .map_err(|_| ClientError::Disconnected)?;
+        if self.ws.send_with_str(&msg.to_string()).is_err() {
+            if let Ok(mut map) = self.pending.lock() {
+                map.remove(&id);
+            }
+            return Err(ClientError::Disconnected);
+        }
 
-        rx.await.map_err(|_| ClientError::Disconnected)?
+        let timeout = Box::pin(crate::client::sleep_secs(REQUEST_TIMEOUT_SECS));
+        match futures::future::select(rx, timeout).await {
+            futures::future::Either::Left((reply, _)) => {
+                reply.map_err(|_| ClientError::Disconnected)?
+            }
+            futures::future::Either::Right(_) => {
+                if let Ok(mut map) = self.pending.lock() {
+                    map.remove(&id);
+                }
+                Err(ClientError::Timeout(std::time::Duration::from_secs(
+                    REQUEST_TIMEOUT_SECS,
+                )))
+            }
+        }
     }
 }

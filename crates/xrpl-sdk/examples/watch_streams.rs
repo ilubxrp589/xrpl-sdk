@@ -14,7 +14,10 @@ use xrpl_sdk::*;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let url = std::env::var("XRPL_WS_URL").unwrap_or_else(|_| "wss://s1.ripple.com".into());
     let ws = XrplWsClient::connect(&url).await?;
-    let mut events = ws.subscribe_ledger().await?;
+    // One receiver for every stream on this connection (each subscribe_*
+    // receiver hears only its own stream).
+    let mut events = ws.events();
+    ws.subscribe_ledger().await?;
     if let Err(e) = ws.subscribe_book_changes().await {
         println!("(book changes not offered here: {e})");
     }
@@ -25,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (mut ledgers, mut validations) = (0, 0);
     while ledgers < 3 {
-        match events.recv().await? {
+        match events.recv().await.ok_or("the connection closed")? {
             WsEvent::Ledger(l) => {
                 ledgers += 1;
                 println!(

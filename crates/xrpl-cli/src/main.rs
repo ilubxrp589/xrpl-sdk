@@ -641,7 +641,7 @@ async fn run(cli: Cli) -> Res {
             };
             let mut seen = 0;
             while seen < count {
-                let event = events.recv().await?;
+                let event = events.recv().await.ok_or("the connection closed")?;
                 let line = match event {
                     WsEvent::Ledger(e) => serde_json::to_string(&e)?,
                     WsEvent::Transaction(e) => serde_json::to_string(&e)?,
@@ -649,6 +649,14 @@ async fn run(cli: Cli) -> Res {
                     WsEvent::BookChanges(e) => serde_json::to_string(&e)?,
                     WsEvent::Server(e) => serde_json::to_string(&e)?,
                     WsEvent::Consensus(e) => serde_json::to_string(&e)?,
+                    WsEvent::Missed(n) => {
+                        eprintln!("({n} events missed: this terminal fell behind)");
+                        continue;
+                    }
+                    WsEvent::Disconnected => {
+                        eprintln!("(disconnected; reconnecting)");
+                        continue;
+                    }
                     _ => continue,
                 };
                 println!("{line}");

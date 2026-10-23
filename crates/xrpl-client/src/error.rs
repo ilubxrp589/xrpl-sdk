@@ -108,6 +108,11 @@ pub enum ClientError {
     #[error("pagination limit reached: {0} pages fetched, use marker manually for more")]
     PaginationLimitReached(usize),
 
+    /// A [`crate::blocking::BlockingClient`] method was called inside an
+    /// async runtime, which blocking would stall; use the async client.
+    #[error("BlockingClient used inside an async runtime; use the async client there")]
+    InsideAsyncRuntime,
+
     /// A core error (codec, keys, amounts, …).
     #[error("core error: {0}")]
     Core(#[from] xrpl_core::CoreError),
