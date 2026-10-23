@@ -2,12 +2,13 @@
  "method": "nft_history",
  "params": {
   "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3EE0FC28306441448",
-  "limit": 2
+  "limit": 2,
+  "api_version": 2
  },
  "result": {
   "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3EE0FC28306441448",
   "ledger_index_min": 32570,
-  "ledger_index_max": 107831525,
+  "ledger_index_max": 107856070,
   "transactions": [
    {
     "meta": {
@@ -398,7 +399,7 @@
      "TransactionIndex": 0,
      "TransactionResult": "tesSUCCESS"
     },
-    "tx": {
+    "tx_json": {
      "Account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
      "Fee": "12",
      "Flags": 0,
@@ -417,16 +418,18 @@
      "TransactionType": "NFTokenMint",
      "TxnSignature": "304402205222683D800BF7CBE5F7B95AD48E13FDA465E0D734AD63332D0586FE3B2AE718022012E31161D384F751E9592CA7EF5C5C5E5D1C8DA128FF7566B6CDC923322520FF",
      "URI": "68747470733A2F2F7A65726F706F65742E6769746875622E696F2F466F6C64506F7274726169742F4D696E742F6D657461646174612F666F6C64706F7274726169742D76332E332D7A65726F2D706F65742D32636664666136342E6A736F6E",
-     "hash": "B2F50181DBCEB606C3E48AC2F58A688F1CD58DDBB0A1053F2E132CAAD475C6B0",
-     "ledger_index": 107830973,
-     "date": 846002090
+     "date": 846002090,
+     "ledger_index": 107830973
     },
+    "ledger_index": 107830973,
+    "hash": "B2F50181DBCEB606C3E48AC2F58A688F1CD58DDBB0A1053F2E132CAAD475C6B0",
+    "close_time_iso": "2026-10-22T16:34:50Z",
+    "ledger_hash": "AD910CDA994A6C7EDC689A908855596F414CA687634825A67BB506A8E96E2C34",
     "validated": true
    }
   ],
   "validated": true,
   "limit": 2,
   "status": "success"
- },
- "trimmed": "transactions cut to 2"
+ }
 }

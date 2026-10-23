@@ -10,7 +10,6 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use serde_json::json;
 use xrpl_sdk::models::{AccountSet, AccountSetFlag, Payment, TrustSet};
 use xrpl_sdk::*;
 
@@ -48,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pay = Payment::new(alice.classic_address(), bob.classic_address(), usd("25")?);
     let result = send(&client, &alice, pay.to_json()?).await?;
     println!("\nWhat Alice's payment changed:");
-    for account in utils::get_balance_changes(result.meta.as_ref().unwrap_or(&json!({})))? {
+    for account in utils::get_balance_changes(result.meta.as_ref().ok_or("no metadata")?)? {
         for b in &account.balances {
             println!("  {}  {:>8} {}", account.account, b.value, b.currency);
         }

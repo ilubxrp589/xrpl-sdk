@@ -387,6 +387,7 @@ impl Transport for XrplWsClient {
                 map.insert(id, tx);
             }
 
+            let params = crate::client::with_api_version(params);
             let msg = if let Some(obj) = params.as_object() {
                 let mut m = serde_json::Map::new();
                 m.insert("command".into(), Value::String(command.into()));

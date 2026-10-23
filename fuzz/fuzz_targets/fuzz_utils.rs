@@ -1,8 +1,8 @@
 #![no_main]
 //! The string utilities and the exact-decimal arithmetic never panic.
 use libfuzzer_sys::fuzz_target;
-use serde_json::Value;
 use xrpl_core::address::decode_x_address;
+use xrpl_core::transaction::TransactionMetadata;
 use xrpl_core::types::Amount;
 use xrpl_core::utils;
 
@@ -27,9 +27,10 @@ fuzz_target!(|data: &[u8]| {
             }
         }
     }
-    if let Ok(meta) = serde_json::from_slice::<Value>(data) {
+    if let Ok(meta) = serde_json::from_slice::<TransactionMetadata>(data) {
         let _ = utils::get_balance_changes(&meta);
         let _ = utils::get_nftoken_id(&meta);
+        let _ = utils::delivered_amount(&meta);
     }
     if data.len() >= 8 {
         let n = u64::from_le_bytes([

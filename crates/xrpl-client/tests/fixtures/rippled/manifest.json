@@ -1,7 +1,8 @@
 {
  "method": "manifest",
  "params": {
-  "public_key": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C"
+  "public_key": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C",
+  "api_version": 2
  },
  "result": {
   "details": {

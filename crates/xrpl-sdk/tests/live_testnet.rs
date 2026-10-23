@@ -34,11 +34,19 @@ async fn query<R: Request>(client: &XrplHttpClient, req: &R, record_as: &str) ->
         .unwrap_or_else(|e| panic!("{}: {e}", R::METHOD));
     if let Ok(dir) = std::env::var("XRPL_RECORD_DIR") {
         let file = std::path::Path::new(&dir).join(format!("{record_as}.json"));
+        // As sent: the client adds the API version.
+        let mut params = params;
+        params["api_version"] = json!(xrpl_sdk::xrpl_client::API_VERSION);
         let recorded =
             json!({"method": R::METHOD, "params": params, "result": result, "network": "testnet"});
         std::fs::write(file, serde_json::to_string_pretty(&recorded).unwrap()).unwrap();
     }
     serde_json::from_value(result).unwrap_or_else(|e| panic!("{} does not parse: {e}", R::METHOD))
+}
+
+/// The typed metadata of a transaction `submit` returned.
+fn typed_meta(tx: &Value) -> xrpl_sdk::TransactionMetadata {
+    serde_json::from_value(tx["meta"].clone()).unwrap()
 }
 
 /// Poll `tx` until the transaction is in a validated ledger.
@@ -47,7 +55,7 @@ async fn wait_validated(client: &XrplHttpClient, hash: &str) -> Value {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         if let Ok(r) = client.tx(hash).await {
             if r.validated == Some(true) {
-                return r.meta.unwrap();
+                return serde_json::to_value(r.meta.unwrap()).unwrap();
             }
         }
     }
@@ -75,17 +83,17 @@ async fn submit(client: &XrplHttpClient, wallet: &Wallet, mut tx: Value) -> Opti
     };
     let meta = result.meta.clone().unwrap();
     assert_eq!(
-        meta["TransactionResult"], "tesSUCCESS",
+        meta.transaction_result, "tesSUCCESS",
         "{}",
         tx["TransactionType"]
     );
     assert_eq!(
-        result.tx_fields["hash"],
-        json!(our_hash),
+        result.hash(),
+        Some(our_hash.as_str()),
         "hash_signed_tx_blob"
     );
     let mut out = tx;
-    out["meta"] = meta;
+    out["meta"] = serde_json::to_value(meta).unwrap();
     Some(out)
 }
 
@@ -103,7 +111,7 @@ async fn submit_batch(
     let ids = batch::inner_transaction_ids(batch_tx).unwrap();
     let blob = wallet.sign(&*batch_tx).unwrap().tx_blob;
     match client.submit_and_wait(&blob).await {
-        Ok(r) => assert_eq!(r.meta.unwrap()["TransactionResult"], "tesSUCCESS", "Batch"),
+        Ok(r) => assert_eq!(r.meta.unwrap().transaction_result, "tesSUCCESS", "Batch"),
         Err(ClientError::TransactionFailed { engine_result, .. })
             if engine_result == "temDISABLED" =>
         {
@@ -163,7 +171,7 @@ async fn keylets_and_helpers_match_testnet() {
     let submitted = query(&client, &SubmitRequest::new(blob.clone()), "submit").await;
     assert_eq!(submitted.engine_result, "tesSUCCESS");
     pay["meta"] = wait_validated(&client, &hash_signed_tx_blob(&blob).unwrap().to_string()).await;
-    let changes = utils::get_balance_changes(&pay["meta"]).unwrap();
+    let changes = utils::get_balance_changes(&typed_meta(&pay)).unwrap();
     let fee = utils::drops_to_xrp(pay["Fee"].as_str().unwrap().parse().unwrap());
     let of = |acct: &str| {
         changes.iter().find(|c| c.account == acct).unwrap().balances[0]
@@ -230,10 +238,10 @@ async fn keylets_and_helpers_match_testnet() {
         checked.push("account_channels".into());
     }
     if let Some(tx) = submit(&client, &alice, json!({"TransactionType": "NFTokenMint", "Account": a, "NFTokenTaxon": 7, "Flags": 8, "TransferFee": 500})).await {
-        let id = utils::get_nftoken_id(&tx["meta"]).unwrap().unwrap();
-        let mut meta = tx["meta"].clone();
-        meta.as_object_mut().unwrap().remove("nftoken_id");
-        check(&mut checked, "get_nftoken_id (page diff)", utils::get_nftoken_id(&meta).unwrap().unwrap(), id.clone());
+        let mut meta = typed_meta(&tx);
+        let id = utils::get_nftoken_id(&meta).unwrap();
+        meta.nftoken_id = None;
+        check(&mut checked, "get_nftoken_id (page diff)", utils::get_nftoken_id(&meta).unwrap(), id.clone());
         let p = parse_nftoken_id(&id).unwrap();
         assert_eq!((p.issuer.as_str(), p.taxon, p.flags, p.transfer_fee), (a, 7, 8, 500));
         if let Some(offer) = submit(&client, &alice, json!({"TransactionType": "NFTokenCreateOffer", "Account": a, "NFTokenID": id, "Amount": "1", "Flags": 1})).await {
@@ -354,7 +362,7 @@ async fn keylets_and_helpers_match_testnet() {
         collect_signers(&mut tx, vec![signature]).unwrap();
         let submitted = query(&client, &SubmitMultisignedRequest::new(tx), "submit_multisigned").await;
         assert_eq!(submitted.engine_result, "tesSUCCESS", "{}", submitted.engine_result_message);
-        let hash = submitted.tx_json.as_ref().unwrap()["hash"].as_str().unwrap().to_string();
+        let hash = submitted.hash().unwrap().to_string();
         let meta = wait_validated(&client, &hash).await;
         assert_eq!(meta["TransactionResult"], "tesSUCCESS");
         checked.push("submit_multisigned".into());

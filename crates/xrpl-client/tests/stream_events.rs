@@ -1,4 +1,4 @@
-//! Every typed stream event against messages recorded from `rippled` 3.4.1
+//! Every typed stream event against messages recorded from `rippled` 3.4.1 (API version 2)
 //! on mainnet (tests/fixtures/streams): each must become its own event
 //! variant, with transactions typed, and keep every field the server sent.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
@@ -69,7 +69,7 @@ fn every_recorded_stream_message_is_typed_and_keeps_every_field() {
                 WsEvent::Ledger(e) => keeps_every_field(file, &m, &e),
                 WsEvent::Transaction(e) => {
                     assert!(
-                        !matches!(e.transaction, Tx::Other(_)),
+                        !matches!(e.tx_json, Tx::Other(_)),
                         "{file}: the transaction is not typed"
                     );
                     assert_eq!(e.validated, file == "transaction_validated.json");

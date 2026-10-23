@@ -610,7 +610,7 @@ impl AccountTxRequest {
     }
 }
 request!(AccountTxRequest => "account_tx", AccountTxResult);
-paginated!(AccountTxRequest, AccountTxEntry, transactions);
+paginated!(AccountTxRequest, TxResult, transactions);
 
 /// [`gateway_balances`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/gateway_balances):
 /// what an issuer has issued, and to whom.
@@ -1071,7 +1071,7 @@ impl TransactionEntryRequest {
         self
     }
 }
-request!(TransactionEntryRequest => "transaction_entry", TransactionEntryResult);
+request!(TransactionEntryRequest => "transaction_entry", TxResult);
 
 /// [`tx`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/tx):
 /// a transaction by hash (or by CTID in `transaction`'s place).
@@ -1907,7 +1907,7 @@ impl NftHistoryRequest {
     }
 }
 request!(NftHistoryRequest => "nft_history", NftHistoryResult);
-paginated!(NftHistoryRequest, AccountTxEntry, transactions);
+paginated!(NftHistoryRequest, TxResult, transactions);
 
 /// [`nfts_by_issuer`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nfts_by_issuer)
 /// (Clio): every NFT an account issued.

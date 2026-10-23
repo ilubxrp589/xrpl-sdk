@@ -220,7 +220,7 @@ impl Shared {
 
         let id = self.ids.fetch_add(1, Ordering::Relaxed);
         tracing::debug!(command, id, host = %self.host, "sending WS request");
-        let mut msg = match params {
+        let mut msg = match crate::client::with_api_version(params) {
             Value::Object(obj) => obj,
             _ => serde_json::Map::new(),
         };
@@ -830,8 +830,8 @@ mod tests {
     fn payment(from: &str, to: &str) -> Value {
         json!({"type": "transaction", "validated": true, "engine_result": "tesSUCCESS",
             "engine_result_code": 0, "engine_result_message": "ok", "ledger_index": 5,
-            "transaction": {"TransactionType": "Payment", "Account": from, "Destination": to,
-                "Amount": "1", "Fee": "12", "Sequence": 1, "SigningPubKey": "", "Flags": 0},
+            "tx_json": {"TransactionType": "Payment", "Account": from, "Destination": to,
+                "DeliverMax": "1", "Fee": "12", "Sequence": 1, "SigningPubKey": "", "Flags": 0},
             "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": []}})
     }
 

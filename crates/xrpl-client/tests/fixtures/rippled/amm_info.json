@@ -8,16 +8,17 @@
    "currency": "524C555344000000000000000000000000000000",
    "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De"
   },
-  "ledger_index": "validated"
+  "ledger_index": "validated",
+  "api_version": 2
  },
  "result": {
   "amm": {
    "account": "rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3",
-   "amount": "1840362040614",
+   "amount": "1849156969805",
    "amount2": {
     "currency": "524C555344000000000000000000000000000000",
     "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
-    "value": "2419392.774765901"
+    "value": "2406585.019629636"
    },
    "asset2_frozen": false,
    "auction_slot": {
@@ -48,7 +49,7 @@
    "lp_token": {
     "currency": "03B245BE580EC4F4386A751C084489EC4B514A2F",
     "issuer": "rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3",
-    "value": "1787431184.524638"
+    "value": "1786815959.484811"
    },
    "trading_fee": 205,
    "vote_slots": [
@@ -94,8 +95,8 @@
     }
    ]
   },
-  "ledger_hash": "975538CBCEDFB78A650F8521418D36A4E94AD4E4AC83BFA1043E1E80118D3393",
-  "ledger_index": 107831677,
+  "ledger_hash": "2F02AF7C7CA8C6ED83E5ECDD7E90CF3BD700659A870C2965000E5DE97BC6268D",
+  "ledger_index": 107856070,
   "status": "success",
   "validated": true
  }

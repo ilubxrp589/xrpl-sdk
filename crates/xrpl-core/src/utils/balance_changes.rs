@@ -1,9 +1,11 @@
 //! What a transaction did to each account's balances, from its metadata.
 
 use super::decimal::Decimal;
+use crate::transaction::metadata::{AffectedNode, DeliveredAmount, TransactionMetadata};
+use crate::types::Amount;
 use crate::CoreError;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// One balance change: XRP (`currency` "XRP", no issuer) or a token, from the
 /// point of view of the account it is listed under.
@@ -35,15 +37,22 @@ pub struct AccountBalanceChanges {
 /// 2014).
 ///
 /// ```
+/// use xrpl_core::transaction::TransactionMetadata;
 /// use xrpl_core::utils::delivered_amount;
-/// let meta = serde_json::json!({"TransactionResult": "tesSUCCESS", "delivered_amount": "15"});
+///
+/// let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+///     "TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": [],
+///     "delivered_amount": "15",
+/// }))?;
 /// assert_eq!(delivered_amount(&meta), Some(xrpl_core::types::Amount::Xrp(15)));
+/// # Ok::<(), serde_json::Error>(())
 /// ```
-pub fn delivered_amount(meta: &Value) -> Option<crate::types::Amount> {
-    meta.get("delivered_amount")
-        .or_else(|| meta.get("DeliveredAmount"))
-        .filter(|v| v.as_str() != Some("unavailable"))
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
+pub fn delivered_amount(meta: &TransactionMetadata) -> Option<Amount> {
+    match &meta.delivered_amount {
+        Some(DeliveredAmount::Amount(amount)) => Some(amount.clone()),
+        Some(DeliveredAmount::Unavailable) => None,
+        _ => meta.stored_delivered_amount.clone(),
+    }
 }
 
 /// The balance changes a transaction made, per account, from its metadata:
@@ -54,39 +63,26 @@ pub fn delivered_amount(meta: &Value) -> Option<crate::types::Amount> {
 ///
 /// Not included: MPT balances (`MPToken` and `MPTokenIssuance` entries), and
 /// XRP held in escrows, payment channels and checks (they are not account
-/// balances). For what a Payment delivered, read `delivered_amount` in the
-/// metadata, never the transaction's `Amount` (a partial payment delivers
-/// less).
+/// balances). For what a Payment delivered, see [`delivered_amount`], never
+/// the transaction's `Amount` (a partial payment delivers less).
 ///
 /// # Errors
 ///
-/// [`CoreError::ValidationError`] if `meta` has no `AffectedNodes` array, or a
-/// changed `RippleState` has no `LowLimit`/`HighLimit` issuer or `Balance`
-/// currency; [`CoreError::InvalidAmount`] for a `Balance` that is not a number.
-pub fn get_balance_changes(meta: &Value) -> Result<Vec<AccountBalanceChanges>, CoreError> {
-    let nodes = meta
-        .get("AffectedNodes")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            CoreError::ValidationError(
-                "expected transaction metadata (an object with AffectedNodes)".into(),
-            )
-        })?;
+/// [`CoreError::ValidationError`] if a changed `RippleState` has no
+/// `LowLimit`/`HighLimit` issuer or `Balance` currency;
+/// [`CoreError::InvalidAmount`] for a `Balance` that is not a number.
+pub fn get_balance_changes(
+    meta: &TransactionMetadata,
+) -> Result<Vec<AccountBalanceChanges>, CoreError> {
     let mut changes: Vec<(String, Balance)> = Vec::new();
-    for node in nodes {
-        let Some(node) = ["CreatedNode", "ModifiedNode", "DeletedNode"]
-            .iter()
-            .find_map(|kind| node.get(*kind))
-        else {
-            continue;
-        };
-        match node.get("LedgerEntryType").and_then(Value::as_str) {
-            Some("AccountRoot") => {
+    for node in &meta.affected_nodes {
+        match node.ledger_entry_type() {
+            "AccountRoot" => {
                 if let Some(change) = xrp_change(node)? {
                     changes.push(change);
                 }
             }
-            Some("RippleState") => changes.extend(trust_line_changes(node)?),
+            "RippleState" => changes.extend(trust_line_changes(node)?),
             _ => {}
         }
     }
@@ -105,7 +101,7 @@ pub fn get_balance_changes(meta: &Value) -> Result<Vec<AccountBalanceChanges>, C
 
 /// `Balance` after minus before (or the new balance of a created entry); `None`
 /// if it did not change.
-fn balance_change(node: &Value) -> Result<Option<Decimal>, CoreError> {
+fn balance_change(node: &AffectedNode) -> Result<Option<Decimal>, CoreError> {
     let value = |v: &Value| -> Result<Decimal, CoreError> {
         match v {
             Value::String(drops) => Decimal::parse(drops),
@@ -115,11 +111,11 @@ fn balance_change(node: &Value) -> Result<Option<Decimal>, CoreError> {
             _ => Err(CoreError::InvalidAmount(format!("not a Balance: {v}"))),
         }
     };
-    let change = if let Some(new) = node.pointer("/NewFields/Balance") {
+    let change = if let Some(new) = balance(node.new_fields()) {
         value(new)?
     } else if let (Some(prev), Some(fin)) = (
-        node.pointer("/PreviousFields/Balance"),
-        node.pointer("/FinalFields/Balance"),
+        balance(node.previous_fields()),
+        balance(node.final_fields()),
     ) {
         value(fin)?.sub(&value(prev)?)
     } else {
@@ -128,13 +124,25 @@ fn balance_change(node: &Value) -> Result<Option<Decimal>, CoreError> {
     Ok((!change.is_zero()).then_some(change))
 }
 
-fn xrp_change(node: &Value) -> Result<Option<(String, Balance)>, CoreError> {
+/// The `Balance` among `fields`.
+fn balance(fields: Option<&Map<String, Value>>) -> Option<&Value> {
+    fields.and_then(|f| f.get("Balance"))
+}
+
+/// The entry's fields: those it was created with, or those after the
+/// transaction.
+fn fields(node: &AffectedNode) -> Option<&Map<String, Value>> {
+    node.new_fields().or_else(|| node.final_fields())
+}
+
+fn xrp_change(node: &AffectedNode) -> Result<Option<(String, Balance)>, CoreError> {
     let Some(drops) = balance_change(node)? else {
         return Ok(None);
     };
     let account = node
-        .pointer("/FinalFields/Account")
-        .or_else(|| node.pointer("/NewFields/Account"))
+        .final_fields()
+        .and_then(|f| f.get("Account"))
+        .or_else(|| node.new_fields().and_then(|f| f.get("Account")))
         .and_then(Value::as_str);
     Ok(account.map(|a| {
         (
@@ -150,22 +158,23 @@ fn xrp_change(node: &Value) -> Result<Option<(String, Balance)>, CoreError> {
 
 /// A trust line's `Balance` is the low account's: positive when the high
 /// account owes it. List the change for the low account, then for the high.
-fn trust_line_changes(node: &Value) -> Result<Vec<(String, Balance)>, CoreError> {
+fn trust_line_changes(node: &AffectedNode) -> Result<Vec<(String, Balance)>, CoreError> {
     let Some(change) = balance_change(node)? else {
         return Ok(Vec::new());
     };
-    let fields = node.get("NewFields").or_else(|| node.get("FinalFields"));
-    let field = |path: &str| {
+    let fields = fields(node);
+    let field = |entry: &str, key: &str| {
         fields
-            .and_then(|f| f.pointer(path))
+            .and_then(|f| f.get(entry))
+            .and_then(|v| v.get(key))
             .and_then(Value::as_str)
             .map(str::to_string)
-            .ok_or_else(|| CoreError::ValidationError(format!("RippleState without {path}")))
+            .ok_or_else(|| CoreError::ValidationError(format!("RippleState without {entry}.{key}")))
     };
     let (low, high, currency) = (
-        field("/LowLimit/issuer")?,
-        field("/HighLimit/issuer")?,
-        field("/Balance/currency")?,
+        field("LowLimit", "issuer")?,
+        field("HighLimit", "issuer")?,
+        field("Balance", "currency")?,
     );
     Ok(vec![
         (
@@ -225,7 +234,9 @@ mod tests {
             };
             let expected: Vec<AccountBalanceChanges> =
                 serde_json::from_value(case["expected"].clone()).unwrap();
-            let got = get_balance_changes(meta).unwrap();
+            let meta: TransactionMetadata = serde_json::from_value(meta.clone())
+                .unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+            let got = get_balance_changes(&meta).unwrap();
             let accounts = |v: &[AccountBalanceChanges]| {
                 v.iter().map(|a| a.account.clone()).collect::<Vec<_>>()
             };
@@ -236,12 +247,22 @@ mod tests {
 
     #[test]
     fn rejects_what_is_not_metadata() {
-        assert!(get_balance_changes(&serde_json::json!({"hash": "00"})).is_err());
         assert!(
-            get_balance_changes(&serde_json::json!({"AffectedNodes": []}))
-                .unwrap()
-                .is_empty()
+            serde_json::from_value::<TransactionMetadata>(serde_json::json!({"hash": "00"}))
+                .is_err()
         );
+        assert!(get_balance_changes(&meta(serde_json::json!({})))
+            .unwrap()
+            .is_empty());
+    }
+
+    /// Metadata with no affected entries and the fields of `extra`.
+    fn meta(extra: Value) -> TransactionMetadata {
+        let mut m = serde_json::json!({"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": []});
+        for (k, v) in extra.as_object().unwrap() {
+            m[k] = v.clone();
+        }
+        serde_json::from_value(m).unwrap()
     }
 
     /// A partial payment's delivered amount, not its Amount; "unavailable"
@@ -249,21 +270,20 @@ mod tests {
     #[test]
     fn delivered_amount_is_what_arrived() {
         let token = serde_json::json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "0.5"});
-        let meta =
-            serde_json::json!({"TransactionResult": "tesSUCCESS", "delivered_amount": token});
         assert_eq!(
-            delivered_amount(&meta),
+            delivered_amount(&meta(serde_json::json!({"delivered_amount": token}))),
             Some(serde_json::from_value(token).unwrap())
         );
-        let stored = serde_json::json!({"DeliveredAmount": "7"});
         assert_eq!(
-            delivered_amount(&stored),
+            delivered_amount(&meta(serde_json::json!({"DeliveredAmount": "7"}))),
             Some(crate::types::Amount::Xrp(7))
         );
         assert_eq!(
-            delivered_amount(&serde_json::json!({"delivered_amount": "unavailable"})),
+            delivered_amount(&meta(
+                serde_json::json!({"delivered_amount": "unavailable", "DeliveredAmount": "7"})
+            )),
             None
         );
-        assert_eq!(delivered_amount(&serde_json::json!({})), None);
+        assert_eq!(delivered_amount(&meta(serde_json::json!({}))), None);
     }
 }

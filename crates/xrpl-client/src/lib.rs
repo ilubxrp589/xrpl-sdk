@@ -137,9 +137,10 @@
 //!
 //! ## Typed responses
 //!
-//! Every response type in [`types`] is checked against a response recorded
-//! from a real server: 44 recordings (38 from `rippled` 3.4.1 and Clio on
-//! mainnet, 6 from Testnet), 2,521 field paths. Each must parse, and
+//! Requests ask for `rippled`'s API version 2 ([`API_VERSION`]), and every
+//! response type in [`types`] is checked against a version 2 response
+//! recorded from a real server: 44 recordings (38 from `rippled` 3.4.1 and
+//! Clio on mainnet, 6 from Testnet), 2,587 field paths. Each must parse, and
 //! serializing it back must keep every field the server sent, so a field the
 //! types do not model fails the test instead of silently vanishing
 //! (`tests/rippled_responses.rs`). `account_objects`, `ledger_data` and
@@ -173,7 +174,7 @@ pub mod ws;
 #[cfg(target_arch = "wasm32")]
 pub mod ws_wasm;
 
-pub use client::{Client, MaybeSend, MaybeSync, Transport, TransportFuture};
+pub use client::{Client, MaybeSend, MaybeSync, Transport, TransportFuture, API_VERSION};
 pub use error::{ClientError, TransportErrorKind};
 pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};

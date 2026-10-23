@@ -32,10 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let created = send(&client, &issuer, create.to_json()?).await?;
     let sequence = created
-        .tx_fields
-        .get("Sequence")
-        .and_then(|s| s.as_u64())
-        .and_then(|s| u32::try_from(s).ok())
+        .transaction()?
+        .common()
+        .and_then(|c| c.sequence)
         .ok_or("no Sequence")?;
     let id = keylet::mpt_issuance_id(sequence, issuer.classic_address())?;
     println!("  MPTokenIssuanceID {id}");

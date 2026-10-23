@@ -11,6 +11,23 @@ use xrpl_core::types::LedgerObject;
 /// The most pages [`Client::request_all`] follows before it gives up.
 pub const MAX_PAGES: usize = 50;
 
+/// The `rippled` API version every request asks for, unless its parameters
+/// name one (`"api_version"`). The response types follow version 2: a
+/// transaction in `tx_json` with its `hash` and `meta` beside it (`tx`,
+/// `account_tx`, `ledger`, streams), a Payment's `DeliverMax`, numeric
+/// ledger indexes. Clio answers version 2 too.
+pub const API_VERSION: u32 = 2;
+
+/// `params` with [`API_VERSION`] added, unless it names a version (or is not
+/// an object).
+pub(crate) fn with_api_version(mut params: Value) -> Value {
+    if let Some(obj) = params.as_object_mut() {
+        obj.entry("api_version")
+            .or_insert_with(|| Value::Number(API_VERSION.into()));
+    }
+    params
+}
+
 /// The fee cap a client starts with: 2 XRP (xrpl.js's default `maxFeeXRP`).
 /// A normal fee is 10-20 drops; fees near the cap mean the network is
 /// heavily loaded, or the server is lying.
@@ -1399,7 +1416,7 @@ pub trait Client: Transport {
     fn account_tx_all(
         &self,
         account: &str,
-    ) -> impl Future<Output = Result<Vec<AccountTxEntry>, ClientError>> + MaybeSend {
+    ) -> impl Future<Output = Result<Vec<TxResult>, ClientError>> + MaybeSend {
         async move {
             self.request_all(AccountTxRequest::new(account).with_limit(200u32))
                 .await
@@ -1939,7 +1956,8 @@ mod tests {
             "tx_json": {"hash": "NOT_THE_HASH"}})
     }
     fn found(validated: bool, result: &str) -> Value {
-        json!({"validated": validated, "ledger_index": 95, "meta": {"TransactionResult": result}})
+        json!({"validated": validated, "ledger_index": 95,
+            "meta": {"TransactionResult": result, "TransactionIndex": 0, "AffectedNodes": []}})
     }
     fn not_found(searched_all: bool) -> Value {
         json!({"status": "error", "error": "txnNotFound", "error_message": "Transaction not found.",

@@ -18,7 +18,7 @@
 use crate::types::{count_as_string, BookChange, BookOffer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use xrpl_core::transaction::models::Tx;
+use xrpl_core::transaction::{models::Tx, TransactionMetadata};
 
 /// One message from a subscription, or a connection event.
 #[derive(Debug, Clone, PartialEq)]
@@ -115,7 +115,7 @@ impl WsEvent {
                     transaction_type,
                     error,
                     ..
-                } = &t.transaction
+                } = &t.tx_json
                 {
                     tracing::warn!(%transaction_type, %error, "a streamed transaction did not parse as its type");
                 }
@@ -171,8 +171,11 @@ pub struct LedgerEvent {
 #[non_exhaustive]
 pub struct TransactionEvent {
     /// The transaction, typed by its `TransactionType` (see
-    /// `xrpl_core::transaction::models`).
-    pub transaction: Tx,
+    /// `xrpl_core::transaction::models`) (`tx_json`).
+    pub tx_json: Tx,
+    /// The transaction's ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
     /// The engine result (`tesSUCCESS`, `tecPATH_DRY`, …).
     pub engine_result: String,
     /// The engine result as a number.
@@ -184,9 +187,9 @@ pub struct TransactionEvent {
     pub status: Option<String>,
     /// Whether the data is from a validated ledger (final).
     pub validated: bool,
-    /// The metadata, once validated.
+    /// What it did, once validated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub meta: Option<Value>,
+    pub meta: Option<TransactionMetadata>,
     /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
@@ -234,10 +237,12 @@ impl TransactionEvent {
                 _ => false,
             }
         }
-        self.transaction
-            .to_value()
-            .is_ok_and(|tx| names(&tx, account))
-            || self.meta.as_ref().is_some_and(|m| names(m, account))
+        self.tx_json.to_value().is_ok_and(|tx| names(&tx, account))
+            || self
+                .meta
+                .as_ref()
+                .and_then(|m| serde_json::to_value(m).ok())
+                .is_some_and(|m| names(&m, account))
     }
 }
 

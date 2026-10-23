@@ -1,7 +1,8 @@
 {
  "method": "book_changes",
  "params": {
-  "ledger_index": 107831526
+  "ledger_index": 107831526,
+  "api_version": 2
  },
  "result": {
   "changes": [
@@ -42,6 +43,5 @@
   "status": "success",
   "type": "bookChanges",
   "validated": true
- },
- "trimmed": "changes cut to 3"
+ }
 }

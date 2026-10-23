@@ -30,8 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     mint.transfer_fee = Some(5000);
     mint.uri = Some(utils::str_to_hex("ipfs://bafy.../artwork.json"));
     let minted = send(&client, &artist, mint.to_json()?).await?;
-    let nft_id = utils::get_nftoken_id(minted.meta.as_ref().ok_or("no metadata")?)?
-        .ok_or("no NFT minted")?;
+    let nft_id =
+        utils::get_nftoken_id(minted.meta.as_ref().ok_or("no metadata")?).ok_or("no NFT minted")?;
     let parts = utils::parse_nftoken_id(&nft_id)?;
     println!(
         "  NFT {nft_id}\n    issuer {}, taxon {}, transfer fee {}%, serial {}",

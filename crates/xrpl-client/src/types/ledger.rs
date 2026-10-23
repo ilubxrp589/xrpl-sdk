@@ -1,7 +1,7 @@
 //! Responses of the ledger methods: `ledger`, `ledger_closed`,
 //! `ledger_current`, `ledger_data` and `ledger_entry`.
 
-use super::{count_as_string, LedgerObject};
+use super::LedgerObject;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -30,8 +30,8 @@ pub struct LedgerResult {
     pub validated: Option<bool>,
 }
 
-/// A ledger header. `rippled`'s API version 1 writes `ledger_index` and
-/// `total_coins` as strings; both versions are read.
+/// A ledger header, and the transactions or state asked for with it. With
+/// `binary: true` the header is hex (`ledger_data`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LedgerInfo {
@@ -59,13 +59,12 @@ pub struct LedgerInfo {
     /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
-    /// The ledger the answer is from.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "count_as_string"
-    )]
+    /// The ledger's index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// The header as hex (`binary: true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ledger_data: Option<String>,
     /// When the previous ledger closed (ledger time).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_close_time: Option<u64>,
@@ -78,10 +77,10 @@ pub struct LedgerInfo {
     /// The transaction tree's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transaction_hash: Option<String>,
-    /// The ledger's transactions (`transactions: true`): hashes, or with
-    /// `expand: true` the transactions with their metadata (`metaData`).
+    /// The ledger's transactions (`transactions: true`): their IDs, or with
+    /// `expand: true` the transactions with their metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub transactions: Option<Vec<Value>>,
+    pub transactions: Option<Vec<LedgerTx>>,
     /// The whole state (`full: true`, admin only).
     #[serde(
         rename = "accountState",
@@ -89,6 +88,18 @@ pub struct LedgerInfo {
         skip_serializing_if = "Option::is_none"
     )]
     pub account_state: Option<Vec<Value>>,
+}
+
+/// A transaction in a [`LedgerInfo`]: its ID, or (with `expand: true`) the
+/// transaction with its metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+#[non_exhaustive]
+pub enum LedgerTx {
+    /// The transaction's ID.
+    Hash(String),
+    /// The transaction with its metadata (`expand: true`).
+    Expanded(Box<super::TxResult>),
 }
 
 /// [`ledger_closed`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_closed):

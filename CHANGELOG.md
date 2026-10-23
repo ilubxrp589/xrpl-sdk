@@ -11,6 +11,45 @@ may break the API, and says so under "Changed (breaking)").
 below says how to update.
 
 ### Changed (breaking)
+- **`rippled`'s API version 2, and typed metadata.** Every request now
+  asks for API version 2 (`xrpl_client::API_VERSION`; a request whose
+  parameters name `api_version` keeps it), subscriptions too, and the
+  response types follow version 2 only. Every response type was checked
+  again against answers recorded in version 2 from `rippled` 3.4.1, Clio and
+  Testnet (`crates/xrpl-client/scripts/record_fixtures.py` re-records them).
+  What changes:
+  - **A transaction with its metadata is one type, `TxResult`**, whichever
+    method returns it: `tx`, `transaction_entry`, and each transaction of
+    `account_tx`, `nft_history` and an expanded `ledger`
+    (`LedgerInfo::transactions` is a list of `LedgerTx`: an ID, or the
+    transaction). The transaction is in `tx_json`, with `hash`,
+    `ledger_index`, `ledger_hash`, `close_time_iso`, `ctid` and `validated`
+    beside it (`tx_blob` and `meta_blob` with `binary: true`);
+    `TxResult::transaction()` reads it typed. *Update:*
+    `AccountTxEntry` and `TransactionEntryResult` → `TxResult`;
+    `tx.tx_fields["Sequence"]` → `tx.transaction()?.common()` (or
+    `tx.tx_json`); an `account_tx` entry's `tx` → `tx_json`; a binary
+    answer's `meta` → `meta_blob`. A Payment's amount is `DeliverMax` in
+    `tx_json` (version 2 writes no `Amount`); the typed models read either.
+  - **Metadata is typed: `TransactionMetadata`** (`transaction_result`,
+    `transaction_index`, `affected_nodes` as `CreatedNode` / `ModifiedNode`
+    / `DeletedNode`, `delivered_amount`, `nftoken_id`, `offer_id`,
+    `mpt_issuance_id`, `parent_batch_id`) in `TxResult`, `SimulateResult`
+    and transaction stream events. `utils::get_balance_changes`,
+    `utils::delivered_amount` and `utils::get_nftoken_id` take it (they took
+    JSON), and `get_nftoken_id` returns an `Option` (it cannot fail on typed
+    metadata). *Update:* `meta["TransactionResult"]` →
+    `meta.transaction_result`; for JSON you hold,
+    `serde_json::from_value::<TransactionMetadata>(json)?`.
+  - Transaction stream events: `TransactionEvent::transaction` →
+    `tx_json`, with `hash` beside it.
+  - `AccountInfo::signer_lists` is the only place signer lists are
+    (`AccountData` no longer has them); `LedgerInfo::ledger_index` is read
+    as a number; `ApiVersions` has `first` and `last` as numbers (no `good`);
+    `SubmitResult` has `hash` (where `submit_multisigned` writes it) and
+    `hash()` finds it either place.
+  - `ledger::verify_ledger_response` reads version 2's `meta_blob`, and
+    also checks each transaction against the `hash` written beside it.
 - **One `Asset` type.** `xrpl_core::types::Asset` (`Xrp`, `Token { currency,
   issuer }`, `Mpt { issuance_id }`), checked when built
   (`Asset::token("USD", issuer)?`, `Asset::mpt(id)?`), written as

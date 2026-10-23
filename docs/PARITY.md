@@ -221,11 +221,13 @@ refused without the sequence).
   fewest-field and most-field sample of each of 15 types) parse into their
   typed variant and serialize back to exactly `rippled`'s JSON.
 - **Responses.** Every typed response is checked against a response recorded
-  from a real server: 44 methods from `rippled` 3.4.1 on mainnet, and Clio
-  (`s2.ripple.com`) for the Clio-only methods. Each must parse into its
+  from a real server in `rippled`'s API version 2 (the version every request
+  asks for): 44 methods from `rippled` 3.4.1 on mainnet, and Clio
+  (`s2.ripple.com`) for the Clio-only methods, re-recorded with
+  `crates/xrpl-client/scripts/record_fixtures.py`. Each must parse into its
   request's response type and serialize back with every field the server
   sent. A field the types do not model fails the test instead of vanishing.
-- **Streams.** 9 recorded stream messages (ledger, transactions, proposed
+- **Streams.** 9 recorded stream kinds, API version 2 (ledger, transactions, proposed
   transactions, validations, book changes, order books, server, peer status,
   consensus) each become their own typed event and keep every field.
 
@@ -346,8 +348,6 @@ The rest are places this report makes no claim.
   precision.
 - **Server-side computation.** Path finding, fee escalation and consensus are
   answered by the server, not computed by the SDK.
-- **API version 2.** Responses are typed for `rippled`'s API version 1, the
-  default when a request names none.
 - **XRP above 10^17 drops (deliberate difference).** `rippled`'s JSON parser refuses XRP amounts
   above the total supply. The codec writes them, up to 2^61 - 1 drops,
   because mainnet ledger entries hold such amounts (an offer asking ten times

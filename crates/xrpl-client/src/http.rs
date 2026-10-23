@@ -355,7 +355,7 @@ impl Transport for XrplHttpClient {
         Box::pin(async move {
             let body = json!({
                 "method": method,
-                "params": [params]
+                "params": [crate::client::with_api_version(params)]
             });
             let mut attempt = 0;
             loop {
@@ -498,8 +498,9 @@ mod tests {
             "account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
             "transactions": [
                 {
-                    "tx": {"TransactionType": "Payment", "Amount": "1000000"},
-                    "meta": {"TransactionResult": "tesSUCCESS"},
+                    "tx_json": {"TransactionType": "Payment", "DeliverMax": "1000000"},
+                    "hash": "2E16765077A9A061C449CE91FE7C909A7B85DC98AA8ED1EE7FFBA1D7A11A5D7D",
+                    "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": []},
                     "validated": true
                 }
             ],

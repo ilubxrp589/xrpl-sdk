@@ -31,10 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let opened = send(&client, &alice, open.to_json()?).await?;
     let sequence = opened
-        .tx_fields
-        .get("Sequence")
-        .and_then(|s| s.as_u64())
-        .and_then(|s| u32::try_from(s).ok())
+        .transaction()?
+        .common()
+        .and_then(|c| c.sequence)
         .ok_or("no Sequence")?;
     let channel =
         keylet::payment_channel(alice.classic_address(), bob.classic_address(), sequence)?

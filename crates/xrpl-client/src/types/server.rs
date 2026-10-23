@@ -558,16 +558,14 @@ pub struct VersionResult {
     pub version: ApiVersions,
 }
 
-/// Lowest, default and highest API versions.
+/// The lowest and highest API versions the server takes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ApiVersions {
     /// The lowest supported API version.
-    pub first: String,
-    /// The default API version.
-    pub good: String,
+    pub first: u32,
     /// The highest supported API version.
-    pub last: String,
+    pub last: u32,
 }
 
 /// [`ping`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/utility-methods/ping):

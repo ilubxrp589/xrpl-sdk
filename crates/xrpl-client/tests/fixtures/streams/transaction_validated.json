@@ -1,31 +1,63 @@
 [
  {
-  "close_time_iso": "2026-10-22T18:09:30Z",
-  "ctid": "C66D644A00000000",
+  "close_time_iso": "2026-10-23T19:58:01Z",
+  "ctid": "C66DC0DB00000000",
   "engine_result": "tesSUCCESS",
   "engine_result_code": 0,
   "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
-  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
-  "ledger_index": 107832394,
+  "hash": "E17E9EB903392000BC727251524391893D147E280B64F02EE0B5B9CFE7968CDA",
+  "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+  "ledger_index": 107856091,
   "meta": {
    "AffectedNodes": [
     {
      "ModifiedNode": {
       "FinalFields": {
-       "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-       "Balance": "1383980",
        "Flags": 0,
-       "OwnerCount": 2,
-       "Sequence": 104759906
+       "IndexNext": "bf",
+       "IndexPrevious": "bc",
+       "Owner": "rPmpinCBzWpRwDeWScDwAXpjThVg7Yx8tx",
+       "RootIndex": "28550E761ACF6121E3A1156CEA518B0168539A9CD60097A13DCAB4EF3759AF30"
+      },
+      "LedgerEntryType": "DirectoryNode",
+      "LedgerIndex": "C593D7546E53DE20ED9C4D8FCD0358F30F30FC4959AA138E59CAA8A18B91FC32",
+      "PreviousTxnID": "B14411EF30A5BB6875E799D07B1EE0078C21EBAD35EC3AD8A25E54C5956A92D8",
+      "PreviousTxnLgrSeq": 107856084
+     }
+    },
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Account": "rPmpinCBzWpRwDeWScDwAXpjThVg7Yx8tx",
+       "Balance": "130739810",
+       "Flags": 0,
+       "OwnerCount": 17,
+       "Sequence": 107588949,
+       "TicketCount": 17
       },
       "LedgerEntryType": "AccountRoot",
-      "LedgerIndex": "09548AC129EDF27071DF661A21146296C4164C75FED3553B277A576DEEE00EDE",
+      "LedgerIndex": "D88826871A5501A89EEDDA03B69B3CA2A0AD43A4C8251FFB694E72BC78D94BA4",
       "PreviousFields": {
-       "Balance": "1384040",
-       "Sequence": 104759905
+       "Balance": "130739870",
+       "OwnerCount": 18,
+       "TicketCount": 18
       },
-      "PreviousTxnID": "9B1E762F59E2F9CEF6C072077248CB7F5E8F24B31CC29202E1A1CD4FFF4C39EE",
-      "PreviousTxnLgrSeq": 107832333
+      "PreviousTxnID": "FEF03C64CF691054AECA2315B61B530CE465897757ED96752C385E75C1C30C5A",
+      "PreviousTxnLgrSeq": 107856084
+     }
+    },
+    {
+     "DeletedNode": {
+      "FinalFields": {
+       "Account": "rPmpinCBzWpRwDeWScDwAXpjThVg7Yx8tx",
+       "Flags": 0,
+       "OwnerNode": "be",
+       "PreviousTxnID": "0EBA743C4B86721F8D263577D00483373770BCFD897E95A8021ED0423E23FBD5",
+       "PreviousTxnLgrSeq": 107855961,
+       "TicketSequence": 107588911
+      },
+      "LedgerEntryType": "Ticket",
+      "LedgerIndex": "E0CD608539B3FB7660FC27987EDB6A95F34AA047E137566683659C3243D2E8F8"
      }
     }
    ],
@@ -33,340 +65,384 @@
    "TransactionResult": "tesSUCCESS"
   },
   "status": "closed",
-  "transaction": {
-   "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
+  "tx_json": {
+   "Account": "rPmpinCBzWpRwDeWScDwAXpjThVg7Yx8tx",
    "Fee": "60",
    "Flags": 65536,
-   "LastLedgerSequence": 107832394,
+   "LastLedgerSequence": 107856091,
    "RawTransactions": [
     {
      "RawTransaction": {
-      "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-      "Amount": "921724034",
-      "CheckID": "16E2FCF7B79F96354BA83EFFDC84C5533B704C4324AB6CDB5BBC04BF6B39EAAC",
-      "Fee": "0",
-      "Flags": 1073741824,
-      "LastLedgerSequence": 107832394,
-      "Sequence": 104759906,
-      "SigningPubKey": "",
-      "TransactionType": "CheckCash"
-     }
-    },
-    {
-     "RawTransaction": {
-      "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
+      "Account": "rPmpinCBzWpRwDeWScDwAXpjThVg7Yx8tx",
       "Fee": "0",
       "Flags": 1074003968,
-      "LastLedgerSequence": 107832394,
-      "Sequence": 104759907,
+      "Sequence": 0,
       "SigningPubKey": "",
-      "TakerGets": "7999997",
+      "TakerGets": "15769774",
       "TakerPays": {
-       "currency": "4A55474753000000000000000000000000000000",
-       "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-       "value": "43844750.373105"
+       "currency": "5741525000000000000000000000000000000000",
+       "issuer": "rhuQ5tKUHG77J5ovRN4GVSwZJT5SDTZZCD",
+       "value": "568214401.35146"
       },
+      "TicketSequence": 107588907,
       "TransactionType": "OfferCreate"
      }
     },
     {
      "RawTransaction": {
-      "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-      "Expiration": 846007795,
+      "Account": "rPmpinCBzWpRwDeWScDwAXpjThVg7Yx8tx",
       "Fee": "0",
-      "Flags": 1074266112,
-      "LastLedgerSequence": 107832394,
-      "Sequence": 104759908,
+      "Flags": 1073807360,
+      "Sequence": 0,
       "SigningPubKey": "",
       "TakerGets": {
-       "currency": "4A55474753000000000000000000000000000000",
-       "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-       "value": "43844750.373105"
+       "currency": "5741525000000000000000000000000000000000",
+       "issuer": "rhuQ5tKUHG77J5ovRN4GVSwZJT5SDTZZCD",
+       "value": "568214401.35146"
       },
-      "TakerPays": "8151402",
+      "TakerPays": "16731115",
+      "TicketSequence": 107588908,
       "TransactionType": "OfferCreate"
      }
     }
    ],
-   "Sequence": 104759905,
-   "SigningPubKey": "ED4BEE94797EADA98457CA2001365B2D7C8770EF500E8F7617453CF3AE16E93503",
+   "Sequence": 0,
+   "SigningPubKey": "ED03E48421DB8E533AD13B108840DB3B7CDBC664E36F93DE8D885E1B9D7ACB53B3",
+   "TicketSequence": 107588911,
    "TransactionType": "Batch",
-   "TxnSignature": "78F8D5040445368BB705BBAD0CBE3977E5C02660FF929C850D86D81F685EAC51E29B173457CFAF58407E4130EE3C6D58A77AA7C07C2C1CE9057E7A1081499D0C",
-   "date": 846007770,
-   "hash": "FADDCEA369BBEAC37D3C87FFB1B9E2960E165B9C4E6B8CAA471A173CE981CF63"
+   "TxnSignature": "AC5FDB30DE7C70865C2004989102564D1991C64C9984A9F492B56F5700ACFC21C339CDAEE628FAA9C7DDEBFE0AF254AEDCD05B846220EE0A8408D400AA5B090B",
+   "date": 846100681
   },
   "type": "transaction",
   "validated": true
  },
  {
-  "close_time_iso": "2026-10-22T18:09:30Z",
-  "ctid": "C66D644A00000000",
+  "close_time_iso": "2026-10-23T19:58:01Z",
+  "ctid": "C66DC0DB00010000",
   "engine_result": "tesSUCCESS",
   "engine_result_code": 0,
   "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
-  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
-  "ledger_index": 107832394,
+  "hash": "F3D1E50134F6F6E6514DF6CBC302B2D1C581593725EA96CD38EC60C0D1AF8346",
+  "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+  "ledger_index": 107856091,
   "meta": {
    "AffectedNodes": [
     {
      "ModifiedNode": {
       "FinalFields": {
-       "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-       "Balance": "1383980",
+       "Account": "rPiPjqQ69jL1BxadvoYu1oABXANC5RPdAV",
+       "Balance": "2116825",
        "Flags": 0,
-       "OwnerCount": 2,
-       "Sequence": 104759906
+       "OwnerCount": 0,
+       "Sequence": 104065778
       },
       "LedgerEntryType": "AccountRoot",
-      "LedgerIndex": "09548AC129EDF27071DF661A21146296C4164C75FED3553B277A576DEEE00EDE",
+      "LedgerIndex": "884CEF2B8AC3453ADE377E9839D3CF6EF5D32A0C238EA5EFBE39C40B667DCB42",
       "PreviousFields": {
-       "Balance": "1384040",
-       "Sequence": 104759905
+       "Balance": "2116948",
+       "Sequence": 104065777
       },
-      "PreviousTxnID": "9B1E762F59E2F9CEF6C072077248CB7F5E8F24B31CC29202E1A1CD4FFF4C39EE",
-      "PreviousTxnLgrSeq": 107832333
+      "PreviousTxnID": "2028CF2D4D2E0478FF37DD27600585B33DA159E5898B48F126E763857E257508",
+      "PreviousTxnLgrSeq": 107856090
+     }
+    },
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Account": "rw2sdn591tJDyeabYE7am5tFSeyfpZNAhJ",
+       "Balance": "28208640",
+       "Flags": 0,
+       "OwnerCount": 4,
+       "Sequence": 67547740
+      },
+      "LedgerEntryType": "AccountRoot",
+      "LedgerIndex": "9636CB0F208CA2080E766EA1735690C58A959FF9B722C45ACC67BA30F57E0DC5",
+      "PreviousFields": {
+       "Balance": "28208542"
+      },
+      "PreviousTxnID": "353383829986DD74335B035E91CF16149B66AF2ADA57939009D9560AE664AA21",
+      "PreviousTxnLgrSeq": 107848774
      }
     }
    ],
-   "TransactionIndex": 0,
+   "TransactionIndex": 1,
+   "TransactionResult": "tesSUCCESS",
+   "delivered_amount": "98"
+  },
+  "status": "closed",
+  "tx_json": {
+   "Account": "rPiPjqQ69jL1BxadvoYu1oABXANC5RPdAV",
+   "DeliverMax": "98",
+   "Destination": "rw2sdn591tJDyeabYE7am5tFSeyfpZNAhJ",
+   "Fee": "25",
+   "Flags": 0,
+   "LastLedgerSequence": 107856328,
+   "Memos": [
+    {
+     "Memo": {
+      "MemoData": "54686973205852502064726F70206973206120726573756C74206F6620796F757220504C5220686F6C64696E67732070726F706F7274696F6E61746520746F20746F74616C20737570706C792C2063616C63756C617465642061732070726F6365656473206F6620343525206F6620616E6E75616C2031322C3030302C30303020504C5220737570706C7920696E63726561736520646973747269627574656420746F20616C6C20504C5220686F6C646572732077686572652044726F70733E46656573206F6E20616E20686F75726C792C206461696C792C207765656B6C792C206F72206D6F6E74686C792062617369732E20466F72206D6F726520696E666F726D6174696F6E2076697369742068747470733A2F2F787270696C6C6172732E636F6D2F"
+     }
+    }
+   ],
+   "Sequence": 104065777,
+   "SigningPubKey": "EDDAC3D17494E86FC9172AE012077C5E47F451B506B65CFC63CFF91BA9BE70F383",
+   "TransactionType": "Payment",
+   "TxnSignature": "58DFD6CEC55059508D7999363A93FF7EB5ECF9B140BF254A463B6F2C0CEC7205815553469BB1D8F958513C04C6C61B5E5BD7542393892E10F5FB1E271F629E01",
+   "date": 846100681
+  },
+  "type": "transaction",
+  "validated": true
+ },
+ {
+  "close_time_iso": "2026-10-23T19:58:01Z",
+  "ctid": "C66DC0DB00160000",
+  "engine_result": "tesSUCCESS",
+  "engine_result_code": 0,
+  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
+  "hash": "7A4D2C92EC9EA9744EC818A2AAB08C085452FED13556FDF5B71D56C886A23503",
+  "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+  "ledger_index": 107856091,
+  "meta": {
+   "AffectedNodes": [
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "AMMID": "54C8D9C13CE6A3645477F51D510B3CF9EDDA054E5E814DD111A003EAFCCA02E4",
+       "Account": "rMvncHHkGcCPjt1HZWHAYBVbm3fwP8enWq",
+       "Balance": "5859749678",
+       "Flags": 26214400,
+       "OwnerCount": 1,
+       "Sequence": 101277123
+      },
+      "LedgerEntryType": "AccountRoot",
+      "LedgerIndex": "1838DC44FDBC9BBB82E5ACF0A318AD2E90F85D9ED28C7E07FB583F95AF308BF7",
+      "PreviousFields": {
+       "Balance": "5809749678"
+      },
+      "PreviousTxnID": "34FF38B8B99E725BF7F83E2FA260DCEDBFCA01FCFE771950AB34AEEEA1238BA4",
+      "PreviousTxnLgrSeq": 107856090
+     }
+    },
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Account": "rP9CDJq4mzZRVgky2EKdt7CEeZ9KijBqCg",
+       "Balance": "677680179",
+       "Flags": 0,
+       "OwnerCount": 15,
+       "Sequence": 97908853
+      },
+      "LedgerEntryType": "AccountRoot",
+      "LedgerIndex": "A5CE8EF3232216093FDE86AACA9C52C048D5BAEF7307F45817CE0483AC046987",
+      "PreviousFields": {
+       "Balance": "727680279",
+       "Sequence": 97908852
+      },
+      "PreviousTxnID": "77F05912FBF0C9839F01844E30CA44F8876F343930B36DEA467993E3BC0C767A",
+      "PreviousTxnLgrSeq": 107856090
+     }
+    },
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Balance": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "-68391167.74854509"
+       },
+       "Flags": 17170432,
+       "HighLimit": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rMvncHHkGcCPjt1HZWHAYBVbm3fwP8enWq",
+        "value": "0"
+       },
+       "HighNode": "0",
+       "LowLimit": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rU5wZyCbZ2WhT51SLDV12vUHtcsqJn9631",
+        "value": "0"
+       },
+       "LowNode": "2"
+      },
+      "LedgerEntryType": "RippleState",
+      "LedgerIndex": "A7E11291AE7D788F749353F67F7530919F6E23E999C6A07FF18DBA65C587D0C2",
+      "PreviousFields": {
+       "Balance": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "-68973906.79320245"
+       }
+      },
+      "PreviousTxnID": "34FF38B8B99E725BF7F83E2FA260DCEDBFCA01FCFE771950AB34AEEEA1238BA4",
+      "PreviousTxnLgrSeq": 107856090
+     }
+    },
+    {
+     "ModifiedNode": {
+      "FinalFields": {
+       "Balance": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "-1778082.86745186"
+       },
+       "Flags": 131072,
+       "HighLimit": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rP9CDJq4mzZRVgky2EKdt7CEeZ9KijBqCg",
+        "value": "100000000"
+       },
+       "HighNode": "4",
+       "LowLimit": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rU5wZyCbZ2WhT51SLDV12vUHtcsqJn9631",
+        "value": "0"
+       },
+       "LowNode": "59"
+      },
+      "LedgerEntryType": "RippleState",
+      "LedgerIndex": "C6702264F88D2A55D74B5EB56EAB067D44EE80E3DCCAFA2B4F72A44587958D5A",
+      "PreviousFields": {
+       "Balance": {
+        "currency": "4849594F00000000000000000000000000000000",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "-1195343.8227945"
+       }
+      },
+      "PreviousTxnID": "56676E52DDA1B858ABCBA426E0620E6A5EC4FAE7E2A2900C9F51EB881DECE9A8",
+      "PreviousTxnLgrSeq": 107856088
+     }
+    }
+   ],
+   "TransactionIndex": 22,
    "TransactionResult": "tesSUCCESS"
   },
   "status": "closed",
-  "transaction": {
-   "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-   "Fee": "60",
-   "Flags": 65536,
-   "LastLedgerSequence": 107832394,
-   "RawTransactions": [
-    {
-     "RawTransaction": {
-      "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-      "Amount": "921724034",
-      "CheckID": "16E2FCF7B79F96354BA83EFFDC84C5533B704C4324AB6CDB5BBC04BF6B39EAAC",
-      "Fee": "0",
-      "Flags": 1073741824,
-      "LastLedgerSequence": 107832394,
-      "Sequence": 104759906,
-      "SigningPubKey": "",
-      "TransactionType": "CheckCash"
-     }
-    },
-    {
-     "RawTransaction": {
-      "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-      "Fee": "0",
-      "Flags": 1074003968,
-      "LastLedgerSequence": 107832394,
-      "Sequence": 104759907,
-      "SigningPubKey": "",
-      "TakerGets": "7999997",
-      "TakerPays": {
-       "currency": "4A55474753000000000000000000000000000000",
-       "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-       "value": "43844750.373105"
-      },
-      "TransactionType": "OfferCreate"
-     }
-    },
-    {
-     "RawTransaction": {
-      "Account": "rhwyLW26kiGih9PLwk87sUkgtjSpDEe5VT",
-      "Expiration": 846007795,
-      "Fee": "0",
-      "Flags": 1074266112,
-      "LastLedgerSequence": 107832394,
-      "Sequence": 104759908,
-      "SigningPubKey": "",
-      "TakerGets": {
-       "currency": "4A55474753000000000000000000000000000000",
-       "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-       "value": "43844750.373105"
-      },
-      "TakerPays": "8151402",
-      "TransactionType": "OfferCreate"
-     }
-    }
-   ],
-   "Sequence": 104759905,
-   "SigningPubKey": "ED4BEE94797EADA98457CA2001365B2D7C8770EF500E8F7617453CF3AE16E93503",
-   "TransactionType": "Batch",
-   "TxnSignature": "78F8D5040445368BB705BBAD0CBE3977E5C02660FF929C850D86D81F685EAC51E29B173457CFAF58407E4130EE3C6D58A77AA7C07C2C1CE9057E7A1081499D0C",
-   "date": 846007770,
-   "hash": "FADDCEA369BBEAC37D3C87FFB1B9E2960E165B9C4E6B8CAA471A173CE981CF63"
+  "tx_json": {
+   "Account": "rP9CDJq4mzZRVgky2EKdt7CEeZ9KijBqCg",
+   "Fee": "100",
+   "Flags": 786432,
+   "Sequence": 97908852,
+   "SigningPubKey": "033ACA51A474E63262042B13996C25F19A5E72A954EE3C870587470CA51478EAD7",
+   "TakerGets": "50000000",
+   "TakerPays": {
+    "currency": "4849594F00000000000000000000000000000000",
+    "issuer": "rU5wZyCbZ2WhT51SLDV12vUHtcsqJn9631",
+    "value": "580624.891291805"
+   },
+   "TransactionType": "OfferCreate",
+   "TxnSignature": "3044022077EEECF7BCF04D953855B89263DA0022B12F52CD700A96CA470B92A51FCD5A3F02203B582E87642722663D5A54EE3846D6C303F36780D6142D71855D58BD1DF745B2",
+   "date": 846100681,
+   "owner_funds": "673680079"
   },
   "type": "transaction",
   "validated": true
  },
  {
-  "close_time_iso": "2026-10-22T18:09:30Z",
-  "ctid": "C66D644A00010000",
-  "engine_result": "tecKILLED",
-  "engine_result_code": 150,
-  "engine_result_message": "No funds transferred and no offer created.",
-  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
-  "ledger_index": 107832394,
+  "close_time_iso": "2026-10-23T19:58:01Z",
+  "ctid": "C66DC0DB002F0000",
+  "engine_result": "tesSUCCESS",
+  "engine_result_code": 0,
+  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
+  "hash": "450B84158C6B639613C24F2CD58939EA16B79F8362F37F42A1D3883BB8BD5351",
+  "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+  "ledger_index": 107856091,
   "meta": {
    "AffectedNodes": [
     {
+     "CreatedNode": {
+      "LedgerEntryType": "DirectoryNode",
+      "LedgerIndex": "499C0A78FBEEDA46030D4E94B495FE17B56031241D236A4BA10EB0350042E376",
+      "NewFields": {
+       "Flags": 1,
+       "NFTokenID": "00081F40BC4233D8EB5A164C4DEA95ACA40EF323FE4D517B0299FA8105D62AE6",
+       "RootIndex": "499C0A78FBEEDA46030D4E94B495FE17B56031241D236A4BA10EB0350042E376"
+      }
+     }
+    },
+    {
+     "ModifiedNode": {
+      "LedgerEntryType": "AccountRoot",
+      "LedgerIndex": "587E28972F3B63D2260C0671E59593EE6C4D27AB857D1AF230F5CAA959BB3EAC",
+      "PreviousTxnID": "F8B1A353D08728C49A9C337451BA427660E357901C298F5D739EF6BA22A5F732",
+      "PreviousTxnLgrSeq": 107856090
+     }
+    },
+    {
+     "CreatedNode": {
+      "LedgerEntryType": "NFTokenOffer",
+      "LedgerIndex": "8E3E122E0C6D694EDC0131C885475DB8F43648A44DF155708CF2C54C9346F8A0",
+      "NewFields": {
+       "Amount": "5140000",
+       "Destination": "rpx9JThQ2y37FaGeeJP7PXDUVEXY3PHZSC",
+       "Expiration": 846187075,
+       "NFTokenID": "00081F40BC4233D8EB5A164C4DEA95ACA40EF323FE4D517B0299FA8105D62AE6",
+       "Owner": "rL54Fz2L8g45Db8kj1nLUatmuMrnXJjHmd",
+       "OwnerNode": "3db1"
+      }
+     }
+    },
+    {
      "ModifiedNode": {
       "FinalFields": {
        "Flags": 0,
-       "IndexNext": "0",
-       "IndexPrevious": "0",
-       "Owner": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-       "RootIndex": "9CE3C9EB332EDF261C62DFA85635DC92852F370B26397020A30F93D64D103E9C"
+       "IndexPrevious": "3db0",
+       "Owner": "rL54Fz2L8g45Db8kj1nLUatmuMrnXJjHmd",
+       "RootIndex": "370303693FB89E46BDB63B0EA040599EEC4714AF0E4D68757B248948B96EC390"
       },
       "LedgerEntryType": "DirectoryNode",
-      "LedgerIndex": "198E1E0323F865DB501F8FFB744809AF3333E6B5D75B4BD8942340EF7F3740BC",
-      "PreviousTxnID": "F5EA288686804D38412E4A259C62FA239632C18682C1003627BA057AB0F185EB",
-      "PreviousTxnLgrSeq": 107832387
+      "LedgerIndex": "91015F592D9D8D0BEA6C5C7120F6E65F17D4765D9C683610569F577681D32211",
+      "PreviousTxnID": "6F066756530C4EDA3C29EC408EAAB0729642FB3AE33F516E379D57FC0C80EF28",
+      "PreviousTxnLgrSeq": 107856087
      }
     },
     {
      "ModifiedNode": {
       "FinalFields": {
-       "Account": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-       "Balance": "13983869",
+       "Account": "rL54Fz2L8g45Db8kj1nLUatmuMrnXJjHmd",
+       "Balance": "913819491",
        "Flags": 0,
-       "OwnerCount": 29,
-       "Sequence": 104297379,
-       "TicketCount": 29
+       "OwnerCount": 2660,
+       "Sequence": 102756814
       },
       "LedgerEntryType": "AccountRoot",
-      "LedgerIndex": "648F878026B385EE546DE24CA1B5F4775F87603BCCCBD9AA8E4E9C605E265671",
+      "LedgerIndex": "A949210A9BB1D3B4A99AD337968750F5CC5C256498D67AA9670C26FE9546EFF3",
       "PreviousFields": {
-       "Balance": "13983879",
-       "OwnerCount": 30,
-       "TicketCount": 30
+       "Balance": "913819504",
+       "OwnerCount": 2659,
+       "Sequence": 102756813
       },
-      "PreviousTxnID": "F5EA288686804D38412E4A259C62FA239632C18682C1003627BA057AB0F185EB",
-      "PreviousTxnLgrSeq": 107832387
-     }
-    },
-    {
-     "DeletedNode": {
-      "FinalFields": {
-       "Account": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-       "Flags": 0,
-       "OwnerNode": "7",
-       "PreviousTxnID": "18BF9DF12FE852F5151AFC299B3E1BEAD65A3793C535FB7A93CE81132379715D",
-       "PreviousTxnLgrSeq": 107832244,
-       "TicketSequence": 104297329
-      },
-      "LedgerEntryType": "Ticket",
-      "LedgerIndex": "D040E3778F8BC0A04934C4D425C14AD2ADC39A720D8C6952859802C313948C3B"
+      "PreviousTxnID": "6F066756530C4EDA3C29EC408EAAB0729642FB3AE33F516E379D57FC0C80EF28",
+      "PreviousTxnLgrSeq": 107856087
      }
     }
    ],
-   "TransactionIndex": 1,
-   "TransactionResult": "tecKILLED"
+   "TransactionIndex": 47,
+   "TransactionResult": "tesSUCCESS",
+   "offer_id": "8E3E122E0C6D694EDC0131C885475DB8F43648A44DF155708CF2C54C9346F8A0"
   },
   "status": "closed",
-  "transaction": {
-   "Account": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-   "Fee": "10",
-   "Flags": 262144,
-   "Sequence": 0,
-   "SigningPubKey": "ED1A4300E75DC81431ED9E6D311E81D06DF84825B7640B12E0A63E56577D734BBA",
-   "TakerGets": "5419921",
-   "TakerPays": {
-    "currency": "4A55474753000000000000000000000000000000",
-    "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-    "value": "29877775.2825545"
-   },
-   "TicketSequence": 104297329,
-   "TransactionType": "OfferCreate",
-   "TxnSignature": "30A3B2825AAB5FC67EFE186EE32DBF21F864F88A6BB3EED0A9751C824A3AF882975F5E338FA00771AFE557956D1210AAB8EA089E5F3BEDB85512D4F53266D30D",
-   "date": 846007770,
-   "hash": "1F931D11FA3697DF677C5C0F15860EF551B4F750F5DB8A321F92301C4CD69402",
-   "owner_funds": "7383839"
-  },
-  "type": "transaction",
-  "validated": true
- },
- {
-  "close_time_iso": "2026-10-22T18:09:30Z",
-  "ctid": "C66D644A00010000",
-  "engine_result": "tecKILLED",
-  "engine_result_code": 150,
-  "engine_result_message": "No funds transferred and no offer created.",
-  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
-  "ledger_index": 107832394,
-  "meta": {
-   "AffectedNodes": [
+  "tx_json": {
+   "Account": "rL54Fz2L8g45Db8kj1nLUatmuMrnXJjHmd",
+   "Amount": "5140000",
+   "Destination": "rpx9JThQ2y37FaGeeJP7PXDUVEXY3PHZSC",
+   "Expiration": 846187075,
+   "Fee": "13",
+   "LastLedgerSequence": 107856103,
+   "Memos": [
     {
-     "ModifiedNode": {
-      "FinalFields": {
-       "Flags": 0,
-       "IndexNext": "0",
-       "IndexPrevious": "0",
-       "Owner": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-       "RootIndex": "9CE3C9EB332EDF261C62DFA85635DC92852F370B26397020A30F93D64D103E9C"
-      },
-      "LedgerEntryType": "DirectoryNode",
-      "LedgerIndex": "198E1E0323F865DB501F8FFB744809AF3333E6B5D75B4BD8942340EF7F3740BC",
-      "PreviousTxnID": "F5EA288686804D38412E4A259C62FA239632C18682C1003627BA057AB0F185EB",
-      "PreviousTxnLgrSeq": 107832387
-     }
-    },
-    {
-     "ModifiedNode": {
-      "FinalFields": {
-       "Account": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-       "Balance": "13983869",
-       "Flags": 0,
-       "OwnerCount": 29,
-       "Sequence": 104297379,
-       "TicketCount": 29
-      },
-      "LedgerEntryType": "AccountRoot",
-      "LedgerIndex": "648F878026B385EE546DE24CA1B5F4775F87603BCCCBD9AA8E4E9C605E265671",
-      "PreviousFields": {
-       "Balance": "13983879",
-       "OwnerCount": 30,
-       "TicketCount": 30
-      },
-      "PreviousTxnID": "F5EA288686804D38412E4A259C62FA239632C18682C1003627BA057AB0F185EB",
-      "PreviousTxnLgrSeq": 107832387
-     }
-    },
-    {
-     "DeletedNode": {
-      "FinalFields": {
-       "Account": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-       "Flags": 0,
-       "OwnerNode": "7",
-       "PreviousTxnID": "18BF9DF12FE852F5151AFC299B3E1BEAD65A3793C535FB7A93CE81132379715D",
-       "PreviousTxnLgrSeq": 107832244,
-       "TicketSequence": 104297329
-      },
-      "LedgerEntryType": "Ticket",
-      "LedgerIndex": "D040E3778F8BC0A04934C4D425C14AD2ADC39A720D8C6952859802C313948C3B"
+     "Memo": {
+      "MemoData": "427579206F66666572206279207872702E63616665"
      }
     }
    ],
-   "TransactionIndex": 1,
-   "TransactionResult": "tecKILLED"
-  },
-  "status": "closed",
-  "transaction": {
-   "Account": "rhDryH4Ertir4KTb1Uey5n4upxN1jfwMUX",
-   "Fee": "10",
-   "Flags": 262144,
-   "Sequence": 0,
-   "SigningPubKey": "ED1A4300E75DC81431ED9E6D311E81D06DF84825B7640B12E0A63E56577D734BBA",
-   "TakerGets": "5419921",
-   "TakerPays": {
-    "currency": "4A55474753000000000000000000000000000000",
-    "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-    "value": "29877775.2825545"
-   },
-   "TicketSequence": 104297329,
-   "TransactionType": "OfferCreate",
-   "TxnSignature": "30A3B2825AAB5FC67EFE186EE32DBF21F864F88A6BB3EED0A9751C824A3AF882975F5E338FA00771AFE557956D1210AAB8EA089E5F3BEDB85512D4F53266D30D",
-   "date": 846007770,
-   "hash": "1F931D11FA3697DF677C5C0F15860EF551B4F750F5DB8A321F92301C4CD69402",
-   "owner_funds": "7383839"
+   "NFTokenID": "00081F40BC4233D8EB5A164C4DEA95ACA40EF323FE4D517B0299FA8105D62AE6",
+   "Owner": "rDArd9XAXyJuZt4LK4NxGaFciCEXVnTjmW",
+   "Sequence": 102756813,
+   "SigningPubKey": "EDD5EB356D1EAA93140E3F2882C40E9852EEE3EEC70D43461DCDAC27D3A7608771",
+   "SourceTag": 101102979,
+   "TransactionType": "NFTokenCreateOffer",
+   "TxnSignature": "01735D66ADED090847E4824198074111B030DF8DA9B027BF78D5FD74CD0D0C96D9CB72B0C2988C7AAB5BAAA4658421BE4C08EB0D341406EC201F77F7EE102705",
+   "date": 846100681
   },
   "type": "transaction",
   "validated": true

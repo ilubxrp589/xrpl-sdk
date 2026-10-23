@@ -1,34 +1,14 @@
 {
  "method": "tx",
  "params": {
-  "transaction": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F"
+  "transaction": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F",
+  "api_version": 2
  },
  "result": {
-  "Account": "rMsXVzCug7nUsMYFGPXBTWY732fRZqxgfY",
-  "Expiration": 846089794,
-  "Fee": "5061",
-  "Flags": 65536,
-  "LastLedgerSequence": 107831537,
-  "OfferSequence": 90348027,
-  "Sequence": 0,
-  "SigningPubKey": "ED2639E0869A74D7F5FEC402C343FABB29BF58754926DFFDA2C1338F9CFF8C85F7",
-  "TakerGets": {
-   "currency": "524C555344000000000000000000000000000000",
-   "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
-   "value": "1903.75295"
-  },
-  "TakerPays": {
-   "currency": "BTC",
-   "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
-   "value": "0.02355"
-  },
-  "TicketSequence": 90348020,
-  "TransactionType": "OfferCreate",
-  "TxnSignature": "C2A8E3CAA20B743AA33AF9886C585B290AE2070EE9EA0B9061425EB5A38A9185DF333F6C5C680CE3B3F99D216044C8FEED456DE398047863BC9A6D2993082202",
+  "close_time_iso": "2026-10-22T17:11:41Z",
   "ctid": "C66D60E0000B0000",
-  "date": 846004301,
   "hash": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F",
-  "inLedger": 107831520,
+  "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
   "ledger_index": 107831520,
   "meta": {
    "AffectedNodes": [
@@ -183,6 +163,31 @@
    "TransactionResult": "tesSUCCESS"
   },
   "status": "success",
+  "tx_json": {
+   "Account": "rMsXVzCug7nUsMYFGPXBTWY732fRZqxgfY",
+   "Expiration": 846089794,
+   "Fee": "5061",
+   "Flags": 65536,
+   "LastLedgerSequence": 107831537,
+   "OfferSequence": 90348027,
+   "Sequence": 0,
+   "SigningPubKey": "ED2639E0869A74D7F5FEC402C343FABB29BF58754926DFFDA2C1338F9CFF8C85F7",
+   "TakerGets": {
+    "currency": "524C555344000000000000000000000000000000",
+    "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+    "value": "1903.75295"
+   },
+   "TakerPays": {
+    "currency": "BTC",
+    "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+    "value": "0.02355"
+   },
+   "TicketSequence": 90348020,
+   "TransactionType": "OfferCreate",
+   "TxnSignature": "C2A8E3CAA20B743AA33AF9886C585B290AE2070EE9EA0B9061425EB5A38A9185DF333F6C5C680CE3B3F99D216044C8FEED456DE398047863BC9A6D2993082202",
+   "date": 846004301,
+   "ledger_index": 107831520
+  },
   "validated": true
  }
 }

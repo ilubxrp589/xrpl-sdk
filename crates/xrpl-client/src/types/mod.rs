@@ -4,8 +4,9 @@
 //! Every response type here is checked against a response recorded from
 //! `rippled` 3.4.1 (or Clio): it must parse, and serializing it back must
 //! keep every field the server sent (`tests/rippled_responses.rs`).
-//! Responses are read as `rippled`'s API version 1, the default when a
-//! request does not name one.
+//! Responses are read as `rippled`'s API version 2, which every request asks
+//! for ([`API_VERSION`](crate::API_VERSION)). A transaction with its
+//! metadata, from any method, is a [`TxResult`].
 
 mod account;
 mod clio;

@@ -37,8 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = client.submit_and_wait(&signed.tx_blob).await?;
     if let Some(meta) = &result.meta {
-        let result = meta.get("TransactionResult").and_then(|v| v.as_str());
-        println!("Result:  {}", result.unwrap_or("?"));
+        println!("Result:  {}", meta.transaction_result);
         for account in utils::get_balance_changes(meta)? {
             for b in &account.balances {
                 println!("  {} {} {}", account.account, b.value, b.currency);

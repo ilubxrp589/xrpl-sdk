@@ -4,7 +4,7 @@
 //! `s2.ripple.com` (mainnet) and `clio.altnet.rippletest.net` (Testnet); a
 //! `rippled` server answers these with an `unknownCmd` error.
 
-use super::AccountTxEntry;
+use super::TxResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -57,7 +57,7 @@ pub struct NftHistoryResult {
     /// The NFT's ID.
     pub nft_id: String,
     /// The transactions.
-    pub transactions: Vec<AccountTxEntry>,
+    pub transactions: Vec<TxResult>,
     /// The earliest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_min: Option<i64>,

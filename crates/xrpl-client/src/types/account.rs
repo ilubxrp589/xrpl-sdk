@@ -14,8 +14,7 @@ use xrpl_core::types::{Amount, LedgerObject};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountInfo {
-    /// The account's `AccountRoot` entry (with `signer_lists` inside it when
-    /// requested under API version 1, as `rippled` does).
+    /// The account's `AccountRoot` entry.
     pub account_data: AccountData,
     /// The `Flags` of `account_data`, one boolean each.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -23,7 +22,7 @@ pub struct AccountInfo {
     /// Transactions this account has in the queue (`queue: true`, current ledger only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_data: Option<QueueData>,
-    /// Signer lists, under API version 2 (version 1 puts them in `account_data`).
+    /// The account's signer list (`signer_lists: true`): none, or one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_lists: Option<Vec<LedgerObject>>,
     /// The open ledger the answer is from (when not a validated one).
@@ -81,9 +80,6 @@ pub struct AccountData {
     /// The entry's ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<String>,
-    /// `SignerList` entries (API version 1, with `signer_lists: true`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_lists: Option<Vec<LedgerObject>>,
     /// Every other field of the `AccountRoot` (`LedgerEntryType`, `Domain`,
     /// `RegularKey`, `TransferRate`, `TickSize`, `NFTokenMinter`, …).
     #[serde(flatten)]
@@ -372,8 +368,8 @@ pub struct AccountTxResult {
     /// The account.
     #[serde(default)]
     pub account: String,
-    /// The transactions.
-    pub transactions: Vec<AccountTxEntry>,
+    /// The transactions, newest first unless `forward` was set.
+    pub transactions: Vec<super::TxResult>,
     /// The earliest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_min: Option<i64>,
@@ -386,28 +382,6 @@ pub struct AccountTxResult {
     /// Where the next page starts: pass it back in the request; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<Value>,
-    /// Whether the data is from a validated ledger (final).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub validated: Option<bool>,
-}
-
-/// One transaction of `account_tx`: JSON (`tx` and `meta` objects) or, with
-/// `binary: true`, hex (`tx_blob` and `meta` as a string).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct AccountTxEntry {
-    /// The transaction, as JSON.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tx: Option<Value>,
-    /// The transaction, as hex.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tx_blob: Option<String>,
-    /// The transaction's metadata.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub meta: Option<Value>,
-    /// The ledger the answer is from.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ledger_index: Option<u32>,
     /// Whether the data is from a validated ledger (final).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validated: Option<bool>,

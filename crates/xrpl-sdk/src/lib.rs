@@ -49,7 +49,7 @@
 //!     let result = sign_and_submit(&client, &payment, &wallet).await?;
 //!
 //!     let meta = result.meta.as_ref().expect("a validated transaction has metadata");
-//!     println!("result: {}", meta["TransactionResult"]);
+//!     println!("result: {}", meta.transaction_result);
 //!     for account in utils::get_balance_changes(meta)? {
 //!         println!("{}: {:?}", account.account, account.balances);
 //!     }
@@ -468,7 +468,7 @@
 //! - **Utilities**: xrpl.js's own fixtures and expected results.
 //! - **Typed responses**: 44 responses recorded from `rippled` 3.4.1, Clio and
 //!   Testnet; each must parse, and serializing it back must keep every one of
-//!   their 2,521 field paths.
+//!   their 2,587 field paths.
 //! - **End to end** (`cargo test -p halcyon-xrpl-sdk --features live-tests`):
 //!   two faucet wallets create a Ticket, Check, Escrow, payment channel (and
 //!   redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding,
@@ -556,6 +556,9 @@ pub use xrpl_client::{Client, Transport, TransportFuture};
 pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
 
 pub use wallet::{sign, sign_async, SignedTransaction, Wallet};
+pub use xrpl_core::transaction::metadata::{
+    self, AffectedNode, DeliveredAmount, TransactionMetadata,
+};
 pub use xrpl_core::transaction::ToTxJson;
 
 /// Generate a new wallet (Ed25519) and fund it with test XRP from `network`'s

@@ -1,17 +1,19 @@
 {
  "method": "server_state",
- "params": {},
+ "params": {
+  "api_version": 2
+ },
  "result": {
   "state": {
    "build_version": "3.4.1",
-   "complete_ledgers": "107436647-107831524",
+   "complete_ledgers": "107436647-107856071",
    "git": {
     "branch": "HEAD",
     "hash": "d147fccf54a500fce586522f28d6044c37fd8d29"
    },
    "initial_sync_duration_us": "544696405",
    "io_latency_ms": 1,
-   "jq_trans_overflow": "54646",
+   "jq_trans_overflow": "58381",
    "last_close": {
     "converge_time": 3001,
     "proposers": 35
@@ -19,100 +21,92 @@
    "load": {
     "job_types": [
      {
-      "job_type": "clientFeeChange",
-      "peak_time": 2,
-      "per_second": 17
-     },
-     {
-      "avg_time": 8,
       "in_progress": 1,
       "job_type": "clientRPC",
-      "over_target": true,
-      "peak_time": 6981,
-      "per_second": 61
+      "peak_time": 1203,
+      "per_second": 258
      },
      {
-      "job_type": "clientWebsocket",
-      "peak_time": 1
-     },
-     {
-      "in_progress": 1,
       "job_type": "untrustedValidation",
-      "per_second": 17
+      "peak_time": 5,
+      "per_second": 15
      },
      {
-      "avg_time": 6,
       "job_type": "ledgerRequest",
-      "peak_time": 107
+      "peak_time": 9,
+      "per_second": 1
      },
      {
       "job_type": "untrustedProposal",
+      "peak_time": 1,
       "per_second": 2
      },
      {
       "job_type": "transaction",
       "peak_time": 1,
-      "per_second": 19
+      "per_second": 28
      },
      {
-      "in_progress": 1,
       "job_type": "batch",
-      "peak_time": 5,
-      "per_second": 16
+      "peak_time": 3,
+      "per_second": 13
      },
      {
-      "avg_time": 8,
+      "avg_time": 17,
       "job_type": "ledgerData",
-      "peak_time": 234,
-      "per_second": 3
+      "peak_time": 618,
+      "per_second": 2
      },
      {
-      "avg_time": 1,
+      "avg_time": 4,
       "job_type": "advanceLedger",
-      "peak_time": 54,
+      "peak_time": 304,
       "per_second": 5
      },
      {
       "job_type": "fetchTxnData",
-      "per_second": 7
+      "peak_time": 8,
+      "per_second": 9
      },
      {
       "job_type": "trustedValidation",
-      "peak_time": 1,
+      "peak_time": 11,
       "per_second": 6
      },
      {
       "job_type": "trustedProposal",
-      "per_second": 14
+      "peak_time": 6,
+      "per_second": 13
      },
      {
       "job_type": "peerCommand",
-      "peak_time": 1,
-      "per_second": 2344
+      "peak_time": 2,
+      "per_second": 2788
      },
      {
       "job_type": "processTransaction",
       "peak_time": 1,
-      "per_second": 19
+      "per_second": 28
      },
      {
-      "avg_time": 856,
+      "avg_time": 218,
       "job_type": "pathFind",
-      "peak_time": 7033,
+      "peak_time": 1200,
       "per_second": 1
      },
      {
       "job_type": "SyncReadNode",
-      "per_second": 3774
+      "peak_time": 3,
+      "per_second": 152
      },
      {
       "job_type": "AsyncReadNode",
-      "peak_time": 1,
-      "per_second": 2036
+      "peak_time": 3,
+      "per_second": 3165
      },
      {
       "job_type": "WriteNode",
-      "per_second": 375
+      "per_second": 1039
      }
     ],
     "threads": 6
@@ -124,8 +118,8 @@
    "load_factor_fee_reference": 256,
    "load_factor_server": 256,
    "node_size": "large",
-   "peer_disconnects": "970",
-   "peer_disconnects_resources": "7",
+   "peer_disconnects": "998",
+   "peer_disconnects_resources": "8",
    "peers": 41,
    "ports": [
     {
@@ -150,7 +144,7 @@
    "pubkey_node": "n9LV6NfwNuH8WYR4HZTheGFhjGbuJB7VzANuXApH7iryMp4jAh4T",
    "pubkey_validator": "none",
    "server_state": "full",
-   "server_state_duration_us": "18811227091",
+   "server_state_duration_us": "115098072556",
    "state_accounting": {
     "connected": {
      "duration_us": "542799252",
@@ -161,7 +155,7 @@
      "transitions": "1"
     },
     "full": {
-     "duration_us": "2338619318149",
+     "duration_us": "2434906163614",
      "transitions": "37"
     },
     "syncing": {
@@ -173,15 +167,15 @@
      "transitions": "39"
     }
    },
-   "time": "2026-Oct-22 17:12:03.571690 UTC",
-   "uptime": 2339353,
+   "time": "2026-Oct-23 19:56:50.417246 UTC",
+   "uptime": 2435640,
    "validated_ledger": {
     "base_fee": 10,
-    "close_time": 846004320,
-    "hash": "0B1586E56E79A807746E99DD1E733BF310B41DD753C2CFB05DC9068D5D2559C5",
+    "close_time": 846100610,
+    "hash": "86E9F947EB0F74F5D79BDBAA34A883DEB576EC168DF02EC898CFD38DFC096C4B",
     "reserve_base": 1000000,
     "reserve_inc": 200000,
-    "seq": 107831524
+    "seq": 107856071
    },
    "validation_quorum": 28,
    "validator_list_expires": 860349094

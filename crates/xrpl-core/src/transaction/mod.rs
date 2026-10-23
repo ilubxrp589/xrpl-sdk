@@ -6,6 +6,7 @@
 //!   [`models::TxModel::validate`] for `rippled`'s checks that need no ledger.
 //! - [`batch`]: `Batch` (XLS-56) — inner transactions, `BatchSigners`, the fee.
 //! - [`cost`]: what `rippled` charges for a transaction.
+//! - [`metadata`]: what a transaction in a ledger did ([`TransactionMetadata`]).
 //!
 //! Any transaction can also be written directly as `rippled`'s JSON.
 
@@ -14,7 +15,12 @@ pub mod batch;
 #[cfg(feature = "std")]
 pub mod cost;
 #[cfg(feature = "std")]
+pub mod metadata;
+#[cfg(feature = "std")]
 pub mod models;
+
+#[cfg(feature = "std")]
+pub use metadata::{AffectedNode, DeliveredAmount, TransactionMetadata};
 
 /// A transaction in any form this crate builds, as the `rippled` JSON the
 /// signers, `autofill` and the codec take: a typed model

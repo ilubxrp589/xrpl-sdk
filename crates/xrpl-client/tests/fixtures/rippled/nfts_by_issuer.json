@@ -2,12 +2,13 @@
  "method": "nfts_by_issuer",
  "params": {
   "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
-  "limit": 2
+  "limit": 2,
+  "api_version": 2
  },
  "result": {
   "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
   "limit": 2,
-  "ledger_index": 107831525,
+  "ledger_index": 107856070,
   "nfts": [
    {
     "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E31280C5C306441428",

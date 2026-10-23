@@ -1,6 +1,8 @@
 {
  "method": "server_definitions",
- "params": {},
+ "params": {
+  "api_version": 2
+ },
  "result": {
   "ACCOUNT_SET_FLAGS": {
    "asfAccountTxnID": 5,

@@ -236,10 +236,12 @@ impl LedgerTransaction {
     }
 }
 
-/// Check the answer of `rippled`'s `ledger` method, asked with `binary`,
-/// `transactions` and `expand` all `true`: the header (`ledger_data`) hashes
-/// to the `ledger_hash` the server named, and the transactions rebuild the
-/// header's `transaction_hash`. Then the transactions are exactly the
+/// Check the answer of `rippled`'s `ledger` method (API version 2), asked
+/// with `binary`, `transactions` and `expand` all `true`: the header
+/// (`ledger_data`) hashes to the `ledger_hash` the server named, each
+/// transaction (`tx_blob`) to the `hash` beside it, and the transactions
+/// with their metadata (`meta_blob`) rebuild the header's
+/// `transaction_hash`. Then the transactions are exactly the
 /// ledger's. Compare [`VerifiedLedger::hash`] with a hash from a source you
 /// trust to know the ledger is the network's.
 ///
@@ -279,12 +281,17 @@ pub fn verify_ledger_response(result: &serde_json::Value) -> Result<VerifiedLedg
         .ok_or_else(|| invalid("no transactions (ask with transactions and expand)"))?
     {
         let tx_blob = hex_field(entry.get("tx_blob"), "tx_blob")?;
-        let meta = hex_field(entry.get("meta"), "meta")?;
-        transactions.push(LedgerTransaction {
-            id: crate::hashes::transaction_id(&tx_blob),
-            tx_blob,
-            meta,
-        });
+        let meta = hex_field(entry.get("meta_blob"), "meta_blob")?;
+        let id = crate::hashes::transaction_id(&tx_blob);
+        // The ID the server wrote beside it must be the transaction's.
+        if let Some(named) = entry.get("hash").and_then(serde_json::Value::as_str) {
+            if Hash256::from_hex(named)? != id {
+                return Err(invalid(&format!(
+                    "a transaction hashes to {id}, not the hash {named} written beside it"
+                )));
+            }
+        }
+        transactions.push(LedgerTransaction { id, tx_blob, meta });
     }
     let root = transaction_tree_hash(
         transactions

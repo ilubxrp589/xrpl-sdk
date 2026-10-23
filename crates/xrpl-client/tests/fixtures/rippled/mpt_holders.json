@@ -2,19 +2,20 @@
   "method": "mpt_holders",
   "network": "testnet",
   "params": {
+    "api_version": 2,
     "ledger_index": "validated",
-    "mpt_issuance_id": "014BB9262A03D6255E9764750942A3D27ECC9F274C8B8DCD"
+    "mpt_issuance_id": "014C29552B3DD7A7E525987A2FAFF91EECF53984A1FC7906"
   },
   "result": {
-    "ledger_index": 21739831,
+    "ledger_index": 21768549,
     "limit": 50,
-    "mpt_issuance_id": "014BB9262A03D6255E9764750942A3D27ECC9F274C8B8DCD",
+    "mpt_issuance_id": "014C29552B3DD7A7E525987A2FAFF91EECF53984A1FC7906",
     "mptokens": [
       {
-        "account": "rEcNXsa8DQCDfHAdBe5aQQF9B7z5tZbhLS",
+        "account": "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp",
         "flags": 0,
         "mpt_amount": "0",
-        "mptoken_index": "02E03279E3698E0186A3D7F09F5B7F03CAF81E48AB5C4274A021908FF8F3A12C"
+        "mptoken_index": "6FE2938199A423B96F259B803ACF1C0865CAC409395C42B482B6B2DF697E49DB"
       }
     ],
     "status": "success",

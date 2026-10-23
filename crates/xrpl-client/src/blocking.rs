@@ -576,7 +576,7 @@ impl<C: Client> BlockingClient<C> {
     /// [`ClientError::PaginationLimitReached`] past
     /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
     /// when a request fails.
-    pub fn account_tx_all(&self, account: &str) -> Result<Vec<AccountTxEntry>, ClientError> {
+    pub fn account_tx_all(&self, account: &str) -> Result<Vec<TxResult>, ClientError> {
         self.call(|c| c.account_tx_all(account))
     }
 
