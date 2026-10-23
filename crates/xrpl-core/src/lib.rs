@@ -78,7 +78,10 @@
 //! [`LedgerObject`] parses any entry `rippled` returns (from `ledger_entry`,
 //! `account_objects` or `ledger_data`) into a struct for its type, and
 //! serializes back to exactly `rippled`'s JSON. Types this crate does not
-//! know stay available as [`LedgerObject::Other`].
+//! know stay available as [`LedgerObject::Other`]; an entry of a known type
+//! that does not fit it (a field a newer `rippled` added) is
+//! [`LedgerObject::Unparsed`], with the error, inside a response, and an
+//! error from [`LedgerObject::from_value`].
 //!
 //! ```
 //! use xrpl_core::types::{Amount, LedgerObject};

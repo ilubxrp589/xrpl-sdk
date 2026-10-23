@@ -630,7 +630,7 @@ macro_rules! tx_enum {
 each_transaction_type!(tx_enum);
 
 /// Key paths of `original` that `back` does not have.
-fn dropped_paths(original: &Value, back: &Value) -> Vec<String> {
+pub(crate) fn dropped_paths(original: &Value, back: &Value) -> Vec<String> {
     fn paths(v: &Value, prefix: &str, out: &mut BTreeSet<String>) {
         match v {
             Value::Object(m) => {

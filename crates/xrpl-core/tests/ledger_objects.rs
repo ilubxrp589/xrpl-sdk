@@ -53,3 +53,25 @@ fn mainnet_ledger_objects_parse_typed_and_round_trip() {
     assert!(n > 0);
     assert!(bad.is_empty(), "{n} objects: {bad:#?}");
 }
+
+/// A field the type does not have is an error from `from_value`; inside a
+/// response the entry is kept as `Unparsed`, with the error, never `Other`.
+#[test]
+fn an_entry_with_an_unknown_field_is_unparsed_not_other() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/mainnet_ledger_objects.jsonl"
+    );
+    let line = std::fs::read_to_string(path).unwrap();
+    let mut v: serde_json::Value = serde_json::from_str(line.lines().next().unwrap()).unwrap();
+    v["NewAmendmentField"] = 1.into();
+    let err = LedgerObject::from_value(v.clone()).unwrap_err().to_string();
+    assert!(err.contains("NewAmendmentField"), "{err}");
+    let lenient: LedgerObject = serde_json::from_value(v.clone()).unwrap();
+    assert!(
+        matches!(&lenient, LedgerObject::Unparsed { error, .. } if error.contains("NewAmendmentField")),
+        "{lenient:?}"
+    );
+    assert_eq!(lenient.entry_type(), v["LedgerEntryType"].as_str().unwrap());
+    assert_eq!(lenient.to_value().unwrap(), v);
+}

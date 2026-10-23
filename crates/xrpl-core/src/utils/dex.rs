@@ -1,6 +1,6 @@
-//! Order-book arithmetic. [`liquidity_at_price`] is exact (decimal); the
-//! price helpers ([`offer_quality_xrp`], [`midpoint_price`],
-//! [`spread_percent`], [`amount_to_f64`]) are `f64` approximations for
+//! Order-book arithmetic. [`liquidity_at_price`](crate::utils::dex::liquidity_at_price) is exact (decimal); the
+//! price helpers ([`offer_quality_xrp`](crate::utils::dex::offer_quality_xrp), [`midpoint_price`](crate::utils::dex::midpoint_price),
+//! [`spread_percent`](crate::utils::dex::spread_percent), [`amount_to_f64`](crate::utils::dex::amount_to_f64)) are `f64` approximations for
 //! display and estimates. Never sign an amount computed with them.
 //!
 //! Units: `book_offers`' `quality` is TakerPays per TakerGets in the units
