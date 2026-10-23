@@ -39,6 +39,24 @@ pub fn sign_payment_channel_claim<K: SigningKey + ?Sized>(
     Ok(hex::encode_upper(signature))
 }
 
+/// [`sign_payment_channel_claim`] with an
+/// [`AsyncSigningKey`](super::AsyncSigningKey) (a remote key), whose
+/// signature is checked against its public key.
+///
+/// # Errors
+///
+/// As [`sign_payment_channel_claim`], and [`CoreError::SigningKeyFailed`]
+/// for a signature that does not verify.
+pub async fn sign_payment_channel_claim_async<K: super::AsyncSigningKey + ?Sized>(
+    channel_id: &str,
+    amount_drops: u64,
+    key: &K,
+) -> Result<String, CoreError> {
+    let data = claim_data(channel_id, amount_drops)?;
+    let signature = super::signing_key::sign_with_async(key, &data).await?;
+    Ok(hex::encode_upper(signature))
+}
+
 /// Whether `signature` is the channel key's (`public_key`, hex) claim for
 /// `amount_drops`. A well-formed signature that does not match is `Ok(false)`.
 ///

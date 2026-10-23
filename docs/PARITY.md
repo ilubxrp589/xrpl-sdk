@@ -273,16 +273,17 @@ seeded with all the real data above (`fuzz/seed_corpus.py`). They require:
 - a typed transaction writes back what it read;
 - whatever decodes encodes again, and decoding that gives the same JSON.
 
-| Target | Inputs in the final run (2026-10-22, 2 minutes each) |
+| Target | Inputs in the final run before 0.8.0 (2026-10-23, 2 minutes each) |
 |---|---|
-| `fuzz_decode` | 2,554,663 |
-| `fuzz_roundtrip` | 1,984,477, after 13,976,235 in a 15-minute run |
-| `fuzz_encode` | 4,559,482 |
-| `fuzz_models` | 743,248 |
-| `fuzz_hashes` | 1,088,519 |
-| `fuzz_utils` | 1,681,292 |
-| `fuzz_amount` | 58,048,086 |
-| `fuzz_address` | 1,245,231 |
+| `fuzz_decode` | 2,309,283 |
+| `fuzz_roundtrip` | 2,460,102 (13,976,235 in a 15-minute run on 2026-10-22) |
+| `fuzz_encode` | 6,050,744 |
+| `fuzz_models` | 1,056,847 |
+| `fuzz_hashes` | 1,009,642 |
+| `fuzz_utils` | 2,427,346 |
+| `fuzz_amount` | 54,556,683 |
+| `fuzz_address` | 19,365,226 |
+| `fuzz_keys` | 562,380 |
 
 None of them found anything in that run, with AddressSanitizer on. Earlier
 runs found the six issues below, each fixed before the next run.

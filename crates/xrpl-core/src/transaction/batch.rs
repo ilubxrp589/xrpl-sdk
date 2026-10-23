@@ -56,7 +56,7 @@ const TF_INNER_BATCH_TXN: u32 = 0x4000_0000;
 use crate::address::decode_account_id;
 use crate::codec::encode::read_uint32;
 use crate::crypto::signing::public_key_to_account_id;
-use crate::crypto::{verify_signing_data, SigningKey};
+use crate::crypto::{verify_signing_data, AsyncSigningKey, SigningKey};
 use crate::hashes::hash_signed_tx;
 use crate::types::{AccountId, Hash256};
 use crate::CoreError;
@@ -194,7 +194,7 @@ pub fn batch_signing_data(batch: &Value) -> Result<Vec<u8>, CoreError> {
 /// [`Keypair`](crate::crypto::Keypair) or any [`SigningKey`]): the
 /// `BatchSigner` to add with [`add_batch_signers`]. The key is the account's
 /// master key; for an account that signs with a regular key, use
-/// [`sign_batch_as`].
+/// [`sign_batch_as`]. For a remote key, [`sign_batch_async`].
 ///
 /// # Errors
 ///
@@ -205,13 +205,28 @@ pub fn sign_batch<K: SigningKey + ?Sized>(
     batch: &Value,
     key: &K,
 ) -> Result<BatchSigner, CoreError> {
-    sign_batch_as(batch, &key_account(key)?.to_address(), key)
+    sign_batch_as(batch, &master_account(SigningKey::public_key(key))?, key)
 }
 
-/// The account a key is the master key of.
-fn key_account<K: SigningKey + ?Sized>(key: &K) -> Result<AccountId, CoreError> {
-    let public_key = crate::crypto::signing_key::checked_public_key(SigningKey::public_key(key))?;
-    Ok(AccountId::from_bytes(public_key_to_account_id(public_key)))
+/// [`sign_batch`] with an [`AsyncSigningKey`] (a remote key), whose
+/// signature is checked against its public key.
+///
+/// # Errors
+///
+/// As [`sign_batch`], and [`CoreError::SigningKeyFailed`] for a signature
+/// that does not verify.
+pub async fn sign_batch_async<K: AsyncSigningKey + ?Sized>(
+    batch: &Value,
+    key: &K,
+) -> Result<BatchSigner, CoreError> {
+    let account = master_account(AsyncSigningKey::public_key(key))?;
+    sign_batch_as_async(batch, &account, key).await
+}
+
+/// The address of the account a public key is the master key of.
+fn master_account(public_key: &[u8]) -> Result<String, CoreError> {
+    let public_key = crate::crypto::signing_key::checked_public_key(public_key)?;
+    Ok(AccountId::from_bytes(public_key_to_account_id(public_key)).to_address())
 }
 
 /// Sign `batch` for `account` with `key`, the account's master key or its
@@ -221,49 +236,118 @@ fn key_account<K: SigningKey + ?Sized>(key: &K) -> Result<AccountId, CoreError> 
 ///
 /// # Errors
 ///
-/// The errors of [`batch_signing_data`], and an address error
+/// The errors of [`batch_signing_data`], an address error
 /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for an
-/// `account` that is not a classic address.
+/// `account` that is not a classic address, and the key's own errors.
 pub fn sign_batch_as<K: SigningKey + ?Sized>(
     batch: &Value,
     account: &str,
     key: &K,
 ) -> Result<BatchSigner, CoreError> {
-    let mut data = batch_signing_data(batch)?;
-    data.extend_from_slice(&decode_account_id(account)?);
+    let data = batch_signer_data(batch, account)?;
     let signature = crate::crypto::signing_key::sign_with(key, &data)?;
-    Ok(BatchSigner {
-        account: account.to_string(),
-        signing_pub_key: hex::encode_upper(SigningKey::public_key(key)),
-        txn_signature: Some(hex::encode_upper(signature)),
-        signers: None,
-    })
+    Ok(single_batch_signer(
+        account,
+        SigningKey::public_key(key),
+        &signature,
+    ))
 }
 
-/// Sign `batch` for `batch_signer`, an account that signs through its signer
-/// list: one of the `Signers` of its `BatchSigner` (combine them with
-/// [`multisigned_batch_signer`]).
+/// [`sign_batch_as`] with an [`AsyncSigningKey`] (a remote key), whose
+/// signature is checked against its public key.
 ///
 /// # Errors
 ///
-/// The errors of [`batch_signing_data`], and an address error
+/// As [`sign_batch_as`], and [`CoreError::SigningKeyFailed`] for a signature
+/// that does not verify.
+pub async fn sign_batch_as_async<K: AsyncSigningKey + ?Sized>(
+    batch: &Value,
+    account: &str,
+    key: &K,
+) -> Result<BatchSigner, CoreError> {
+    let data = batch_signer_data(batch, account)?;
+    let signature = crate::crypto::signing_key::sign_with_async(key, &data).await?;
+    Ok(single_batch_signer(
+        account,
+        AsyncSigningKey::public_key(key),
+        &signature,
+    ))
+}
+
+/// What `account`'s batch signature covers.
+fn batch_signer_data(batch: &Value, account: &str) -> Result<Vec<u8>, CoreError> {
+    let mut data = batch_signing_data(batch)?;
+    data.extend_from_slice(&decode_account_id(account)?);
+    Ok(data)
+}
+
+fn single_batch_signer(account: &str, public_key: &[u8], signature: &[u8]) -> BatchSigner {
+    BatchSigner {
+        account: account.to_string(),
+        signing_pub_key: hex::encode_upper(public_key),
+        txn_signature: Some(hex::encode_upper(signature)),
+        signers: None,
+    }
+}
+
+/// Sign `batch` for `batch_signer`, an account that approves it through its
+/// signer list, as `signer`, a member of that list, with `key` (`signer`'s
+/// master key or regular key): one of the `Signers` of `batch_signer`'s
+/// `BatchSigner` (combine them with [`multisigned_batch_signer`]).
+///
+/// # Errors
+///
+/// The errors of [`batch_signing_data`], an address error
 /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) for a
-/// `batch_signer` that is not a classic address.
+/// `batch_signer` or `signer` that is not a classic address, and the key's
+/// own errors.
 pub fn sign_batch_for<K: SigningKey + ?Sized>(
     batch: &Value,
     batch_signer: &str,
+    signer: &str,
     key: &K,
 ) -> Result<Signer, CoreError> {
-    let account = key_account(key)?;
-    let mut data = batch_signing_data(batch)?;
-    data.extend_from_slice(&decode_account_id(batch_signer)?);
-    data.extend_from_slice(&account.0);
+    let data = nested_signer_data(batch, batch_signer, signer)?;
     let signature = crate::crypto::signing_key::sign_with(key, &data)?;
     Ok(Signer::new(
-        account.to_address(),
+        signer,
         hex::encode_upper(SigningKey::public_key(key)),
         hex::encode_upper(signature),
     ))
+}
+
+/// [`sign_batch_for`] with an [`AsyncSigningKey`] (a remote key), whose
+/// signature is checked against its public key.
+///
+/// # Errors
+///
+/// As [`sign_batch_for`], and [`CoreError::SigningKeyFailed`] for a
+/// signature that does not verify.
+pub async fn sign_batch_for_async<K: AsyncSigningKey + ?Sized>(
+    batch: &Value,
+    batch_signer: &str,
+    signer: &str,
+    key: &K,
+) -> Result<Signer, CoreError> {
+    let data = nested_signer_data(batch, batch_signer, signer)?;
+    let signature = crate::crypto::signing_key::sign_with_async(key, &data).await?;
+    Ok(Signer::new(
+        signer,
+        hex::encode_upper(AsyncSigningKey::public_key(key)),
+        hex::encode_upper(signature),
+    ))
+}
+
+/// What `signer`'s signature for `batch_signer` covers: the batch data, the
+/// approving account, then the signer.
+fn nested_signer_data(
+    batch: &Value,
+    batch_signer: &str,
+    signer: &str,
+) -> Result<Vec<u8>, CoreError> {
+    let mut data = batch_signer_data(batch, batch_signer)?;
+    data.extend_from_slice(&decode_account_id(signer)?);
+    Ok(data)
 }
 
 /// A multi-signed `BatchSigner` for `batch_signer` from its signers'
@@ -583,8 +667,8 @@ mod tests {
         let for_bob = multisigned_batch_signer(
             &b,
             vec![
-                sign_batch_for(&multi, &b, &carol).unwrap(),
-                sign_batch_for(&multi, &b, &alice).unwrap(),
+                sign_batch_for(&multi, &b, &carol.classic_address(), &carol).unwrap(),
+                sign_batch_for(&multi, &b, &alice.classic_address(), &alice).unwrap(),
             ],
         )
         .unwrap();

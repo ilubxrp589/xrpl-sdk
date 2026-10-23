@@ -278,6 +278,60 @@ mod tests {
         assert_eq!(signed, sign_transaction(&tx, &keys).unwrap());
     }
 
+    /// Drive a future that never waits (every key here answers at once).
+    fn block_on<F: core::future::Future>(f: F) -> F::Output {
+        use core::task::{Context, Poll, Waker};
+        let mut f = core::pin::pin!(f);
+        loop {
+            if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+                return v;
+            }
+        }
+    }
+
+    /// Every signing function has an async twin that signs the same bytes.
+    #[test]
+    fn async_signing_signs_what_sync_signing_does() {
+        use crate::crypto::{sign_payment_channel_claim, sign_payment_channel_claim_async};
+        use crate::transaction::batch;
+        let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5").unwrap())
+            .unwrap();
+        let other = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        let pay = |from: &str, seq: u32| {
+            serde_json::json!({"RawTransaction": {"TransactionType": "Payment", "Account": from,
+                "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Amount": "1", "Fee": "0",
+                "Sequence": seq, "SigningPubKey": "", "Flags": 0x4000_0000}})
+        };
+        let tx = serde_json::json!({"TransactionType": "Batch", "Account": other,
+            "Sequence": 3, "Flags": 0x0001_0000, "Fee": "40",
+            "RawTransactions": [pay(other, 4), pay(&keys.classic_address(), 9)]});
+        assert_eq!(
+            block_on(batch::sign_batch_async(&tx, &keys)).unwrap(),
+            batch::sign_batch(&tx, &keys).unwrap()
+        );
+        assert_eq!(
+            block_on(batch::sign_batch_for_async(
+                &tx,
+                other,
+                &keys.classic_address(),
+                &keys
+            ))
+            .unwrap(),
+            batch::sign_batch_for(&tx, other, &keys.classic_address(), &keys).unwrap()
+        );
+        let channel = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";
+        assert_eq!(
+            block_on(sign_payment_channel_claim_async(channel, 7, &keys)).unwrap(),
+            sign_payment_channel_claim(channel, 7, &keys).unwrap()
+        );
+        let single = serde_json::json!({"TransactionType": "Payment", "Account": keys.classic_address(),
+            "Destination": other, "Amount": "1000000", "Fee": "12", "Sequence": 1});
+        assert_eq!(
+            block_on(crate::crypto::sign_transaction_async(&single, &keys)).unwrap(),
+            sign_transaction(&single, &keys).unwrap()
+        );
+    }
+
     #[test]
     fn a_public_key_the_ledger_does_not_take_is_refused() {
         for key in [&[0x04; 65][..], &[0xED; 32], &[0x05; 33], &[]] {

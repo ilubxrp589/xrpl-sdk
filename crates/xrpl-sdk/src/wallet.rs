@@ -9,9 +9,7 @@ use xrpl_core::types::Hash256;
 use xrpl_core::CoreError;
 use zeroize::Zeroizing;
 
-/// The most signers a multi-signed transaction may carry (`rippled`'s
-/// `STTx::maxMultiSigners`).
-pub const MAX_MULTISIGNERS: usize = 32;
+pub use xrpl_core::crypto::MAX_MULTISIGNERS;
 
 /// A signed transaction: what [`Wallet::sign`], [`sign`] and [`sign_async`]
 /// return.
@@ -280,7 +278,7 @@ impl Wallet {
         batch: &serde_json::Value,
         batch_signer: &str,
     ) -> Result<xrpl_core::transaction::models::Signer, CoreError> {
-        xrpl_core::transaction::batch::sign_batch_for(batch, batch_signer, &self.keypair)
+        xrpl_core::transaction::batch::sign_batch_for(batch, batch_signer, &self.address, self)
     }
 
     /// Sign a payment channel claim for `amount_drops` (the channel's total
@@ -424,7 +422,8 @@ fn signed(tx_json: serde_json::Value) -> Result<SignedTransaction, CoreError> {
 /// for a different transaction, or a changed one, is an error here rather
 /// than a refusal from the network. The signers are sorted by 20-byte
 /// AccountID, the order rippled requires (base58 text order is not the same
-/// order); an account may sign once; at most [`MAX_MULTISIGNERS`] may sign.
+/// order); an account may sign once, and not for itself; at most
+/// [`MAX_MULTISIGNERS`] may sign.
 /// `SigningPubKey` is set empty; a `TxnSignature` (a single signature) is an
 /// error.
 ///
@@ -433,8 +432,8 @@ fn signed(tx_json: serde_json::Value) -> Result<SignedTransaction, CoreError> {
 /// - [`CoreError::ValidationError`] for no signers or more than
 ///   [`MAX_MULTISIGNERS`], a transaction with a `TxnSignature`, a `Signer`
 ///   entry without its `Account`, `SigningPubKey` or `TxnSignature`, a
-///   signature that is not for this transaction, or an account that signs
-///   twice.
+///   signature that is not for this transaction, an account that signs
+///   twice, or the transaction's own `Account` as a signer.
 /// - [`CoreError::InvalidHex`], [`CoreError::InvalidKeyLength`] or
 ///   [`CoreError::SigningFailed`] for a key or signature that is malformed.
 /// - The errors of
@@ -480,6 +479,17 @@ pub fn collect_signers(
     keyed.sort_by_key(|a| a.0);
     if keyed.windows(2).any(|w| matches!(w, [a, b] if a.0 == b.0)) {
         return Err(invalid("an account signs a transaction once".to_string()));
+    }
+    let own = tx
+        .get("Account")
+        .and_then(serde_json::Value::as_str)
+        .map(xrpl_core::address::decode_account_id)
+        .transpose()?;
+    if keyed.iter().any(|(id, _)| Some(*id) == own) {
+        return Err(invalid(
+            "the transaction's own Account cannot multi-sign it (rippled: Invalid multisigner)"
+                .to_string(),
+        ));
     }
 
     let obj = tx
@@ -759,6 +769,34 @@ mod tests {
         assert_eq!(sign(&a, &spelled), sign(&a, &tx));
         let mut ok = tx.clone();
         super::collect_signers(&mut ok, vec![sign(&a, &spelled), sign(&b, &tx)]).unwrap();
+        assert!(xrpl_core::crypto::verify_transaction(&ok).unwrap());
+        // The account may not sign for itself, here or at rippled.
+        let mut own = tx.clone();
+        own["Account"] = serde_json::json!(a.classic_address());
+        assert!(
+            super::collect_signers(&mut own.clone(), vec![sign(&a, &own), sign(&b, &own)]).is_err()
+        );
+        let mut forged = ok.clone();
+        forged["Account"] = serde_json::json!(a.classic_address());
+        let resigned = vec![sign(&a, &forged), sign(&b, &forged)];
+        let entries: Vec<serde_json::Value> = {
+            let mut keyed: Vec<_> = resigned
+                .into_iter()
+                .map(|s| {
+                    (
+                        xrpl_core::address::decode_account_id(&s.account).unwrap(),
+                        s,
+                    )
+                })
+                .collect();
+            keyed.sort_by_key(|k| k.0);
+            keyed
+                .into_iter()
+                .map(|(_, s)| serde_json::json!({"Signer": s}))
+                .collect()
+        };
+        forged["Signers"] = serde_json::json!(entries);
+        assert!(!xrpl_core::crypto::verify_transaction(&forged).unwrap());
     }
 
     #[test]

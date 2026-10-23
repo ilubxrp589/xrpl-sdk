@@ -20,7 +20,6 @@ pub const API_VERSION: u32 = 2;
 
 /// `params` with [`API_VERSION`] added, unless it names a version (or is not
 /// an object).
-#[cfg(any(feature = "http", feature = "ws"))]
 pub(crate) fn with_api_version(mut params: Value) -> Value {
     if let Some(obj) = params.as_object_mut() {
         obj.entry("api_version")
@@ -69,7 +68,6 @@ fn check_x_address_networks(tx: &Value, network_id: u32) -> Result<(), ClientErr
     Ok(())
 }
 
-/// `fee`, or [`ClientError::FeeTooHigh`] above `max`.
 /// [`Client::autofill_batch`] with the prices already known.
 async fn fill_batch<C: Client + ?Sized>(
     client: &C,
@@ -89,7 +87,12 @@ async fn fill_batch<C: Client + ?Sized>(
         .and_then(Value::as_array_mut)
         .ok_or_else(|| bad("no RawTransactions"))?;
     let mut next: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
-    next.insert(outer.to_string(), outer_seq.saturating_add(1));
+    // A Batch sent with a Ticket (Sequence 0) does not use the account's
+    // sequence: its inner transactions start at the account's next one, as
+    // any other account's do.
+    if outer_seq != 0 {
+        next.insert(outer.to_string(), outer_seq.saturating_add(1));
+    }
     for wrapped in raw.iter_mut() {
         let inner = wrapped
             .get_mut("RawTransaction")
@@ -304,7 +307,9 @@ pub type TransportFuture<'a> =
 /// HTTP and WebSocket clients implement it; implement it for your own
 /// transport (a proxy, a mock in tests) and you have every [`Client`]
 /// method. It is object safe, so `Arc<dyn Transport>` and
-/// `Box<dyn Transport>` are clients too.
+/// `Box<dyn Transport>` are clients too. [`Client`] adds `api_version`
+/// ([`API_VERSION`]) to the parameters before they reach
+/// [`Transport::send_raw`], which sends them as given.
 ///
 /// ```
 /// use std::sync::Arc;
@@ -382,9 +387,16 @@ impl<T: Transport + ?Sized> Transport for std::sync::Arc<T> {
 /// WebSocket clients, `Arc<dyn Transport>`, or your own. Bring it into scope
 /// (`use xrpl_client::Client;`) to call the methods. On native targets every
 /// future it returns is `Send`, so generic code can spawn it.
+///
+/// Every request asks for [`API_VERSION`], unless its parameters name a
+/// version. The methods that wait ([`Client::submit_and_wait`] and those
+/// built on it) wait with Tokio's timer on native targets, so run them in a
+/// Tokio runtime with its timer enabled (`#[tokio::main]` has it); in
+/// `wasm32` they wait with JavaScript's `setTimeout`.
 pub trait Client: Transport {
-    /// Send `method` with `params` and return the response's `result`, as
-    /// the transport sends it ([`Transport::send_raw`]).
+    /// Send `method` with `params` (and `api_version`, [`API_VERSION`],
+    /// unless `params` names one) and return the response's `result`, as the
+    /// transport sends it ([`Transport::send_raw`]).
     ///
     /// # Errors
     ///
@@ -394,7 +406,7 @@ pub trait Client: Transport {
         method: &'a str,
         params: Value,
     ) -> impl Future<Output = Result<Value, ClientError>> + MaybeSend + 'a {
-        self.send_raw(method, params)
+        self.send_raw(method, with_api_version(params))
     }
 
     /// Send a typed request and decode its `result`.
@@ -1940,6 +1952,28 @@ mod tests {
         assert_eq!(tx["Fee"], "72");
     }
 
+    /// A Batch sent with a Ticket uses no sequence of its account: its inner
+    /// transactions start at the account's next sequence, not at 1.
+    #[tokio::test]
+    async fn a_ticketed_batch_numbers_its_inner_transactions_from_the_account() {
+        let (ra, rc) = (
+            "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+        );
+        let mock = Mock::default()
+            .reply("fee", json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "12"}}))
+            .reply("ledger_current", json!({"ledger_current_index": 100}))
+            .reply("server_info", json!({"info": {"network_id": 1}}))
+            .reply("account_info", json!({"account_data": {"Account": ra, "Balance": "1", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}));
+        let pay = json!({"RawTransaction": {"TransactionType": "Payment", "Account": ra, "Destination": rc, "Amount": "1"}});
+        let mut tx = json!({"TransactionType": "Batch", "Account": ra, "Flags": 0x0001_0000,
+            "TicketSequence": 7, "RawTransactions": [pay.clone(), pay]});
+        mock.autofill(&mut tx).await.unwrap();
+        assert_eq!(tx["Sequence"], 0);
+        assert_eq!(tx["RawTransactions"][0]["RawTransaction"]["Sequence"], 5);
+        assert_eq!(tx["RawTransactions"][1]["RawTransaction"]["Sequence"], 6);
+    }
+
     #[tokio::test]
     async fn autofill_fills_only_what_is_missing() {
         let mock = Mock::default()
@@ -2034,6 +2068,8 @@ mod tests {
         let calls = mock.calls();
         assert_eq!(calls[0].1["ledger_index"], "validated");
         assert_eq!(calls[0].1["taker_gets"], json!({"currency": "XRP"}));
+        // Every request names the API version, whatever the transport.
+        assert!(calls.iter().all(|(_, p)| p["api_version"] == API_VERSION));
         assert_eq!(calls[1].1["ledger_index"], 77);
         assert_eq!(calls[1].1["taker_pays"], json!({"currency": "XRP"}));
     }

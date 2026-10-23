@@ -192,9 +192,12 @@
 //! let approval = bob.sign_batch(&tx)?;                       // Bob approves
 //! batch::add_batch_signers(&mut tx, vec![approval])?;
 //! let signed = alice.sign(&tx)?;                            // Alice signs the batch
-//! client.submit_and_wait(&signed.tx_blob).await?;
+//! client.submit_and_wait(&signed.tx_blob).await?;                 // the Batch itself succeeded
+//! // Each inner transaction that applied is on the ledger under its ID; one
+//! // that failed is in no ledger (`tx` answers `txnNotFound`).
 //! for id in batch::inner_transaction_ids(&tx)? {
-//!     println!("inner transaction {id}");                  // each is on the ledger under this ID
+//!     let applied = client.tx(&id.to_string()).await.is_ok();
+//!     println!("inner transaction {id}: {}", if applied { "applied" } else { "not applied" });
 //! }
 //! # Ok(()) }
 //! ```
@@ -441,7 +444,7 @@
 //! |---|---|---|---|
 //! | `halcyon-xrpl-sdk`, `halcyon-xrpl-client` | `http` | yes | [`XrplHttpClient`], the faucet ([`generate_faucet_wallet`]) and [`BlockingClient`] (`reqwest`) |
 //! | | `ws` | yes | [`XrplWsClient`]: subscriptions, `path_find` (`tokio-tungstenite`) |
-//! | | `wasm` | no | the browser / Node.js build (`wasm32-unknown-unknown`): HTTP through `fetch`, WebSocket through the JavaScript `WebSocket` |
+//! | | `wasm` | no | what every `wasm32-unknown-unknown` build (browser, Node.js, workers) needs: JavaScript's random source and bindings. On `wasm32`, `http` goes through `fetch` and `ws` through JavaScript's `WebSocket` |
 //! | `halcyon-xrpl-core` | `std` | yes | the codec, hashes, utilities and JSON support; without it, types and crypto only (`no_std` + `alloc`) |
 //! | | `wasm` | no | `wasm32-unknown-unknown` builds and the JavaScript bindings |
 //!
@@ -535,8 +538,8 @@ pub use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
 pub use xrpl_core::crypto::{hd::DerivationPath, mnemonic::Mnemonic};
 pub use xrpl_core::crypto::{
     sign_for_multisigning, sign_for_multisigning_async, sign_payment_channel_claim,
-    sign_transaction, sign_transaction_async, verify_payment_channel_claim, verify_transaction,
-    AsyncSigningKey, Keypair, Seed, SigningKey,
+    sign_payment_channel_claim_async, sign_transaction, sign_transaction_async,
+    verify_payment_channel_claim, verify_transaction, AsyncSigningKey, Keypair, Seed, SigningKey,
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::batch;

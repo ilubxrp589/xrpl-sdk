@@ -125,7 +125,12 @@ pub fn get_nftoken_id(meta: &TransactionMetadata) -> Option<String> {
         }
         match node {
             AffectedNode::CreatedNode(_) => after.extend(token_ids(node.new_fields())),
-            AffectedNode::ModifiedNode(_) if node.previous_fields().is_some() => {
+            // A page whose tokens changed (not one whose links did).
+            AffectedNode::ModifiedNode(_)
+                if node
+                    .previous_fields()
+                    .is_some_and(|p| p.contains_key("NFTokens")) =>
+            {
                 before.extend(token_ids(node.previous_fields()));
                 after.extend(token_ids(node.final_fields()));
             }
@@ -214,6 +219,19 @@ mod tests {
         assert_eq!(get_nftoken_id(&meta), Some(rippled_id.clone()));
         meta.nftoken_id = None;
         assert_eq!(get_nftoken_id(&meta), Some(rippled_id.clone()));
+        // A page whose only change is a link (a split moved NextPageMin)
+        // holds no new token, whatever it holds.
+        let mut linked = meta.clone();
+        let page = serde_json::json!({"ModifiedNode": {
+            "LedgerEntryType": "NFTokenPage",
+            "LedgerIndex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "PreviousFields": {"NextPageMin": "00"},
+            "FinalFields": {"NFTokens": [{"NFToken": {"NFTokenID": "00".repeat(32)}}]}
+        }});
+        linked
+            .affected_nodes
+            .insert(0, serde_json::from_value(page).unwrap());
+        assert_eq!(get_nftoken_id(&linked), Some(rippled_id.clone()));
         let p = parse_nftoken_id(&rippled_id).unwrap();
         let issuer = tx.get("Issuer").unwrap_or(&tx["Account"]).as_str().unwrap();
         assert_eq!(p.issuer, issuer);

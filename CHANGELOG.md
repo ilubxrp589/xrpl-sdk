@@ -13,7 +13,9 @@ below says how to update.
 ### Changed (breaking)
 - **`rippled`'s API version 2, and typed metadata.** Every request now
   asks for API version 2 (`xrpl_client::API_VERSION`; a request whose
-  parameters name `api_version` keeps it), subscriptions too, and the
+  parameters name `api_version` keeps it), on every transport
+  (`Client::raw_request` adds it, so a `Transport` of your own gets it too),
+  subscriptions too, and the
   response types follow version 2 only. Every response type was checked
   again against answers recorded in version 2 from `rippled` 3.4.1, Clio and
   Testnet (`crates/xrpl-client/scripts/record_fixtures.py` re-records them).
@@ -79,8 +81,13 @@ below says how to update.
   - `AccountData::balance` is an `Amount` (`Amount::Xrp`, in drops; it was a
     string of drops). *Update:* `balance_drops()` works as before; where you
     parsed `balance`, match `Amount::Xrp(drops)`.
+  - `batch::sign_batch_for(batch, batch_signer, signer, key)` names the
+    signer-list member that signs (it took it from the key), so a member
+    can sign with its regular key, as `sign_for_multisigning` allows.
+    *Update:* add the signer's address (`Wallet::sign_batch_for` is
+    unchanged).
   - `Wallet::sign_for_multisigning` returns a typed `models::Signer` and
-    `Wallet::collect_signers` takes them (they were JSON objects).
+    `wallet::collect_signers` takes them (they were JSON objects).
   - **`LedgerIndex` is passed by value** (it is `Copy`) to every `Client`
     and `BlockingClient` method: `client.account_info(addr,
     LedgerIndex::Validated)`. *Update:* drop the `&`. `LedgerIndex::as_value`
@@ -228,8 +235,10 @@ below says how to update.
   functions, and `sign_and_submit` (code that passes a `Keypair` or a
   `Wallet` is unchanged). New: `sign_transaction_async`,
   `sign_for_multisigning` / `sign_for_multisigning_async` (for an account
-  named, so a regular key can sign for its account), and in the SDK `sign` /
-  `sign_async`, which return a `SignedTransaction`. A secp256k1 signature
+  named, so a regular key can sign for its account),
+  `sign_batch_async` / `sign_batch_as_async` / `sign_batch_for_async`,
+  `sign_payment_channel_claim_async`, and in the SDK `sign` / `sign_async`,
+  which return a `SignedTransaction`. A secp256k1 signature
   with a high S (as AWS KMS returns half the time) is turned into the low-S
   form `rippled` requires, and a remote key's signature is checked against
   its public key before it is used, so a key that signs the wrong thing (the
@@ -260,6 +269,15 @@ below says how to update.
   their licence (MIT with an attribution clause).
 
 ### Fixed
+- **`autofill` of a Batch sent with a Ticket** numbered the outer account's
+  inner transactions from 1 (the Ticket's `Sequence` is 0), so they failed
+  with `tefPAST_SEQ` while the Batch itself succeeded and was charged. They
+  now start at the account's next sequence.
+- **`verify_transaction` refuses what `rippled` refuses in a multi-signed
+  transaction**: the transaction's own `Account` as a signer ("Invalid
+  multisigner") and more than 32 signers (they verified). `collect_signers`
+  refuses the transaction's own `Account` too. `MAX_MULTISIGNERS` is in
+  `xrpl_core::crypto` (the SDK re-exports it).
 - The Cloudflare Worker example (`examples/cloudflare-worker`) did not
   build: Cargo took it for a member of the SDK's workspace. It is now its
   own workspace, and CI checks it and the benchmarks on every change.

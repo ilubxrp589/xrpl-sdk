@@ -39,12 +39,14 @@ mod wordlists;
 
 pub use crate::address::KeyType;
 #[cfg(feature = "std")]
-pub use channel::{sign_payment_channel_claim, verify_payment_channel_claim};
+pub use channel::{
+    sign_payment_channel_claim, sign_payment_channel_claim_async, verify_payment_channel_claim,
+};
 pub use signing::{sha512_half, verify_signing_data, Keypair, Seed};
 #[cfg(feature = "std")]
 pub use signing::{
     sign_for_multisigning, sign_for_multisigning_async, sign_transaction, sign_transaction_async,
-    verify_transaction,
+    verify_transaction, MAX_MULTISIGNERS,
 };
 pub use signing_key::{AsyncSigningKey, SigningKey};
 

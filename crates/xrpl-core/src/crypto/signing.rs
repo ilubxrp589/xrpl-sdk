@@ -385,6 +385,11 @@ pub fn sha512_half(data: &[u8]) -> [u8; 32] {
     out
 }
 
+/// The most signers a multi-signed transaction may carry (`rippled`'s
+/// `STTx::maxMultiSigners`).
+#[cfg(feature = "std")]
+pub const MAX_MULTISIGNERS: usize = 32;
+
 /// Sign a transaction (JSON) with `key` (a [`Keypair`], or any
 /// [`SigningKey`]): sets `SigningPubKey` to the key's, signs the
 /// transaction's signing data ([`encode_for_signing`](crate::codec::encode_for_signing))
@@ -532,8 +537,10 @@ pub async fn sign_for_multisigning_async<K: AsyncSigningKey + ?Sized>(
 /// them (`STTx::checkSign`): the `TxnSignature` against the `SigningPubKey`
 /// over the transaction's signing data; or, for a multi-signed transaction
 /// (empty `SigningPubKey`, `Signers` set), each signer's signature over its
-/// multi-signing data, with the signers in strictly ascending account-ID
-/// order (a repeat or the wrong order is `false`, as `rippled` refuses it). A
+/// multi-signing data, with at most [`MAX_MULTISIGNERS`] signers in strictly
+/// ascending account-ID order, none of them the transaction's own `Account`
+/// (a repeat, the wrong order, too many signers or the account signing for
+/// itself is `false`, as `rippled` refuses each). A
 /// `Batch`'s `BatchSigners` are checked too
 /// ([`verify_batch_signers`](crate::transaction::batch::verify_batch_signers)).
 ///
@@ -595,13 +602,25 @@ pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
             if !text(tx.get("SigningPubKey"), "SigningPubKey")?.is_empty() {
                 return Ok(false);
             }
+            // rippled's bounds (STTx::maxMultiSigners).
+            if signers.len() > MAX_MULTISIGNERS {
+                return Ok(false);
+            }
+            let own = tx
+                .get("Account")
+                .and_then(serde_json::Value::as_str)
+                .map(crate::address::decode_account_id)
+                .transpose()?;
             let mut previous: Option<[u8; 20]> = None;
             let mut all = true;
             for entry in signers {
                 let signer = entry.get("Signer").unwrap_or(entry);
                 let account = text(signer.get("Account"), "a signer's Account")?;
                 let id = crate::address::decode_account_id(account)?;
-                if previous.is_some_and(|p| p >= id) {
+                // An account may not multi-sign for itself ("Invalid
+                // multisigner"), and the signers are in strictly ascending
+                // account-ID order.
+                if own == Some(id) || previous.is_some_and(|p| p >= id) {
                     return Ok(false);
                 }
                 previous = Some(id);

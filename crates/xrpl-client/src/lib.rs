@@ -17,7 +17,10 @@
 //! |---|---|---|---|
 //! | [`XrplHttpClient`] | JSON-RPC over HTTPS (`reqwest`, rustls) | native and `wasm32` | `http` (default) |
 //! | [`XrplWsClient`] | WebSocket with subscriptions and automatic reconnection (`tokio-tungstenite`) | native | `ws` (default) |
-//! | `XrplWsClient` (wasm) | the browser's `WebSocket` | `wasm32` | `ws` and `wasm` |
+//! | `XrplWsClient` (wasm) | JavaScript's `WebSocket` | `wasm32` | `ws` |
+//!
+//! A `wasm32` build also needs the `wasm` feature, which gives
+//! `halcyon-xrpl-core` its random source and JavaScript bindings.
 //!
 //! All of them implement [`Transport`], and so [`Client`]: a transport
 //! supplies [`Transport::send_raw`], and every method below is written once
