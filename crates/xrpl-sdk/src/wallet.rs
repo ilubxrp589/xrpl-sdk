@@ -326,7 +326,7 @@ impl Wallet {
     /// see [`Wallet::sign_for_multisigning`]).
     pub fn sign(&self, tx: &impl ToTxJson) -> Result<SignedTransaction, CoreError> {
         let tx_json = sign_transaction(&tx.to_tx_json()?, &self.keypair)?;
-        let blob = encode_transaction_json(&tx_json, false)?;
+        let blob = encode_transaction_json(&tx_json)?;
         Ok(SignedTransaction {
             hash: xrpl_core::hashes::transaction_id(&blob),
             tx_blob: hex::encode_upper(&blob),
@@ -354,7 +354,7 @@ impl Wallet {
     /// As [`Wallet::sign_transaction`].
     pub fn sign_and_encode(&self, tx: &serde_json::Value) -> Result<String, CoreError> {
         let signed = sign_transaction(tx, &self.keypair)?;
-        let encoded = encode_transaction_json(&signed, false)?;
+        let encoded = encode_transaction_json(&signed)?;
         Ok(hex::encode_upper(&encoded))
     }
 
@@ -368,32 +368,30 @@ impl Wallet {
         hex::encode_upper(self.keypair.public_key())
     }
 
-    /// Sign a transaction as one of its multi-signers: the `Signer` entry for
+    /// Sign `tx` (a typed transaction or JSON) as one of its multi-signers:
+    /// this wallet's [`Signer`](xrpl_core::transaction::models::Signer) for
     /// [`collect_signers`]. The transaction is signed with an empty
     /// `SigningPubKey` (a missing one counts as empty; a non-empty one is an
     /// error), as `rippled`'s `sign_for` does.
     ///
     /// # Errors
     ///
-    /// The errors of
+    /// The errors of [`ToTxJson::to_tx_json`] (a model that fails its
+    /// checks) and of
     /// [`encode_for_multisigning`](xrpl_core::codec::encode_for_multisigning):
-    /// [`CoreError::ValidationError`] for a non-empty `SigningPubKey`, and
-    /// the errors of [`encode_transaction_json`] for a field that does not
-    /// encode.
+    /// [`CoreError::ValidationError`] for a non-empty `SigningPubKey`, and a
+    /// codec error for a field that does not encode.
     pub fn sign_for_multisigning(
         &self,
-        tx: &serde_json::Value,
-    ) -> Result<serde_json::Value, CoreError> {
-        let encoded = xrpl_core::codec::encode_for_multisigning(tx, &self.address)?;
+        tx: &impl ToTxJson,
+    ) -> Result<xrpl_core::transaction::models::Signer, CoreError> {
+        let encoded = xrpl_core::codec::encode_for_multisigning(&tx.to_tx_json()?, &self.address)?;
         let signature = self.keypair.sign_signing_data(&encoded)?;
-
-        Ok(serde_json::json!({
-            "Signer": {
-                "Account": self.address,
-                "SigningPubKey": self.public_key_hex(),
-                "TxnSignature": hex::encode_upper(&signature)
-            }
-        }))
+        Ok(xrpl_core::transaction::models::Signer::new(
+            self.address.clone(),
+            self.public_key_hex(),
+            hex::encode_upper(&signature),
+        ))
     }
 }
 
@@ -422,7 +420,7 @@ impl Wallet {
 ///   for the transaction or a signer's `Account`.
 pub fn collect_signers(
     tx: &mut serde_json::Value,
-    signers: Vec<serde_json::Value>,
+    signers: Vec<xrpl_core::transaction::models::Signer>,
 ) -> Result<(), CoreError> {
     let invalid = |m: String| CoreError::ValidationError(m);
     if signers.is_empty() || signers.len() > MAX_MULTISIGNERS {
@@ -443,17 +441,10 @@ pub fn collect_signers(
     let mut keyed = signers
         .into_iter()
         .map(|signer| {
-            let field = |name: &str| {
-                signer
-                    .get("Signer")
-                    .and_then(|s| s.get(name))
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| invalid(format!("a Signer entry has no {name}")))
-            };
-            let account = field("Account")?;
-            let public_key = hex::decode(field("SigningPubKey")?)
+            let account = signer.account.as_str();
+            let public_key = hex::decode(&signer.signing_pub_key)
                 .map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-            let signature = hex::decode(field("TxnSignature")?)
+            let signature = hex::decode(&signer.txn_signature)
                 .map_err(|e| CoreError::InvalidHex(e.to_string()))?;
             let data = xrpl_core::codec::encode_for_multisigning(&unsigned, account)?;
             if !verify_signing_data(&public_key, &data, &signature)? {
@@ -472,10 +463,15 @@ pub fn collect_signers(
     let obj = tx
         .as_object_mut()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-    obj.insert(
-        "Signers".to_string(),
-        serde_json::Value::Array(keyed.into_iter().map(|(_, signer)| signer).collect()),
-    );
+    let signers = keyed
+        .into_iter()
+        .map(|(_, signer)| {
+            serde_json::to_value(signer)
+                .map(|signer| serde_json::json!({ "Signer": signer }))
+                .map_err(|e| CoreError::CodecError(e.to_string()))
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    obj.insert("Signers".to_string(), serde_json::Value::Array(signers));
     obj.insert(
         "SigningPubKey".to_string(),
         serde_json::Value::String(String::new()),
@@ -594,31 +590,26 @@ mod tests {
             "SigningPubKey": ""
         });
         let signer = wallet.sign_for_multisigning(&tx).unwrap();
-        assert!(signer["Signer"]["Account"].is_string());
-        assert!(signer["Signer"]["SigningPubKey"].is_string());
-        assert!(signer["Signer"]["TxnSignature"].is_string());
-        // Round-trip: same seed produces identical multisig signer entry
+        assert_eq!(signer.account, wallet.classic_address());
+        assert_eq!(signer.signing_pub_key, wallet.public_key_hex());
+        // The same seed signs the same transaction the same way.
         let wallet2 = Wallet::from_seed(&seed_str).unwrap();
-        let signer2 = wallet2.sign_for_multisigning(&tx).unwrap();
-        assert_eq!(
-            signer["Signer"]["TxnSignature"].as_str().unwrap(),
-            signer2["Signer"]["TxnSignature"].as_str().unwrap()
-        );
-        assert_eq!(
-            signer["Signer"]["Account"].as_str().unwrap(),
-            signer2["Signer"]["Account"].as_str().unwrap()
-        );
+        assert_eq!(wallet2.sign_for_multisigning(&tx).unwrap(), signer);
     }
 
     #[test]
     fn collect_signers_rejects_signer_without_valid_account() {
         let mut tx = serde_json::json!({"TransactionType": "Payment"});
-        let bad = vec![
-            serde_json::json!({"Signer": {"Account": "rZZZ", "SigningPubKey": "AA", "TxnSignature": "BB"}}),
-        ];
+        let bad = vec![xrpl_core::transaction::models::Signer::new(
+            "rZZZ", "AA", "BB",
+        )];
         assert!(super::collect_signers(&mut tx, bad).is_err());
-        let missing = vec![serde_json::json!({"Signer": {"SigningPubKey": "AA"}})];
-        assert!(super::collect_signers(&mut tx, missing).is_err());
+        let not_hex = vec![xrpl_core::transaction::models::Signer::new(
+            "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+            "ZZ",
+            "BB",
+        )];
+        assert!(super::collect_signers(&mut tx, not_hex).is_err());
         assert!(tx.get("Signers").is_none());
     }
 
@@ -722,10 +713,7 @@ mod tests {
         let s1 = w1.sign_for_multisigning(&tx).unwrap();
         let s2 = w2.sign_for_multisigning(&tx).unwrap();
         // Signatures should be different
-        assert_ne!(
-            s1["Signer"]["TxnSignature"].as_str().unwrap(),
-            s2["Signer"]["TxnSignature"].as_str().unwrap()
-        );
+        assert_ne!(s1.txn_signature, s2.txn_signature);
     }
 
     #[test]
@@ -747,7 +735,7 @@ mod tests {
             ("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r", "1209DCDAE666452AB21CA541F6653A80290F96336C52872463AD1D2A9B9D69CC6480E4397FFC9EA0678E45AB93E85D2AFE2AD36D86898387270F851296408406"),
         ] {
             let signer = Wallet::from_seed(seed).unwrap().sign_for_multisigning(&tx).unwrap();
-            assert_eq!(signer["Signer"]["TxnSignature"], sig, "{seed}");
+            assert_eq!(signer.txn_signature, sig, "{seed}");
         }
     }
 

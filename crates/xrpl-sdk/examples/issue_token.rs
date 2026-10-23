@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nTrust lines now:");
     for (name, holder) in [("Alice", &alice), ("Bob", &bob)] {
         for line in client
-            .account_lines_all(holder.classic_address(), &LedgerIndex::Validated)
+            .account_lines_all(holder.classic_address(), LedgerIndex::Validated)
             .await?
         {
             println!(

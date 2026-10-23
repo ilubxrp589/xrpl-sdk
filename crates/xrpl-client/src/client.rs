@@ -34,9 +34,10 @@ fn check_x_address_networks(tx: &Value, network_id: u32) -> Result<(), ClientErr
         let Some(text) = value.as_str().filter(|s| s.starts_with(['X', 'T'])) else {
             continue;
         };
-        let Ok((_, _, test)) = xrpl_core::address::decode_x_address(text) else {
+        let Ok(decoded) = xrpl_core::address::decode_x_address(text) else {
             continue;
         };
+        let test = decoded.test_network;
         if test == mainnet {
             return Err(ClientError::Core(xrpl_core::CoreError::ValidationError(
                 format!(
@@ -88,7 +89,7 @@ async fn fill_batch<C: Client + ?Sized>(
             Some(s) => *s,
             None => {
                 client
-                    .account_info(&account, &LedgerIndex::Current)
+                    .account_info(&account, LedgerIndex::Current)
                     .await?
                     .account_data
                     .sequence
@@ -513,11 +514,11 @@ pub trait Client: Transport {
     fn account_info(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<AccountInfo, ClientError>> + MaybeSend {
         async move {
             self.request(&AccountInfoRequest {
-                ledger_index: *ledger,
+                ledger_index: ledger,
                 ..AccountInfoRequest::new(account)
             })
             .await
@@ -555,9 +556,9 @@ pub trait Client: Transport {
     /// not have, and the errors of [`Client::request`].
     fn ledger(
         &self,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<LedgerResult, ClientError>> + MaybeSend {
-        async move { self.request(&LedgerRequest::new(*ledger)).await }
+        async move { self.request(&LedgerRequest::new(ledger)).await }
     }
 
     /// Submit a signed transaction blob (hex) once and sort the server's
@@ -639,7 +640,7 @@ pub trait Client: Transport {
     fn account_lines(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<AccountLinesResult, ClientError>> + MaybeSend {
         async move { self.request(&account_lines_request(account, ledger)).await }
     }
@@ -653,7 +654,7 @@ pub trait Client: Transport {
     fn account_offers(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<AccountOffersResult, ClientError>> + MaybeSend {
         async move { self.request(&account_offers_request(account, ledger)).await }
     }
@@ -667,7 +668,7 @@ pub trait Client: Transport {
     fn account_nfts(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<AccountNftsResult, ClientError>> + MaybeSend {
         async move { self.request(&account_nfts_request(account, ledger)).await }
     }
@@ -710,8 +711,23 @@ pub trait Client: Transport {
         }
     }
 
-    /// Get transaction history for an account (bounds default to all
-    /// validated ledgers, limit to 200, order to newest first).
+    /// An account's latest transactions: one page of up to 200, newest
+    /// first, from every validated ledger. For other bounds, order or page
+    /// size, send an [`AccountTxRequest`] (with [`Client::request`], or
+    /// [`Client::pages`] to read on page by page):
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::requests::AccountTxRequest;
+    ///
+    /// let oldest = client
+    ///     .request(&AccountTxRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
+    ///         .with_forward(true)
+    ///         .with_limit(10u32))
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -721,23 +737,10 @@ pub trait Client: Transport {
     fn account_tx(
         &self,
         account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-        limit: Option<u32>,
-        marker: Option<Value>,
-        forward: Option<bool>,
     ) -> impl Future<Output = Result<AccountTxResult, ClientError>> + MaybeSend {
         async move {
-            self.request(&AccountTxRequest {
-                account: account.into(),
-                ledger_index_min: ledger_index_min.unwrap_or(-1),
-                ledger_index_max: ledger_index_max.unwrap_or(-1),
-                limit: Some(limit.unwrap_or(200)),
-                marker,
-                forward: forward.unwrap_or(false),
-                binary: None,
-            })
-            .await
+            self.request(&AccountTxRequest::new(account).with_limit(200u32))
+                .await
         }
     }
 
@@ -751,7 +754,7 @@ pub trait Client: Transport {
         &self,
         account: &str,
         object_type: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
         limit: Option<u32>,
         marker: Option<Value>,
     ) -> impl Future<Output = Result<AccountObjectsResult, ClientError>> + MaybeSend {
@@ -774,12 +777,12 @@ pub trait Client: Transport {
     fn account_currencies(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<AccountCurrenciesResult, ClientError>> + MaybeSend {
         async move {
             self.request(&AccountCurrenciesRequest {
                 account: account.into(),
-                ledger_index: *ledger,
+                ledger_index: ledger,
             })
             .await
         }
@@ -795,12 +798,12 @@ pub trait Client: Transport {
         &self,
         account: &str,
         destination_account: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<AccountChannelsResult, ClientError>> + MaybeSend {
         async move {
             self.request(&AccountChannelsRequest {
                 destination_account: destination_account.map(Into::into),
-                ledger_index: *ledger,
+                ledger_index: ledger,
                 ..AccountChannelsRequest::new(account)
             })
             .await
@@ -816,11 +819,11 @@ pub trait Client: Transport {
     fn ledger_entry(
         &self,
         index: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<LedgerEntryResult, ClientError>> + MaybeSend {
         async move {
             self.request(&LedgerEntryRequest {
-                ledger_index: *ledger,
+                ledger_index: ledger,
                 ..LedgerEntryRequest::new(index)
             })
             .await
@@ -849,12 +852,12 @@ pub trait Client: Transport {
         &self,
         account: &str,
         hotwallet: Option<Vec<&str>>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<GatewayBalancesResult, ClientError>> + MaybeSend {
         async move {
             self.request(&GatewayBalancesRequest {
                 hotwallet: hotwallet.map(|h| h.into_iter().map(Into::into).collect()),
-                ledger_index: *ledger,
+                ledger_index: ledger,
                 ..GatewayBalancesRequest::new(account)
             })
             .await
@@ -944,7 +947,7 @@ pub trait Client: Transport {
 
             let seq_fut = async {
                 if need_seq && !uses_ticket {
-                    self.account_info(&account, &LedgerIndex::Current)
+                    self.account_info(&account, LedgerIndex::Current)
                         .await
                         .map(Some)
                 } else {
@@ -1228,7 +1231,7 @@ pub trait Client: Transport {
     /// `ledger_index`.
     fn validated_ledger_index(&self) -> impl Future<Output = Result<u32, ClientError>> + MaybeSend {
         async move {
-            self.ledger(&LedgerIndex::Validated)
+            self.ledger(LedgerIndex::Validated)
                 .await?
                 .ledger_index
                 .ok_or_else(|| ClientError::UnexpectedResponse("ledger has no ledger_index".into()))
@@ -1245,7 +1248,7 @@ pub trait Client: Transport {
     /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::error::ClientError> {
     /// use xrpl_client::types::LedgerIndex;
     ///
-    /// for amount in client.balances("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", &LedgerIndex::Validated).await? {
+    /// for amount in client.balances("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await? {
     ///     println!("{amount}");
     /// }
     /// # Ok(())
@@ -1260,7 +1263,7 @@ pub trait Client: Transport {
     fn balances(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<Vec<xrpl_core::types::Amount>, ClientError>> + MaybeSend {
         async move {
             use xrpl_core::types::Amount;
@@ -1268,16 +1271,13 @@ pub trait Client: Transport {
             let pinned = info
                 .ledger_index
                 .or(info.ledger_current_index)
-                .map_or(*ledger, LedgerIndex::Index);
-            let drops = info.account_data.balance.parse::<u64>().map_err(|_| {
-                ClientError::UnexpectedResponse(format!(
-                    "Balance {:?} is not a whole number of drops",
-                    info.account_data.balance
-                ))
+                .map_or(ledger, LedgerIndex::Index);
+            let drops = info.account_data.balance_drops().ok_or_else(|| {
+                ClientError::UnexpectedResponse("an account balance that is not XRP".into())
             })?;
             let (lines, objects) = futures::future::try_join(
-                self.account_lines_all(account, &pinned),
-                self.account_objects_all(account, Some("mptoken"), &pinned),
+                self.account_lines_all(account, pinned),
+                self.account_objects_all(account, Some("mptoken"), pinned),
             )
             .await?;
             let mut amounts = vec![Amount::xrp(drops)?];
@@ -1310,7 +1310,7 @@ pub trait Client: Transport {
     /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
     /// use xrpl_client::types::LedgerIndex;
     ///
-    /// let ledger = client.verified_ledger(&LedgerIndex::Validated).await?;
+    /// let ledger = client.verified_ledger(LedgerIndex::Validated).await?;
     /// println!("ledger {} ({}): {} transactions", ledger.header.ledger_index, ledger.hash, ledger.transactions.len());
     /// # Ok(())
     /// # }
@@ -1324,7 +1324,7 @@ pub trait Client: Transport {
     /// when the request fails.
     fn verified_ledger(
         &self,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<xrpl_core::ledger::VerifiedLedger, ClientError>> + MaybeSend
     {
         async move {
@@ -1347,7 +1347,7 @@ pub trait Client: Transport {
     fn account_lines_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<Vec<TrustLine>, ClientError>> + MaybeSend {
         async move {
             self.request_all(account_lines_request(account, ledger))
@@ -1364,7 +1364,7 @@ pub trait Client: Transport {
     fn account_offers_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<Vec<AccountOffer>, ClientError>> + MaybeSend {
         async move {
             self.request_all(account_offers_request(account, ledger))
@@ -1381,7 +1381,7 @@ pub trait Client: Transport {
     fn account_nfts_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<Vec<NFToken>, ClientError>> + MaybeSend {
         async move {
             self.request_all(account_nfts_request(account, ledger))
@@ -1399,7 +1399,7 @@ pub trait Client: Transport {
         &self,
         account: &str,
         object_type: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> impl Future<Output = Result<Vec<LedgerObject>, ClientError>> + MaybeSend {
         async move {
             self.request_all(account_objects_request(account, object_type, ledger))
@@ -1407,7 +1407,11 @@ pub trait Client: Transport {
         }
     }
 
-    /// All transactions of an account, newest first, following the marker.
+    /// All transactions of an account in every validated ledger, newest
+    /// first, following the marker. For a range of ledgers, pass
+    /// [`Client::request_all`] an [`AccountTxRequest`] with
+    /// `with_ledger_index_min` / `with_ledger_index_max`; for a long history,
+    /// [`Client::pages`] reads it page by page.
     ///
     /// # Errors
     ///
@@ -1417,45 +1421,35 @@ pub trait Client: Transport {
     fn account_tx_all(
         &self,
         account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
     ) -> impl Future<Output = Result<Vec<AccountTxEntry>, ClientError>> + MaybeSend {
         async move {
-            self.request_all(AccountTxRequest {
-                account: account.into(),
-                ledger_index_min: ledger_index_min.unwrap_or(-1),
-                ledger_index_max: ledger_index_max.unwrap_or(-1),
-                limit: Some(200),
-                marker: None,
-                forward: false,
-                binary: None,
-            })
-            .await
+            self.request_all(AccountTxRequest::new(account).with_limit(200u32))
+                .await
         }
     }
 }
 
 impl<T: Transport + ?Sized> Client for T {}
 
-fn account_lines_request(account: &str, ledger: &LedgerIndex) -> AccountLinesRequest {
+fn account_lines_request(account: &str, ledger: LedgerIndex) -> AccountLinesRequest {
     AccountLinesRequest {
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(400),
         ..AccountLinesRequest::new(account)
     }
 }
 
-fn account_offers_request(account: &str, ledger: &LedgerIndex) -> AccountOffersRequest {
+fn account_offers_request(account: &str, ledger: LedgerIndex) -> AccountOffersRequest {
     AccountOffersRequest {
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(400),
         ..AccountOffersRequest::new(account)
     }
 }
 
-fn account_nfts_request(account: &str, ledger: &LedgerIndex) -> AccountNftsRequest {
+fn account_nfts_request(account: &str, ledger: LedgerIndex) -> AccountNftsRequest {
     AccountNftsRequest {
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(400),
         ..AccountNftsRequest::new(account)
     }
@@ -1464,11 +1458,11 @@ fn account_nfts_request(account: &str, ledger: &LedgerIndex) -> AccountNftsReque
 fn account_objects_request(
     account: &str,
     object_type: Option<&str>,
-    ledger: &LedgerIndex,
+    ledger: LedgerIndex,
 ) -> AccountObjectsRequest {
     AccountObjectsRequest {
         object_type: object_type.map(Into::into),
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(200),
         ..AccountObjectsRequest::new(account)
     }
@@ -1711,14 +1705,14 @@ mod tests {
     fn requests_carry_the_params_the_methods_always_sent() {
         let p = |r: &dyn erased::Params| r.params();
         assert_eq!(
-            p(&account_lines_request("rA", &LedgerIndex::Validated)),
+            p(&account_lines_request("rA", LedgerIndex::Validated)),
             json!({"account": "rA", "ledger_index": "validated", "limit": 400})
         );
         assert_eq!(
             p(&account_objects_request(
                 "rA",
                 Some("offer"),
-                &LedgerIndex::Index(7)
+                LedgerIndex::Index(7)
             )),
             json!({"account": "rA", "type": "offer", "ledger_index": 7, "limit": 200})
         );
@@ -1760,7 +1754,7 @@ mod tests {
                 json!({"account": "rA", "lines": [line("EUR")]}),
             );
         let lines = mock
-            .account_lines_all("rA", &LedgerIndex::Validated)
+            .account_lines_all("rA", LedgerIndex::Validated)
             .await
             .unwrap();
         assert_eq!(
@@ -1810,7 +1804,7 @@ mod tests {
             );
         }
         let err = mock
-            .account_offers_all("rA", &LedgerIndex::Validated)
+            .account_offers_all("rA", LedgerIndex::Validated)
             .await
             .unwrap_err();
         assert!(
@@ -1927,11 +1921,11 @@ mod tests {
         tx: &mut Value,
     ) {
         fn send<T: Send>(_: T) {}
-        send(http.account_info("rA", &LedgerIndex::Current));
-        send(http.account_lines_all("rA", &LedgerIndex::Current));
+        send(http.account_info("rA", LedgerIndex::Current));
+        send(http.account_lines_all("rA", LedgerIndex::Current));
         send(http.submit_and_wait("00"));
-        send(ws.account_info("rA", &LedgerIndex::Current));
-        send(ws.account_tx_all("rA", None, None));
+        send(ws.account_info("rA", LedgerIndex::Current));
+        send(ws.account_tx_all("rA"));
         send(ws.autofill(tx));
     }
 
@@ -1949,8 +1943,7 @@ mod tests {
             tx["LastLedgerSequence"] = json!(l);
         }
         let signed = sign_transaction(&tx, &keypair).unwrap();
-        let blob =
-            hex::encode_upper(xrpl_core::codec::encode_transaction_json(&signed, false).unwrap());
+        let blob = hex::encode_upper(xrpl_core::codec::encode_transaction_json(&signed).unwrap());
         let hash = xrpl_core::hashes::hash_signed_tx_blob(&blob)
             .unwrap()
             .to_string();
@@ -2170,14 +2163,14 @@ mod tests {
         fn send<T: Send>(_: T) {}
         send(client.raw_request("fee", json!({})));
         send(client.fee());
-        send(client.account_info("rA", &LedgerIndex::Validated));
+        send(client.account_info("rA", LedgerIndex::Validated));
         send(client.request(&FeeRequest {}));
         send(client.request_all(AccountLinesRequest::new("rA")));
         send(client.pages(AccountTxRequest::new("rA")));
         send(client.autofill(tx));
         send(client.submit_and_wait("00"));
-        send(client.balances("rA", &LedgerIndex::Validated));
-        send(client.verified_ledger(&LedgerIndex::Validated));
+        send(client.balances("rA", LedgerIndex::Validated));
+        send(client.verified_ledger(LedgerIndex::Validated));
     }
 
     /// `Arc<dyn Transport>` is a client: a transport chosen at run time.
@@ -2204,7 +2197,7 @@ mod tests {
                 {"account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "balance": "-12.5", "currency": "USD", "limit": "0", "limit_peer": "100"}]}))
             .reply("account_objects", json!({"account": "rA", "account_objects": [
                 {"LedgerEntryType": "MPToken", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "MPTokenIssuanceID": issuance, "MPTAmount": "750", "Flags": 0, "OwnerNode": "0", "PreviousTxnID": "0000000000000000000000000000000000000000000000000000000000000000", "PreviousTxnLgrSeq": 1, "index": "0000000000000000000000000000000000000000000000000000000000000000"}]}));
-        let amounts = mock.balances("rA", &LedgerIndex::Validated).await.unwrap();
+        let amounts = mock.balances("rA", LedgerIndex::Validated).await.unwrap();
         assert_eq!(
             amounts,
             vec![

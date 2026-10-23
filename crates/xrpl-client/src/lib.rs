@@ -63,8 +63,8 @@
 //! # async fn run() -> Result<(), xrpl_client::ClientError> {
 //! let client = XrplHttpClient::new("https://xrplcluster.com")?;
 //!
-//! let account = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated).await?;
-//! println!("balance: {} drops", account.account_data.balance);
+//! let account = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated).await?;
+//! println!("balance: {}", account.account_data.balance); // "12.5 XRP"
 //!
 //! // The XRP/RLUSD order book, with amounts typed as `xrpl_core::types::Amount`.
 //! let book = client

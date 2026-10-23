@@ -15,11 +15,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Async helpers run on the client's own runtime with block_on.
     println!("Funding a Testnet wallet…");
     let wallet = client.block_on(generate_faucet_wallet(net))?;
-    let info = client.account_info(wallet.classic_address(), &LedgerIndex::Validated)?;
+    let info = client.account_info(wallet.classic_address(), LedgerIndex::Validated)?;
     println!(
-        "  {} holds {} XRP",
+        "  {} holds {}",
         wallet.classic_address(),
-        utils::drops_to_xrp(info.account_data.balance.parse()?)
+        info.account_data.balance
     );
 
     let mut tx = json!({
@@ -37,10 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         result.transaction_result().unwrap_or("?")
     );
 
-    let info = client.account_info(wallet.classic_address(), &LedgerIndex::Validated)?;
-    println!(
-        "  balance now {} XRP",
-        utils::drops_to_xrp(info.account_data.balance.parse()?)
-    );
+    let info = client.account_info(wallet.classic_address(), LedgerIndex::Validated)?;
+    println!("  balance now {}", info.account_data.balance);
     Ok(())
 }

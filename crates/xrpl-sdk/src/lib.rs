@@ -122,7 +122,7 @@
 //! });
 //! let signatures = vec![alice.sign_for_multisigning(&tx)?, bob.sign_for_multisigning(&tx)?];
 //! collect_signers(&mut tx, signatures)?;
-//! let blob = hex::encode_upper(encode_transaction_json(&tx, false)?);
+//! let blob = hex::encode_upper(encode_transaction_json(&tx)?);
 //! # assert_eq!(tx["Signers"].as_array().unwrap().len(), 2);
 //! # let _ = blob;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -230,8 +230,8 @@
 //! let client = XrplHttpClient::new("https://xrplcluster.com")?;
 //!
 //! // A method with typed arguments and response.
-//! let info = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated).await?;
-//! println!("{} drops, sequence {}", info.account_data.balance, info.account_data.sequence);
+//! let info = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated).await?;
+//! println!("{}, sequence {}", info.account_data.balance, info.account_data.sequence);
 //!
 //! // Any typed request, by value.
 //! let fee = client.request(&requests::FeeRequest::new()).await?;
@@ -322,8 +322,8 @@
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let client = BlockingClient::new("https://xrplcluster.com")?;
-//!     let info = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated)?;
-//!     println!("{} XRP", utils::drops_to_xrp(info.account_data.balance.parse()?));
+//!     let info = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated)?;
+//!     println!("{}", info.account_data.balance);
 //!     Ok(())
 //! }
 //! ```

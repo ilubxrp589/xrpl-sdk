@@ -41,7 +41,7 @@
 //! assert_eq!(tx["Amount"], "1000000");
 //! assert_eq!(tx["Destination"], "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
 //!
-//! assert_eq!(encode_transaction_json(&tx, false)?, blob);
+//! assert_eq!(encode_transaction_json(&tx)?, blob);
 //!
 //! // Its ID, as rippled reported it.
 //! assert_eq!(
@@ -54,7 +54,7 @@
 //! ## Keys and addresses
 //!
 //! ```
-//! use xrpl_core::address::{classic_to_x_address, x_address_to_classic, KeyType};
+//! use xrpl_core::address::{classic_to_x_address, decode_x_address, KeyType};
 //! use xrpl_core::crypto::{Keypair, Seed};
 //!
 //! // A public test seed (never fund it on mainnet).
@@ -65,7 +65,9 @@
 //!
 //! // X-addresses carry a destination tag inside the address.
 //! let x = classic_to_x_address("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", Some(12345), false)?;
-//! assert_eq!(x_address_to_classic(&x)?, ("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1".to_string(), Some(12345), false));
+//! let decoded = decode_x_address(&x)?;
+//! assert_eq!(decoded.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+//! assert_eq!(decoded.tag, Some(12345));
 //! # Ok::<(), xrpl_core::CoreError>(())
 //! ```
 //!

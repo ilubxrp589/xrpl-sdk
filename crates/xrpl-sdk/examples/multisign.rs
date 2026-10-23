@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Submit and wait.
     let submitted = client.submit_multisigned(&tx).await?;
     println!("  submit_multisigned        {}", submitted.engine_result);
-    let blob = hex::encode_upper(encode_transaction_json(&tx, false)?);
+    let blob = hex::encode_upper(encode_transaction_json(&tx)?);
     let hash = hash_signed_tx_blob(&blob)?.to_string();
     for _ in 0..15 {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;

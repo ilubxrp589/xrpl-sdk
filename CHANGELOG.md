@@ -30,6 +30,44 @@ below says how to update.
     3.4.1 does (MPT AMM IDs checked against `rippled`'s `ledger_entry`), and
     `book_base` / `book_directory` take an optional permissioned-DEX
     `domain`. The bridge keylets take a `models::XChainBridge`.
+- **One type for each other idea, too.**
+  - `xrpl_client::types::PathStep` is the transaction models' `PathStep`,
+    so a path `ripple_path_find` or `path_find` returns goes into
+    `Payment::paths` as it is. The client's `AuthAccount` (an auction slot's
+    `{"account": …}`) is renamed `AuctionSlotAccount`, so it is not confused
+    with the transaction models' `AuthAccount`.
+  - `AccountData::balance` is an `Amount` (`Amount::Xrp`, in drops; it was a
+    string of drops). *Update:* `balance_drops()` works as before; where you
+    parsed `balance`, match `Amount::Xrp(drops)`.
+  - `Wallet::sign_for_multisigning` returns a typed `models::Signer` and
+    `Wallet::collect_signers` takes them (they were JSON objects).
+  - **`LedgerIndex` is passed by value** (it is `Copy`) to every `Client`
+    and `BlockingClient` method: `client.account_info(addr,
+    LedgerIndex::Validated)`. *Update:* drop the `&`. `LedgerIndex::as_value`
+    is renamed `to_value`.
+  - **`Client::account_tx(account)`** takes only the account (one page of up
+    to 200, newest first) and `account_tx_all(account)` likewise; the five
+    positional options (`None, None, Some(50), None, None`) are gone. For
+    bounds, order, page size or a marker, send an `AccountTxRequest`:
+    *Update:* `client.account_tx(a, None, None, Some(50), None, Some(true))`
+    → `client.request(&AccountTxRequest::new(a).with_limit(50u32).with_forward(true))`;
+    `account_tx_all(a, Some(min), None)` →
+    `client.request_all(AccountTxRequest::new(a).with_ledger_index_min(min))`.
+  - **The encoder has no `bool` argument.** `encode_transaction_json(&tx)`
+    encodes every field (it was `encode_transaction_json(&tx, false)`); what
+    a single signature covers is `encode_for_signing(&tx)`, which, as
+    xrpl.js's `encodeForSigning` and as `encode_for_multisigning` already
+    did, starts with its prefix (`"STX\0"`). *Update:* `(&tx, false)` →
+    `(&tx)`; `encode_transaction_json(&tx, true)` → `encode_for_signing(&tx)`,
+    dropping the first four bytes where you added the prefix yourself. The
+    wasm export `encode_transaction_for_signing` is now `encode_for_signing`
+    and returns the prefix too.
+  - **X-addresses decode to an `XAddress`** (`account_id`, `tag`,
+    `test_network`; `classic_address()`, `Display` and `FromStr`) instead of
+    a tuple. `x_address_to_classic` is removed: *Update:*
+    `let (classic, tag, test) = x_address_to_classic(x)?` →
+    `let x = decode_x_address(x)?;` then `x.classic_address()`, `x.tag`,
+    `x.test_network`.
 - **Typed flags.** Each transaction type has its own flags type
   (`PaymentFlags`, `OfferCreateFlags`, …; `UniversalFlags` for types with
   none of their own, each including `FULLY_CANONICAL_SIG` and
@@ -121,6 +159,11 @@ below says how to update.
   James Turner must travel with any redistribution or derived work (section
   4(d)). Each crate carries LICENSE and NOTICE. Releases up to 0.7.0 keep
   their licence (MIT with an attribution clause).
+
+### Fixed
+- The Cloudflare Worker example (`examples/cloudflare-worker`) did not
+  build: Cargo took it for a member of the SDK's workspace. It is now its
+  own workspace, and CI checks it and the benchmarks on every change.
 
 ## [v0.7.0] (2026-10-23)
 

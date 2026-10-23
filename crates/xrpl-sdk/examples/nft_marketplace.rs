@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let owned = client
-        .account_nfts_all(collector.classic_address(), &LedgerIndex::Validated)
+        .account_nfts_all(collector.classic_address(), LedgerIndex::Validated)
         .await?;
     println!(
         "  The collector now holds {} NFT(s): {}",

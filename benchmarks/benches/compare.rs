@@ -34,7 +34,7 @@ fn inputs() -> Vec<(String, Value, String)> {
             .clone();
         // rippled adds `hash`; it is not part of the transaction.
         tx.as_object_mut().expect("object").remove("hash");
-        let blob = hex::encode_upper(encode_transaction_json(&tx, false).expect("encodes"));
+        let blob = hex::encode_upper(encode_transaction_json(&tx).expect("encodes"));
         out.push((want.to_string(), tx, blob));
     }
     out
@@ -66,7 +66,7 @@ fn codec(c: &mut Criterion) {
         let mut g = c.benchmark_group(format!("encode/{name}"));
         g.bench_function("halcyon-xrpl-core", |b| {
             b.iter(|| {
-                hex::encode_upper(encode_transaction_json(black_box(&tx), false).expect("encodes"))
+                hex::encode_upper(encode_transaction_json(black_box(&tx)).expect("encodes"))
             })
         });
         if their_hex.is_some() {

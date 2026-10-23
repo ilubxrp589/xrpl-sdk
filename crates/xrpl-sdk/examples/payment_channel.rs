@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     send(&client, &bob, redeem.to_json()?).await?;
 
     let channels = client
-        .account_channels(alice.classic_address(), None, &LedgerIndex::Validated)
+        .account_channels(alice.classic_address(), None, LedgerIndex::Validated)
         .await?;
     let c = &channels.channels[0];
     println!(

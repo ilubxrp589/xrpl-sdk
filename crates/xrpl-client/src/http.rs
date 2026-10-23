@@ -720,10 +720,7 @@ mod live_tests {
         let client = XrplHttpClient::new(TESTNET_URL).unwrap();
         // Use the testnet faucet's known account
         let result = client
-            .account_info(
-                "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-                &LedgerIndex::Validated,
-            )
+            .account_info("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)
             .await;
         // Account may or may not exist on testnet, but the request should succeed
         assert!(result.is_ok() || matches!(result, Err(ClientError::RpcError { .. })));

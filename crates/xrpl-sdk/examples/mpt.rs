@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .account_objects_all(
             holder.classic_address(),
             Some("mptoken"),
-            &LedgerIndex::Validated,
+            LedgerIndex::Validated,
         )
         .await?;
     for entry in owned {

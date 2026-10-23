@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The check is a ledger entry anyone can look up.
     let entry = client
-        .ledger_entry(&check_id.to_string(), &LedgerIndex::Validated)
+        .ledger_entry(&check_id.to_string(), LedgerIndex::Validated)
         .await?;
     println!(
         "  on the ledger: {}",

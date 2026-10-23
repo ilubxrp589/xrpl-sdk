@@ -19,5 +19,5 @@ mod number;
 
 pub use decode::decode_transaction_binary;
 pub use definitions::{lookup_field_def, lookup_field_def_by_id, transaction_type_code};
-pub use encode::{encode_for_multisigning, encode_transaction_json};
+pub use encode::{encode_for_multisigning, encode_for_signing, encode_transaction_json};
 pub use field::{decode_vl, encode_vl, FieldId};

@@ -51,9 +51,10 @@ pub struct AccountData {
     /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
-    /// The XRP balance, in drops (see [`AccountData::balance_drops`]).
+    /// The XRP balance (an [`Amount::Xrp`](xrpl_core::types::Amount::Xrp), in
+    /// drops; shown as XRP). See [`AccountData::balance_drops`].
     #[serde(rename = "Balance")]
-    pub balance: String,
+    pub balance: xrpl_core::types::Amount,
     /// Flag bits (`Flags`).
     #[serde(rename = "Flags")]
     pub flags: u32,
@@ -90,9 +91,13 @@ pub struct AccountData {
 }
 
 impl AccountData {
-    /// The XRP balance in drops, as a number.
+    /// The XRP balance in drops (`None` only if the server sent a balance
+    /// that is not XRP, which an account root never has).
     pub fn balance_drops(&self) -> Option<u64> {
-        self.balance.parse().ok()
+        match self.balance {
+            xrpl_core::types::Amount::Xrp(drops) => Some(drops),
+            _ => None,
+        }
     }
 }
 

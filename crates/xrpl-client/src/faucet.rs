@@ -120,8 +120,8 @@ pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding
 /// The account's XRP balance in a validated ledger, in drops; 0 for an
 /// account that does not exist yet.
 async fn validated_balance(client: &XrplHttpClient, address: &str) -> Result<u64, ClientError> {
-    match client.account_info(address, &LedgerIndex::Validated).await {
-        Ok(info) => info.account_data.balance.parse().map_err(|_| {
+    match client.account_info(address, LedgerIndex::Validated).await {
+        Ok(info) => info.account_data.balance_drops().ok_or_else(|| {
             ClientError::UnexpectedResponse("an XRP balance that is not drops".into())
         }),
         Err(ClientError::RpcError { ref code, .. }) if code == "actNotFound" => Ok(0),

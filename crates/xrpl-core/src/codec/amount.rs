@@ -354,8 +354,7 @@ mod tests {
         let amount: Amount = serde_json::from_value(json.clone()).unwrap();
         let bytes = encode_amount(&amount).unwrap();
         let via_json =
-            crate::codec::encode_transaction_json(&serde_json::json!({"Amount": json}), false)
-                .unwrap();
+            crate::codec::encode_transaction_json(&serde_json::json!({"Amount": json})).unwrap();
         assert_eq!(via_json[1..], bytes[..]);
         assert_eq!(decode_amount(&bytes).unwrap(), amount);
     }

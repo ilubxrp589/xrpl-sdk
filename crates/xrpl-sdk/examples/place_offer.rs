@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = XrplHttpClient::new(TESTNET_URL)?;
     let info = client
-        .account_info(wallet.classic_address(), &LedgerIndex::Current)
+        .account_info(wallet.classic_address(), LedgerIndex::Current)
         .await?;
     let fee = client.fee().await?;
     let ledger_idx = client.ledger_current().await?;

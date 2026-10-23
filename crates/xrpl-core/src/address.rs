@@ -2,6 +2,7 @@
 //! destination tag) and seeds (`s…`): base58check with the XRP Ledger's
 //! alphabet, as `rippled` encodes them.
 
+use crate::types::AccountId;
 use crate::CoreError;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -215,8 +216,73 @@ pub fn encode_x_address(account_id: &[u8; 20], tag: Option<u32>, test: bool) -> 
     base58_encode(&payload)
 }
 
-/// Decode an X-address to (account ID, tag, is_test). Rejects unknown
-/// prefixes and flags, 64-bit tags, and tag bytes without the tag flag.
+/// An X-address (XLS-5d) taken apart: the account, the destination tag it
+/// carries (if any) and whether it is for a test network (`T…`) or mainnet
+/// (`X…`). Read from text by [`decode_x_address`] (or `parse`), written back
+/// by `Display`.
+///
+/// ```
+/// use xrpl_core::address::{classic_to_x_address, decode_x_address};
+///
+/// let x = classic_to_x_address("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", Some(12345), false)?;
+/// let decoded = decode_x_address(&x)?;
+/// assert_eq!(decoded.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+/// assert_eq!(decoded.tag, Some(12345));
+/// assert!(!decoded.test_network);
+/// assert_eq!(decoded.to_string(), x);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct XAddress {
+    /// The account.
+    pub account_id: AccountId,
+    /// The destination tag the address carries, if any.
+    pub tag: Option<u32>,
+    /// Whether the address is for a test network (`T…`) rather than mainnet
+    /// (`X…`).
+    pub test_network: bool,
+}
+
+impl XAddress {
+    /// An X-address for `account_id`, with `tag`, for a test network or
+    /// mainnet.
+    pub fn new(account_id: AccountId, tag: Option<u32>, test_network: bool) -> Self {
+        XAddress {
+            account_id,
+            tag,
+            test_network,
+        }
+    }
+
+    /// The account's classic address (`r…`).
+    pub fn classic_address(&self) -> String {
+        encode_account_id(&self.account_id.0)
+    }
+}
+
+impl core::fmt::Display for XAddress {
+    /// The X-address (`X…` or `T…`).
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&encode_x_address(
+            &self.account_id.0,
+            self.tag,
+            self.test_network,
+        ))
+    }
+}
+
+impl core::str::FromStr for XAddress {
+    type Err = CoreError;
+
+    /// As [`decode_x_address`].
+    fn from_str(s: &str) -> Result<Self, CoreError> {
+        decode_x_address(s)
+    }
+}
+
+/// Decode an X-address. Rejects unknown prefixes and flags, 64-bit tags,
+/// and tag bytes without the tag flag.
 ///
 /// # Errors
 ///
@@ -225,7 +291,7 @@ pub fn encode_x_address(account_id: &[u8; 20], tag: Option<u32>, test: bool) -> 
 /// checksum does not match; [`CoreError::InvalidAddress`] if it does not
 /// decode to 35 bytes, or has an unknown prefix or flag, a 64-bit tag, or
 /// tag bytes without the tag flag.
-pub fn decode_x_address(x_address: &str) -> Result<([u8; 20], Option<u32>, bool), CoreError> {
+pub fn decode_x_address(x_address: &str) -> Result<XAddress, CoreError> {
     let decoded: [u8; 35] = base58_decode(x_address)?.try_into().map_err(|d: Vec<u8>| {
         CoreError::InvalidAddress(format!("X-address: expected 35 bytes, got {}", d.len()))
     })?;
@@ -268,7 +334,7 @@ pub fn decode_x_address(x_address: &str) -> Result<([u8; 20], Option<u32>, bool)
     };
     let mut account_id = [0u8; 20];
     account_id.copy_from_slice(&decoded[2..22]);
-    Ok((account_id, tag, test))
+    Ok(XAddress::new(AccountId(account_id), tag, test))
 }
 
 /// Classic address (+ optional tag) → X-address.
@@ -284,18 +350,6 @@ pub fn classic_to_x_address(
     test: bool,
 ) -> Result<String, CoreError> {
     Ok(encode_x_address(&decode_account_id(classic)?, tag, test))
-}
-
-/// X-address → (classic address, tag, is_test).
-///
-/// # Errors
-///
-/// As [`decode_x_address`]: [`CoreError::InvalidBase58`],
-/// [`CoreError::InvalidAddress`] or [`CoreError::InvalidChecksum`] when
-/// `x_address` is not a valid X-address.
-pub fn x_address_to_classic(x_address: &str) -> Result<(String, Option<u32>, bool), CoreError> {
-    let (account_id, tag, test) = decode_x_address(x_address)?;
-    Ok((encode_account_id(&account_id), tag, test))
 }
 
 /// The signature scheme of a key. Written as `rippled`'s `key_type` writes
@@ -584,14 +638,13 @@ mod tests {
                 test,
                 "{classic} {tag:?}"
             );
-            assert_eq!(
-                x_address_to_classic(main).unwrap(),
-                (classic.to_string(), tag, false)
-            );
-            assert_eq!(
-                x_address_to_classic(test).unwrap(),
-                (classic.to_string(), tag, true)
-            );
+            for (x, test_network) in [(main, false), (test, true)] {
+                let decoded = decode_x_address(x).unwrap();
+                assert_eq!(decoded.classic_address(), classic);
+                assert_eq!((decoded.tag, decoded.test_network), (tag, test_network));
+                assert_eq!(decoded.to_string(), x);
+                assert_eq!(x.parse::<XAddress>().unwrap(), decoded);
+            }
         }
     }
 

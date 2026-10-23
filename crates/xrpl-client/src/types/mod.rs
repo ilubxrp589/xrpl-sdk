@@ -46,13 +46,13 @@ pub enum LedgerIndex {
 }
 
 impl LedgerIndex {
-    /// The JSON `rippled` takes for this ledger.
-    pub fn as_value(&self) -> serde_json::Value {
+    /// The JSON `rippled` takes for this ledger (what it serializes as).
+    pub fn to_value(self) -> serde_json::Value {
         match self {
             LedgerIndex::Validated => serde_json::Value::String("validated".into()),
             LedgerIndex::Current => serde_json::Value::String("current".into()),
             LedgerIndex::Closed => serde_json::Value::String("closed".into()),
-            LedgerIndex::Index(n) => serde_json::Value::Number((*n).into()),
+            LedgerIndex::Index(n) => serde_json::Value::Number(n.into()),
         }
     }
 }

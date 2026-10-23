@@ -144,7 +144,7 @@ pub struct AuctionSlot {
     pub account: String,
     /// Accounts the holder lets trade at the discounted fee too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth_accounts: Option<Vec<AuthAccount>>,
+    pub auth_accounts: Option<Vec<AuctionSlotAccount>>,
     /// The slot holder's trading fee, in 1/100,000.
     pub discounted_fee: u32,
     /// ISO 8601.
@@ -155,10 +155,12 @@ pub struct AuctionSlot {
     pub time_interval: u32,
 }
 
-/// An account the auction slot holder authorised.
+/// An account the auction slot holder authorised, as `amm_info` writes it
+/// (`{"account": …}`; a transaction's `AuthAccounts` entry is
+/// [`xrpl_core::transaction::models::AuthAccount`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
-pub struct AuthAccount {
+pub struct AuctionSlotAccount {
     /// The account.
     pub account: String,
 }
@@ -396,28 +398,6 @@ pub struct PathAlternative {
     pub destination_amount: Option<Value>,
 }
 
-/// One step of a payment path: an account to ripple through, or a currency
-/// (and issuer) to convert into on the DEX.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct PathStep {
-    /// The account that sends the transaction or owns the entry (`Account`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub account: Option<String>,
-    /// A currency code, to convert into on the DEX.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub currency: Option<String>,
-    /// An MPT to convert into, instead of a currency (`mpt_issuance_id`; path
-    /// steps of type 64, new in `rippled` 3.4.1).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mpt_issuance_id: Option<String>,
-    /// The issuer (`Issuer`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issuer: Option<String>,
-    /// Bits for which of the fields above are set (1 account, 16 currency, 32 issuer, 64 MPT).
-    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    pub step_type: Option<u32>,
-    /// The step's type, hex.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub type_hex: Option<String>,
-}
+/// One step of a payment path: the transaction models' type, so a path
+/// `ripple_path_find` returns goes into `Payment::paths` as it is.
+pub use xrpl_core::transaction::models::PathStep;

@@ -159,7 +159,7 @@ use xrpl_sdk::*;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
-    let lines = client.account_lines_all("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated).await?;
+    let lines = client.account_lines_all("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated).await?;
     println!("{} trust lines", lines.len());
     for line in &lines {
         println!("  {} {} (issuer: {})", line.balance, line.currency, line.account);

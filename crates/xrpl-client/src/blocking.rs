@@ -18,12 +18,12 @@
 //!     let fee = client.fee()?;
 //!     println!("open ledger fee: {} drops", fee.drops.open_ledger_fee);
 //!
-//!     let account = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated)?;
-//!     println!("balance: {} drops", account.account_data.balance);
+//!     let account = client.account_info("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated)?;
+//!     println!("balance: {}", account.account_data.balance); // "12.5 XRP"
 //!
 //!     // Any typed request, or any async method with `run`.
 //!     let changes = client.request(&BookChangesRequest::new(LedgerIndex::Validated))?;
-//!     let lines = client.run(|c| c.account_lines_all("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated))?;
+//!     let lines = client.run(|c| c.account_lines_all("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated))?;
 //!     println!("{} books traded, {} trust lines", changes.changes.len(), lines.len());
 //!     Ok(())
 //! }
@@ -89,7 +89,7 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// Run any async method of the client to completion:
-    /// `client.run(|c| c.account_lines_all(addr, &ledger))`.
+    /// `client.run(|c| c.account_lines_all(addr, ledger))`.
     ///
     /// # Panics
     ///
@@ -191,7 +191,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_info(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<AccountInfo, ClientError> {
         self.call(|c| c.account_info(account, ledger))
     }
@@ -207,7 +207,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_lines(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<AccountLinesResult, ClientError> {
         self.call(|c| c.account_lines(account, ledger))
     }
@@ -242,7 +242,7 @@ impl<C: Client> BlockingClient<C> {
     /// otherwise the errors of [`Client::ledger`]: [`ClientError::RpcError`]
     /// (`lgrNotFound`) for a ledger the server does not have, and a
     /// [`ClientError`] when the request fails.
-    pub fn ledger(&self, ledger: &LedgerIndex) -> Result<LedgerResult, ClientError> {
+    pub fn ledger(&self, ledger: LedgerIndex) -> Result<LedgerResult, ClientError> {
         self.call(|c| c.ledger(ledger))
     }
 
@@ -331,7 +331,7 @@ impl<C: Client> BlockingClient<C> {
     /// ledger's hash, and a [`ClientError`] when the request fails.
     pub fn verified_ledger(
         &self,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<xrpl_core::ledger::VerifiedLedger, ClientError> {
         self.call(|c| c.verified_ledger(ledger))
     }
@@ -411,7 +411,7 @@ impl<C: Client> BlockingClient<C> {
         &self,
         account: &str,
         destination_account: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<AccountChannelsResult, ClientError> {
         self.call(|c| c.account_channels(account, destination_account, ledger))
     }
@@ -427,7 +427,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_currencies(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<AccountCurrenciesResult, ClientError> {
         self.call(|c| c.account_currencies(account, ledger))
     }
@@ -445,7 +445,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_lines_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<Vec<TrustLine>, ClientError> {
         self.call(|c| c.account_lines_all(account, ledger))
     }
@@ -461,7 +461,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_nfts(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<AccountNftsResult, ClientError> {
         self.call(|c| c.account_nfts(account, ledger))
     }
@@ -479,7 +479,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_nfts_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<Vec<NFToken>, ClientError> {
         self.call(|c| c.account_nfts_all(account, ledger))
     }
@@ -496,7 +496,7 @@ impl<C: Client> BlockingClient<C> {
         &self,
         account: &str,
         object_type: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
         limit: Option<u32>,
         marker: Option<Value>,
     ) -> Result<AccountObjectsResult, ClientError> {
@@ -517,7 +517,7 @@ impl<C: Client> BlockingClient<C> {
         &self,
         account: &str,
         object_type: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<Vec<LedgerObject>, ClientError> {
         self.call(|c| c.account_objects_all(account, object_type, ledger))
     }
@@ -533,7 +533,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_offers(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<AccountOffersResult, ClientError> {
         self.call(|c| c.account_offers(account, ledger))
     }
@@ -551,7 +551,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn account_offers_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<Vec<AccountOffer>, ClientError> {
         self.call(|c| c.account_offers_all(account, ledger))
     }
@@ -563,25 +563,8 @@ impl<C: Client> BlockingClient<C> {
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
     /// otherwise the errors of [`Client::account_tx`]: a [`ClientError`] when
     /// the request fails.
-    pub fn account_tx(
-        &self,
-        account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-        limit: Option<u32>,
-        marker: Option<Value>,
-        forward: Option<bool>,
-    ) -> Result<AccountTxResult, ClientError> {
-        self.call(|c| {
-            c.account_tx(
-                account,
-                ledger_index_min,
-                ledger_index_max,
-                limit,
-                marker,
-                forward,
-            )
-        })
+    pub fn account_tx(&self, account: &str) -> Result<AccountTxResult, ClientError> {
+        self.call(|c| c.account_tx(account))
     }
 
     /// [`Client::account_tx_all`].
@@ -593,13 +576,8 @@ impl<C: Client> BlockingClient<C> {
     /// [`ClientError::PaginationLimitReached`] past
     /// [`MAX_PAGES`](crate::client::MAX_PAGES) pages, and a [`ClientError`]
     /// when a request fails.
-    pub fn account_tx_all(
-        &self,
-        account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-    ) -> Result<Vec<AccountTxEntry>, ClientError> {
-        self.call(|c| c.account_tx_all(account, ledger_index_min, ledger_index_max))
+    pub fn account_tx_all(&self, account: &str) -> Result<Vec<AccountTxEntry>, ClientError> {
+        self.call(|c| c.account_tx_all(account))
     }
 
     /// [`Client::amm_info`].
@@ -630,7 +608,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn balances(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<Vec<xrpl_core::types::Amount>, ClientError> {
         self.call(|c| c.balances(account, ledger))
     }
@@ -661,7 +639,7 @@ impl<C: Client> BlockingClient<C> {
         &self,
         account: &str,
         hotwallet: Option<Vec<&str>>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<GatewayBalancesResult, ClientError> {
         self.call(|c| c.gateway_balances(account, hotwallet, ledger))
     }
@@ -677,7 +655,7 @@ impl<C: Client> BlockingClient<C> {
     pub fn ledger_entry(
         &self,
         index: &str,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
     ) -> Result<LedgerEntryResult, ClientError> {
         self.call(|c| c.ledger_entry(index, ledger))
     }

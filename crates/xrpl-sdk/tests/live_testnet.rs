@@ -184,7 +184,7 @@ async fn keylets_and_helpers_match_testnet() {
     let entry = client
         .ledger_entry(
             &keylet::account(a).unwrap().to_string(),
-            &LedgerIndex::Validated,
+            LedgerIndex::Validated,
         )
         .await
         .unwrap();

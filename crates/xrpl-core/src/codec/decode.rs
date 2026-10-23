@@ -973,7 +973,7 @@ mod tests {
         });
         let bytes = hex::decode(blob).unwrap();
         assert_eq!(decode_transaction_binary(&bytes).unwrap(), rippled);
-        assert_eq!(encode_transaction_json(&rippled, false).unwrap(), bytes);
+        assert_eq!(encode_transaction_json(&rippled).unwrap(), bytes);
     }
 
     #[test]
@@ -986,8 +986,7 @@ mod tests {
             {"Permission": {"PermissionValue": 65_548}},
             {"Permission": {"PermissionValue": 70_000}}
         ]});
-        let back =
-            decode_transaction_binary(&encode_transaction_json(&tx, false).unwrap()).unwrap();
+        let back = decode_transaction_binary(&encode_transaction_json(&tx).unwrap()).unwrap();
         let names: Vec<&Value> = (0..4)
             .map(|i| &back["Permissions"][i]["Permission"]["PermissionValue"])
             .collect();
@@ -1006,17 +1005,17 @@ mod tests {
     fn int32_is_signed_big_endian() {
         // STInteger<int32_t>: add32 (big-endian two's complement); JSON is the
         // number, and rippled also accepts a decimal string (STParsedJSON).
-        let bytes = encode_transaction_json(&json!({"LoanScale": -5}), false).unwrap();
+        let bytes = encode_transaction_json(&json!({"LoanScale": -5})).unwrap();
         assert_eq!(bytes, [0xA1, 0xFF, 0xFF, 0xFF, 0xFB]);
         assert_eq!(
             decode_transaction_binary(&bytes).unwrap(),
             json!({"LoanScale": -5})
         );
         assert_eq!(
-            encode_transaction_json(&json!({"LoanScale": "-5"}), false).unwrap(),
+            encode_transaction_json(&json!({"LoanScale": "-5"})).unwrap(),
             bytes
         );
-        assert!(encode_transaction_json(&json!({"LoanScale": 2_147_483_648_i64}), false).is_err());
+        assert!(encode_transaction_json(&json!({"LoanScale": 2_147_483_648_i64})).is_err());
     }
 
     #[test]
@@ -1036,24 +1035,21 @@ mod tests {
             "Destination": "X7AcgcsBL6XDcUb289X4mJ8djcdyKaLFuhLRuNXPrDeJd9A",
             "Amount": "1000000"
         });
-        let want = encode_transaction_json(&classic, false).unwrap();
-        assert_eq!(encode_transaction_json(&x, false).unwrap(), want);
+        let want = encode_transaction_json(&classic).unwrap();
+        assert_eq!(encode_transaction_json(&x).unwrap(), want);
         // An untagged X-address is just the classic address.
         let untagged = json!({"Account": "XVLhHMPHU98es4dbozjVtdWzVrDjtV5fdx1mHp98tDMoQXb"});
         assert_eq!(
-            encode_transaction_json(&untagged, false).unwrap(),
-            encode_transaction_json(
-                &json!({"Account": "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf"}),
-                false
-            )
-            .unwrap()
+            encode_transaction_json(&untagged).unwrap(),
+            encode_transaction_json(&json!({"Account": "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf"}))
+                .unwrap()
         );
         // A tag twice, or a tag on a field that has no tag field, is an error.
         let twice =
             json!({"Account": "XVLhHMPHU98es4dbozjVtdWzVrDjtV8xvjGQTYPiAx6gwDC", "SourceTag": 1});
-        assert!(encode_transaction_json(&twice, false).is_err());
+        assert!(encode_transaction_json(&twice).is_err());
         let elsewhere = json!({"Authorize": "XVLhHMPHU98es4dbozjVtdWzVrDjtV8xvjGQTYPiAx6gwDC"});
-        assert!(encode_transaction_json(&elsewhere, false).is_err());
+        assert!(encode_transaction_json(&elsewhere).is_err());
     }
 
     #[test]
@@ -1078,7 +1074,7 @@ mod tests {
         });
 
         // Encode to binary
-        let encoded = encode_transaction_json(&tx_json, false).expect("encode failed");
+        let encoded = encode_transaction_json(&tx_json).expect("encode failed");
 
         // Decode back to JSON
         let decoded = decode_transaction_binary(&encoded).expect("decode failed");
@@ -1118,7 +1114,7 @@ mod tests {
             };
 
             // Re-encode decoded JSON -> binary
-            let re_encoded = match encode_transaction_json(&decoded, false) {
+            let re_encoded = match encode_transaction_json(&decoded) {
                 Ok(v) => v,
                 Err(e) => {
                     panic!("re-encode failed for tx[{i}] {tx_type}: {e}");
@@ -1164,7 +1160,7 @@ mod tests {
                 }
             };
 
-            let re_encoded = match encode_transaction_json(&decoded, false) {
+            let re_encoded = match encode_transaction_json(&decoded) {
                 Ok(v) => v,
                 Err(_) => {
                     skipped += 1;

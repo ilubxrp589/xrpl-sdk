@@ -106,6 +106,20 @@ jobs:
         env:
           CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
 
+  # The crates outside the workspace build against this version too: the
+  # benchmarks and the Cloudflare Worker example.
+  extras:
+    name: Benchmarks and examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --manifest-path benchmarks/Cargo.toml --benches
+      - run: cargo check --manifest-path examples/cloudflare-worker/Cargo.toml --target wasm32-unknown-unknown
+
   docs:
     name: Docs
     runs-on: ubuntu-latest

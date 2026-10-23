@@ -61,7 +61,7 @@ async fn handle_validate(mut req: Request) -> Result<Response> {
 
 async fn handle_encode(mut req: Request) -> Result<Response> {
     let tx: serde_json::Value = req.json().await?;
-    let bytes = xrpl_core::codec::encode_transaction_json(&tx, false)
+    let bytes = xrpl_core::codec::encode_transaction_json(&tx)
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
     #[derive(serde::Serialize)]
     struct Out {

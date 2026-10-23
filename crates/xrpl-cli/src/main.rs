@@ -482,24 +482,22 @@ async fn run(cli: Cli) -> Res {
         Command::Account(cmd) => {
             let c = client()?;
             match cmd {
-                AccountCmd::Info { address } => print(&c.account_info(&address, &v).await?)?,
-                AccountCmd::Lines { address } => print(&c.account_lines_all(&address, &v).await?)?,
-                AccountCmd::Offers { address } => {
-                    print(&c.account_offers_all(&address, &v).await?)?
-                }
+                AccountCmd::Info { address } => print(&c.account_info(&address, v).await?)?,
+                AccountCmd::Lines { address } => print(&c.account_lines_all(&address, v).await?)?,
+                AccountCmd::Offers { address } => print(&c.account_offers_all(&address, v).await?)?,
                 AccountCmd::Objects { address, kind } => {
-                    print(&c.account_objects_all(&address, kind.as_deref(), &v).await?)?
+                    print(&c.account_objects_all(&address, kind.as_deref(), v).await?)?
                 }
-                AccountCmd::Nfts { address } => print(&c.account_nfts_all(&address, &v).await?)?,
+                AccountCmd::Nfts { address } => print(&c.account_nfts_all(&address, v).await?)?,
                 AccountCmd::Tx { address, limit } => print(
-                    &c.account_tx(&address, None, None, Some(limit), None, None)
+                    &c.request(&requests::AccountTxRequest::new(address).with_limit(limit))
                         .await?,
                 )?,
                 AccountCmd::Currencies { address } => {
-                    print(&c.account_currencies(&address, &v).await?)?
+                    print(&c.account_currencies(&address, v).await?)?
                 }
                 AccountCmd::Channels { address } => {
-                    print(&c.account_channels(&address, None, &v).await?)?
+                    print(&c.account_channels(&address, None, v).await?)?
                 }
             }
         }
@@ -518,7 +516,7 @@ async fn run(cli: Cli) -> Res {
             }
             TxCmd::Encode { json } => println!(
                 "{}",
-                hex::encode_upper(encode_transaction_json(&read_json(&json)?, false)?)
+                hex::encode_upper(encode_transaction_json(&read_json(&json)?)?)
             ),
             TxCmd::Sign {
                 json,
@@ -577,8 +575,8 @@ async fn run(cli: Cli) -> Res {
                 )?;
             }
         },
-        Command::Ledger { ledger } => print(&client()?.ledger(&ledger_index(&ledger)?).await?)?,
-        Command::Entry { id } => print(&client()?.ledger_entry(&id, &v).await?)?,
+        Command::Ledger { ledger } => print(&client()?.ledger(ledger_index(&ledger)?).await?)?,
+        Command::Entry { id } => print(&client()?.ledger_entry(&id, v).await?)?,
         Command::Id(cmd) => {
             let id = match cmd {
                 IdCmd::Account { address } => keylet::account(&address)?,

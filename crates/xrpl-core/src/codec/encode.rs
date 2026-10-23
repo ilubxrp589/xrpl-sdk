@@ -1,4 +1,4 @@
-use crate::address::x_address_to_classic;
+use crate::address::decode_x_address;
 use crate::codec::amount;
 use crate::codec::definitions::{
     ledger_entry_type_code, lookup_field_def, permission_value_code, transaction_type_code,
@@ -48,8 +48,9 @@ fn with_classic_addresses(
         let Some(x) = x_address(name, value) else {
             continue;
         };
-        let (classic, tag, _) = x_address_to_classic(&x)?;
-        out.insert(name.clone(), Value::String(classic));
+        let decoded = decode_x_address(&x)?;
+        let tag = decoded.tag;
+        out.insert(name.clone(), Value::String(decoded.classic_address()));
         let Some(tag) = tag else {
             continue;
         };
@@ -145,8 +146,8 @@ fn encode_fields(
 }
 
 /// Encode a transaction (or a ledger entry) from `rippled`'s JSON to its
-/// canonical binary form; with `for_signing`, without the fields that are
-/// not signed (`TxnSignature`, `Signers`, …).
+/// canonical binary form, every field included: a signed transaction's
+/// `tx_blob`.
 ///
 /// # Errors
 ///
@@ -154,11 +155,29 @@ fn encode_fields(
 /// (keys `rippled` adds to its responses, such as `hash` or `meta`, are
 /// skipped), and a codec error for any value `rippled` would refuse: an
 /// integer out of its field's range, a malformed amount, and so on.
-pub fn encode_transaction_json(json: &Value, for_signing: bool) -> Result<Vec<u8>, CoreError> {
+pub fn encode_transaction_json(json: &Value) -> Result<Vec<u8>, CoreError> {
     let obj = json
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-    encode_fields(&*with_deliver_max(obj)?, true, for_signing)
+    encode_fields(&*with_deliver_max(obj)?, true, false)
+}
+
+/// What a single signature covers, as `rippled` builds it
+/// (`HashPrefix::txSign`) and as xrpl.js's `encodeForSigning` returns it:
+/// the prefix `"STX\0"`, then the transaction's signed fields (every field
+/// but `TxnSignature`, `Signers` and the others that are not signed). A
+/// multi-signer's is [`encode_for_multisigning`].
+///
+/// # Errors
+///
+/// As [`encode_transaction_json`].
+pub fn encode_for_signing(tx: &Value) -> Result<Vec<u8>, CoreError> {
+    let obj = tx
+        .as_object()
+        .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
+    let mut result = b"STX\0".to_vec();
+    result.extend_from_slice(&encode_fields(&*with_deliver_max(obj)?, true, true)?);
+    Ok(result)
 }
 
 /// If the field is TransactionType or LedgerEntryType and value is a string,
@@ -1033,11 +1052,7 @@ mod tests {
             let blob = hex::decode(blob_hex).unwrap();
             let json = crate::codec::decode::decode_transaction_binary(&blob).unwrap();
             assert_eq!(json["Account"], account, "{json}");
-            assert_eq!(
-                encode_transaction_json(&json, false).unwrap(),
-                blob,
-                "{json}"
-            );
+            assert_eq!(encode_transaction_json(&json).unwrap(), blob, "{json}");
         }
         assert_eq!(encode_account_id_field(&json!("")).unwrap(), vec![0x00]);
     }
@@ -1056,7 +1071,7 @@ mod tests {
             "LastLedgerSequence": 100
         });
 
-        let result = encode_transaction_json(&tx, false);
+        let result = encode_transaction_json(&tx);
         assert!(result.is_ok(), "encode failed: {:?}", result.err());
         let bytes = result.unwrap();
         assert!(!bytes.is_empty());
@@ -1075,7 +1090,7 @@ mod tests {
             "SigningPubKey": ""
         });
 
-        let result = encode_transaction_json(&tx, false).unwrap();
+        let result = encode_transaction_json(&tx).unwrap();
         // First field header should be TransactionType (type=1, field=2) = 0x12
         assert_eq!(result[0], 0x12);
     }
@@ -1094,9 +1109,16 @@ mod tests {
             "TxnSignature": "AABBCCDD"
         });
 
-        let with_sig = encode_transaction_json(&tx, false).unwrap();
-        let without_sig = encode_transaction_json(&tx, true).unwrap();
+        let with_sig = encode_transaction_json(&tx).unwrap();
+        let signing = encode_for_signing(&tx).unwrap();
+        let (prefix, without_sig) = signing.split_at(4);
+        assert_eq!(prefix, b"STX\0");
         assert!(without_sig.len() < with_sig.len());
+        // TxnSignature (74 04 AABBCCDD) is the only field left out.
+        assert!(with_sig
+            .windows(6)
+            .any(|w| w == [0x74, 0x04, 0xAA, 0xBB, 0xCC, 0xDD]));
+        assert_eq!(without_sig.len() + 6, with_sig.len());
     }
 
     fn payment() -> Value {
@@ -1122,27 +1144,24 @@ mod tests {
     fn an_unknown_field_is_an_error_not_dropped() {
         for name in ["DestinationTAg", "destination_tag", "Destinationtag"] {
             let tx = with(payment(), name, json!(12345));
-            for for_signing in [false, true] {
+            for encoded in [encode_transaction_json(&tx), encode_for_signing(&tx)] {
                 assert!(
-                    matches!(
-                        encode_transaction_json(&tx, for_signing),
-                        Err(CoreError::UnknownField(ref f)) if f == name
-                    ),
+                    matches!(encoded, Err(CoreError::UnknownField(ref f)) if f == name),
                     "{name} was not refused"
                 );
             }
             assert!(encode_for_multisigning(&tx, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").is_err());
         }
         // A defined name with no wire type is refused too.
-        assert!(encode_transaction_json(&with(payment(), "Generic", json!({})), false).is_err());
+        assert!(encode_transaction_json(&with(payment(), "Generic", json!({}))).is_err());
         // Inside an inner object, and as an array element's name.
         let memo = |m: Value| with(payment(), "Memos", json!([m]));
         assert!(matches!(
-            encode_transaction_json(&memo(json!({"Memo": {"memodata": "AA"}})), false),
+            encode_transaction_json(&memo(json!({"Memo": {"memodata": "AA"}}))),
             Err(CoreError::UnknownField(_))
         ));
         assert!(matches!(
-            encode_transaction_json(&memo(json!({"memo": {"MemoData": "AA"}})), false),
+            encode_transaction_json(&memo(json!({"memo": {"MemoData": "AA"}}))),
             Err(CoreError::UnknownField(_))
         ));
         // rippled's response-only keys are still skipped at the top level.
@@ -1151,30 +1170,28 @@ mod tests {
             response[*key] = json!("x");
         }
         assert_eq!(
-            encode_transaction_json(&response, false).unwrap(),
-            encode_transaction_json(&payment(), false).unwrap()
+            encode_transaction_json(&response).unwrap(),
+            encode_transaction_json(&payment()).unwrap()
         );
     }
 
     /// API version 2's name for a Payment's Amount, taken as rippled takes it.
     #[test]
     fn deliver_max_is_a_payments_amount() {
-        let plain = encode_transaction_json(&payment(), false).unwrap();
+        let plain = encode_transaction_json(&payment()).unwrap();
         let mut v2 = payment();
         let amount = v2.as_object_mut().unwrap().remove("Amount").unwrap();
         v2["DeliverMax"] = amount.clone();
-        assert_eq!(encode_transaction_json(&v2, false).unwrap(), plain);
+        assert_eq!(encode_transaction_json(&v2).unwrap(), plain);
         assert_eq!(
-            encode_transaction_json(&with(payment(), "DeliverMax", amount), false).unwrap(),
+            encode_transaction_json(&with(payment(), "DeliverMax", amount)).unwrap(),
             plain
         );
-        assert!(
-            encode_transaction_json(&with(payment(), "DeliverMax", json!("5")), false).is_err()
-        );
+        assert!(encode_transaction_json(&with(payment(), "DeliverMax", json!("5"))).is_err());
         let offer = json!({"TransactionType": "OfferCreate", "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
             "TakerGets": "1", "TakerPays": "1", "DeliverMax": "1"});
         assert!(matches!(
-            encode_transaction_json(&offer, false),
+            encode_transaction_json(&offer),
             Err(CoreError::UnknownField(_))
         ));
     }
@@ -1183,7 +1200,7 @@ mod tests {
     /// would turn DestinationTag 2^32 + 12345 into 12345.
     #[test]
     fn integers_that_do_not_fit_are_refused() {
-        let tag = |v: Value| encode_transaction_json(&with(payment(), "DestinationTag", v), false);
+        let tag = |v: Value| encode_transaction_json(&with(payment(), "DestinationTag", v));
         assert!(tag(json!(4_294_967_296_u64 + 12_345)).is_err());
         assert!(tag(json!("4294979641")).is_err());
         assert!(tag(json!(-1)).is_err());
@@ -1194,33 +1211,26 @@ mod tests {
             tag(json!("4294967295")).unwrap()
         );
         let nft = |fee: Value| {
-            encode_transaction_json(
-                &json!({"TransactionType": "NFTokenMint",
+            encode_transaction_json(&json!({"TransactionType": "NFTokenMint",
                 "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "NFTokenTaxon": 0,
-                "TransferFee": fee}),
-                false,
-            )
+                "TransferFee": fee}))
         };
         assert!(nft(json!(65_536)).is_err());
         assert_eq!(nft(json!(50_000)).unwrap(), nft(json!("50000")).unwrap());
         let tick = |t: Value| {
-            encode_transaction_json(
-                &json!({"TransactionType": "AccountSet",
-                "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "TickSize": t}),
-                false,
-            )
+            encode_transaction_json(&json!({"TransactionType": "AccountSet",
+                "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "TickSize": t}))
         };
         assert!(tick(json!(256)).is_err());
         assert!(tick(json!(15)).is_ok());
         assert!(
-            encode_transaction_json(&with(payment(), "TransactionType", json!(65_536)), false)
-                .is_err()
+            encode_transaction_json(&with(payment(), "TransactionType", json!(65_536))).is_err()
         );
     }
 
     #[test]
     fn an_array_element_has_exactly_one_inner_object() {
-        let memos = |m: Value| encode_transaction_json(&with(payment(), "Memos", m), false);
+        let memos = |m: Value| encode_transaction_json(&with(payment(), "Memos", m));
         assert!(memos(json!([{"Memo": {"MemoData": "AA"}}])).is_ok());
         assert!(memos(json!([{"Memo": {"MemoData": "AA"}, "Signer": {}}])).is_err());
         assert!(memos(json!([{}])).is_err());
@@ -1232,15 +1242,12 @@ mod tests {
     #[test]
     fn a_token_cannot_use_xrps_currency_code() {
         let amount = |currency: &str| {
-            encode_transaction_json(
-                &with(
-                    payment(),
-                    "Amount",
-                    json!({"currency": currency,
+            encode_transaction_json(&with(
+                payment(),
+                "Amount",
+                json!({"currency": currency,
                     "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "1"}),
-                ),
-                false,
-            )
+            ))
         };
         assert!(amount("XRP").is_err());
         assert!(amount("0000000000000000000000000000000000000000").is_err());
@@ -1253,12 +1260,9 @@ mod tests {
     #[test]
     fn an_issue_holds_only_what_its_kind_has() {
         let issue = |i: Value| {
-            encode_transaction_json(
-                &json!({"TransactionType": "AMMDelete",
+            encode_transaction_json(&json!({"TransactionType": "AMMDelete",
                 "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
-                "Asset": i, "Asset2": {"currency": "XRP"}}),
-                false,
-            )
+                "Asset": i, "Asset2": {"currency": "XRP"}}))
         };
         assert!(
             issue(json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"}))
@@ -1309,7 +1313,7 @@ mod tests {
             "Sequence": 2, "Flags": 1_073_741_824, "SigningPubKey": "", "TxnSignature": "AA"});
         let batch = json!({"TransactionType": "Batch", "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
             "Flags": 65_536, "RawTransactions": [{"RawTransaction": inner}]});
-        let signing = encode_transaction_json(&batch, true).unwrap();
+        let signing = encode_for_signing(&batch).unwrap();
         // TxnSignature (74 01 AA) stays inside the inner transaction.
         assert!(signing.windows(3).any(|w| w == [0x74, 0x01, 0xAA]));
     }
@@ -1324,13 +1328,13 @@ mod tests {
             "LedgerEntryType": "RippleState",
             "LowLimit": {"currency": "0000000000FEFFFFFFFFFF3F5553440000000000", "issuer": "r9aRw8p1jHtR9PtFgnC6M4kKtSefw9QyFM", "value": "0"},
             "PreviousTxnID": "AAC46BD97B75B21F81B73BE6F81DF13AE4F9E83B6BD8C290894A095878158DEB", "PreviousTxnLgrSeq": 27420});
-        let bytes = encode_transaction_json(&entry, false).unwrap();
+        let bytes = encode_transaction_json(&entry).unwrap();
         let decoded = crate::codec::decode_transaction_binary(&bytes).unwrap();
         assert_eq!(decoded, entry);
         // In an Issue and a path step too.
         let issue = json!({"TransactionType": "AMMDelete", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
             "Asset": {"currency": "1", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"}, "Asset2": {"currency": "XRP"}});
-        let bytes = encode_transaction_json(&issue, false).unwrap();
+        let bytes = encode_transaction_json(&issue).unwrap();
         assert_eq!(
             crate::codec::decode_transaction_binary(&bytes).unwrap(),
             issue

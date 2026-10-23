@@ -463,7 +463,7 @@ pub fn sign_transaction(
     // Remove TxnSignature for signing
     obj.remove("TxnSignature");
 
-    let signature = keypair.sign_signing_data(&single_signing_data(&tx)?)?;
+    let signature = keypair.sign_signing_data(&crate::codec::encode_for_signing(&tx)?)?;
 
     // Set TxnSignature — tx was cloned from a known object, so this always succeeds
     let obj = tx
@@ -475,15 +475,6 @@ pub fn sign_transaction(
     );
 
     Ok(tx)
-}
-
-/// What a single signature covers: the prefix `"STX\0"` and the
-/// transaction's signing fields (`rippled`'s `HashPrefix::txSign`).
-#[cfg(feature = "std")]
-fn single_signing_data(tx: &serde_json::Value) -> Result<Vec<u8>, CoreError> {
-    let mut data = vec![0x53, 0x54, 0x58, 0x00];
-    data.extend_from_slice(&crate::codec::encode_transaction_json(tx, true)?);
-    Ok(data)
 }
 
 /// Whether a signed transaction's signatures verify, as `rippled` checks
@@ -547,7 +538,7 @@ pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
             if key.is_empty() {
                 return Ok(false);
             }
-            verify_signing_data(&key, &single_signing_data(tx)?, &signature)?
+            verify_signing_data(&key, &crate::codec::encode_for_signing(tx)?, &signature)?
         }
         (false, Some(signers)) => {
             if !text(tx.get("SigningPubKey"), "SigningPubKey")?.is_empty() {
@@ -740,7 +731,7 @@ mod tests {
             "Flags": 0
         });
         let signed = sign_transaction(&tx, &keypair).unwrap();
-        hex::encode_upper(crate::codec::encode_transaction_json(&signed, false).unwrap())
+        hex::encode_upper(crate::codec::encode_transaction_json(&signed).unwrap())
     }
 
     #[test]

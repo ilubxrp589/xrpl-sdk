@@ -21,23 +21,24 @@ fn to_js_error(e: CoreError) -> JsValue {
 pub fn encode_transaction(json_str: &str) -> Result<String, JsValue> {
     let value: serde_json::Value = serde_json::from_str(json_str)
         .map_err(|e| JsValue::from_str(&format!("invalid JSON: {e}")))?;
-    let bytes = crate::codec::encode_transaction_json(&value, false).map_err(to_js_error)?;
+    let bytes = crate::codec::encode_transaction_json(&value).map_err(to_js_error)?;
     Ok(hex::encode_upper(bytes))
 }
 
-/// Encode a transaction JSON string for signing (excludes non-signing fields).
+/// What a single signature covers, as hex: the prefix `"STX\0"`
+/// (`53545800`) and the transaction's signed fields, as xrpl.js's
+/// `encodeForSigning` returns it.
 ///
 /// # Errors
 ///
 /// A `JsValue` string if `json_str` is not JSON, or holding the [`CoreError`]
-/// message if
-/// [`encode_transaction_json`](crate::codec::encode_transaction_json) refuses
-/// the transaction.
+/// message if [`encode_for_signing`](crate::codec::encode_for_signing)
+/// refuses the transaction.
 #[wasm_bindgen]
-pub fn encode_transaction_for_signing(json_str: &str) -> Result<String, JsValue> {
+pub fn encode_for_signing(json_str: &str) -> Result<String, JsValue> {
     let value: serde_json::Value = serde_json::from_str(json_str)
         .map_err(|e| JsValue::from_str(&format!("invalid JSON: {e}")))?;
-    let bytes = crate::codec::encode_transaction_json(&value, true).map_err(to_js_error)?;
+    let bytes = crate::codec::encode_for_signing(&value).map_err(to_js_error)?;
     Ok(hex::encode_upper(bytes))
 }
 

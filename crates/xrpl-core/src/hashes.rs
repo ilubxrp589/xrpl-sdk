@@ -50,7 +50,7 @@ pub fn transaction_id(blob: &[u8]) -> Hash256 {
 /// and the errors of [`encode_transaction_json`] when it does not encode.
 pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
     require_signed(tx)?;
-    Ok(transaction_id(&encode_transaction_json(tx, false)?))
+    Ok(transaction_id(&encode_transaction_json(tx)?))
 }
 
 /// The ID of a signed transaction blob (hex, as `submit` takes it).
@@ -852,7 +852,7 @@ mod tests {
         let mut unsigned = inner.clone();
         unsigned["Flags"] = serde_json::json!(0);
         assert!(hash_signed_tx(&unsigned).is_err());
-        let blob = hex::encode_upper(encode_transaction_json(&unsigned, false).unwrap());
+        let blob = hex::encode_upper(encode_transaction_json(&unsigned).unwrap());
         assert!(hash_signed_tx_blob(&blob).is_err());
     }
 

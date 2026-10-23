@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. The maker cancels the 30 USD left.
     let open = client
-        .account_offers(maker.classic_address(), &LedgerIndex::Validated)
+        .account_offers(maker.classic_address(), LedgerIndex::Validated)
         .await?;
     println!(
         "  the maker's offer still sells {}",
