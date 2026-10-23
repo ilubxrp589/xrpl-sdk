@@ -7,13 +7,13 @@ use serde_json::{json, Value};
 pub struct EscrowCreate {
     /// The fields every transaction has.
     pub common: TxCommon,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: String,
     /// The account that receives it (`Destination`).
     pub destination: String,
-    /// The time after which it can be cancelled (ledger time) (`CancelAfter`).
+    /// The time after which it can be cancelled (`CancelAfter`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub cancel_after: Option<u32>,
-    /// The time after which it can be finished (ledger time) (`FinishAfter`).
+    /// The time after which it can be finished (`FinishAfter`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub finish_after: Option<u32>,
     /// A PREIMAGE-SHA-256 crypto-condition that must be fulfilled (`Condition`).
     pub condition: Option<String>,

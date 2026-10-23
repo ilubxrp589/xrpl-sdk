@@ -216,11 +216,11 @@ pub struct NFTokenCreateOffer {
     pub common: TxCommon,
     /// An NFT's ID (`NFTokenID`).
     pub nf_token_id: String,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: Value,
     /// The account that owns the entry (`Owner`).
     pub owner: Option<String>,
-    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
+    /// When it expires (`Expiration`). Ledger time: seconds since 2000-01-01 UTC, not Unix time (`utils::unix_to_ripple_time`).
     pub expiration: Option<u32>,
     /// The account that receives it (`Destination`).
     pub destination: Option<String>,

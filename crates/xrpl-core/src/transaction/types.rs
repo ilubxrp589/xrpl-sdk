@@ -1,4 +1,11 @@
-/// XRPL transaction type discriminants.
+// The deprecated legacy type and its own implementation.
+#![allow(deprecated)]
+
+/// XRPL transaction type discriminants (25 of them; `rippled` 3.4.1 has 82).
+#[deprecated(
+    since = "0.6.0",
+    note = "covers 25 of rippled's 82 types; use transaction::models::Tx::transaction_type or codec::transaction_type_code"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum TransactionType {

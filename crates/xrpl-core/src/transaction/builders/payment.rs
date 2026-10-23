@@ -7,15 +7,15 @@ use serde_json::{json, Value};
 pub struct Payment {
     /// The fields every transaction has.
     pub common: TxCommon,
-    /// How much (`Amount`).
+    /// How much (`Amount`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub amount: Value,
     /// The account that receives it (`Destination`).
     pub destination: String,
     /// A tag the destination uses to tell its senders apart (`DestinationTag`).
     pub destination_tag: Option<u32>,
-    /// The most the sender will spend, in any currency (`SendMax`).
+    /// The most the sender will spend, in any currency (`SendMax`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub send_max: Option<Value>,
-    /// The least a partial payment must deliver (`DeliverMin`).
+    /// The least a partial payment must deliver (`DeliverMin`): XRP as a string of **drops** (`"1000000"` is 1 XRP; `utils::xrp_to_drops`), or a token `{"currency", "issuer", "value"}`.
     pub deliver_min: Option<Value>,
     /// The paths a cross-currency payment may take (from `ripple_path_find`) (`Paths`).
     pub paths: Option<Vec<Vec<Value>>>,

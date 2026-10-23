@@ -24,6 +24,15 @@ impl Transaction for SetRegularKey {
         Value::Object(obj)
     }
     fn validate(&self) -> Result<(), CoreError> {
+        if self.regular_key.as_deref() == Some(self.common.account.as_str()) {
+            return Err(super::invalid(
+                "SetRegularKey",
+                "the regular key cannot be the account's own address",
+            ));
+        }
+        if let Some(k) = &self.regular_key {
+            crate::address::decode_account_id(k)?;
+        }
         Ok(())
     }
 }
@@ -62,10 +71,12 @@ impl SetRegularKeyBuilder {
     }
     /// Check the required fields and build the transaction.
     pub fn build(self) -> Result<SetRegularKey, CoreError> {
-        Ok(SetRegularKey {
+        let tx = SetRegularKey {
             common: self.common,
             regular_key: self.regular_key,
-        })
+        };
+        tx.validate()?;
+        Ok(tx)
     }
 }
 impl SetRegularKey {
