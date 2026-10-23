@@ -57,6 +57,12 @@ pub fn delivered_amount(meta: &Value) -> Option<crate::types::Amount> {
 /// balances). For what a Payment delivered, read `delivered_amount` in the
 /// metadata, never the transaction's `Amount` (a partial payment delivers
 /// less).
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `meta` has no `AffectedNodes` array, or a
+/// changed `RippleState` has no `LowLimit`/`HighLimit` issuer or `Balance`
+/// currency; [`CoreError::InvalidAmount`] for a `Balance` that is not a number.
 pub fn get_balance_changes(meta: &Value) -> Result<Vec<AccountBalanceChanges>, CoreError> {
     let nodes = meta
         .get("AffectedNodes")

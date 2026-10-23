@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-cli"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.88"
 description = "hxrpl: the XRP Ledger from the command line — wallets, faucet, queries, signing, sending, hashes, ledger entry IDs, live streams — on halcyon-xrpl-sdk"
@@ -8,7 +8,6 @@ license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["James Turner"]
 readme = "README.md"
-homepage = "https://github.com/ilubxrp589/xrpl-sdk"
 documentation = "https://docs.rs/halcyon-xrpl-sdk"
 keywords = ["xrpl", "xrp", "ripple", "cli", "blockchain"]
 categories = ["command-line-utilities", "cryptography::cryptocurrencies"]
@@ -18,7 +17,7 @@ name = "hxrpl"
 path = "src/main.rs"
 
 [dependencies]
-xrpl-sdk = { package = "halcyon-xrpl-sdk", path = "../xrpl-sdk", version = "0.6" }
+xrpl-sdk = { package = "halcyon-xrpl-sdk", path = "../xrpl-sdk", version = "0.7" }
 clap = { version = "4.5", features = ["derive", "env"] }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true }

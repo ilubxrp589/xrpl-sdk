@@ -63,6 +63,7 @@ impl Transaction for Clawback {
     }
 }
 /// Builds a [`Clawback`] (from [`Clawback::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct ClawbackBuilder {
     common: TxCommon,
     amount: Option<Value>,
@@ -103,6 +104,16 @@ impl ClawbackBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount` is missing, has no `value`
+    /// (XRP cannot be clawed back) or is not positive, the holder is missing or
+    /// in the wrong field (a token's is its issuer, an MPT's is `Holder`), or
+    /// the holder is the account itself; [`CoreError::InvalidAmount`] for a
+    /// `value` that does not parse; an address error
+    /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`)
+    /// for a holder that is not a classic address.
     pub fn build(self) -> Result<Clawback, CoreError> {
         let amount = self
             .amount

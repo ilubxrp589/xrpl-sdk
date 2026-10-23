@@ -7,7 +7,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-client = "0.5"   # imported as `xrpl_client`
+//! halcyon-xrpl-client = "0.7"   # imported as `xrpl_client`
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! ```
 //!
@@ -130,7 +130,7 @@
 //! ```
 //!
 //! After a dropped connection the client reconnects with backoff, restores
-//! every subscription, and sends [`ws::WsEvent::Reconnected`].
+//! every subscription, and sends [`stream::WsEvent::Reconnected`].
 //!
 //! ## Test networks
 //!
@@ -149,6 +149,16 @@
 //! `ledger_entry` return typed [`xrpl_core::types::LedgerObject`]s.
 
 #![warn(missing_docs)]
+// docs.rs labels each feature- or platform-gated item with what it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
+/// The host (and port) of a URL, without scheme, credentials, path or query:
+/// what logs, errors and `Debug` show of a server (its URL may carry a token).
+pub(crate) fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    authority.rsplit('@').next().unwrap_or("").to_string()
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
@@ -172,7 +182,7 @@ pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use ws::{Subscription, XrplWsClient};
+pub use ws::{Subscription, WsClientBuilder, XrplWsClient};
 
 #[cfg(target_arch = "wasm32")]
 pub use ws_wasm::{Subscription, XrplWsClient};

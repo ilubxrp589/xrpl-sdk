@@ -63,6 +63,7 @@ impl Transaction for Payment {
 }
 
 /// Builds a [`Payment`] (from [`Payment::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentBuilder {
     common: TxCommon,
     amount: Option<Value>,
@@ -156,6 +157,11 @@ impl PaymentBuilder {
     }
 
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount` or `destination` is missing,
+    /// or `destination` is empty.
     pub fn build(self) -> Result<Payment, CoreError> {
         let amount = self
             .amount

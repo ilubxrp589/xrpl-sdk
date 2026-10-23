@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.5"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.7"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -139,7 +139,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.5", default-features = false }
+//! halcyon-xrpl-core = { version = "0.7", default-features = false }
 //! ```
 //!
 //! ## How it is checked
@@ -169,6 +169,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
+// docs.rs labels each feature- or platform-gated item with what it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(feature = "std"))]
 #[macro_use]
@@ -181,6 +183,8 @@ pub mod crypto;
 pub mod error;
 #[cfg(feature = "std")]
 pub mod hashes;
+#[cfg(feature = "std")]
+pub mod ledger;
 mod number_text;
 pub mod transaction;
 pub mod types;

@@ -5,19 +5,19 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use alloc::string::{String, ToString};
 
 /// 128-bit hash (16 bytes). Used for EmailHash field.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hash128(pub [u8; 16]);
 
 /// 160-bit hash (20 bytes). Used for account IDs internally.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hash160(pub [u8; 20]);
 
 /// 192-bit hash (24 bytes). Used for MPTokenIssuanceID.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hash192(pub [u8; 24]);
 
 /// 256-bit hash (32 bytes). Used for transaction hashes, ledger hashes, etc.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hash256(pub [u8; 32]);
 
 // --- Hash128 ---
@@ -27,6 +27,11 @@ impl Hash128 {
     pub const ZERO: Self = Self([0u8; 16]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 16 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 16 {
@@ -78,6 +83,11 @@ impl Hash160 {
     pub const ZERO: Self = Self([0u8; 20]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 20 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 20 {
@@ -129,6 +139,11 @@ impl Hash192 {
     pub const ZERO: Self = Self([0u8; 24]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 24 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 24 {
@@ -180,6 +195,11 @@ impl Hash256 {
     pub const ZERO: Self = Self([0u8; 32]);
 
     /// From hex (either case).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex or not 32 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 32 {
@@ -230,6 +250,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_order_and_bytes() {
+        let low: Hash256 = "00".repeat(32).parse().unwrap();
+        let high: Hash256 = "ff".repeat(32).parse().unwrap();
+        assert!(low < high);
+        assert_eq!(high.as_ref(), &[0xFF; 32]);
+        assert!("00".parse::<Hash128>().is_err());
+        let id: Hash192 = "000004C463C52827307480341125DA0577DEFC38405B0E3E"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            id.to_string(),
+            "000004C463C52827307480341125DA0577DEFC38405B0E3E"
+        );
+    }
+
+    #[test]
     fn hash256_hex_roundtrip() {
         let hex_str = "4B4E9C06F24296074F7BC48F92A97916C6DC5EA9AAAE7D26C7B8684E7D1AC31D";
         let hash = Hash256::from_hex(hex_str).unwrap();
@@ -278,3 +314,24 @@ mod tests {
         assert_eq!(hash, back);
     }
 }
+
+/// `FromStr` (hex, either case) and `AsRef<[u8]>` for each hash type.
+macro_rules! hash_traits {
+    ($($name:ident),*) => {$(
+        impl core::str::FromStr for $name {
+            type Err = crate::CoreError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Self::from_hex(s)
+            }
+        }
+
+        impl AsRef<[u8]> for $name {
+            fn as_ref(&self) -> &[u8] {
+                &self.0
+            }
+        }
+    )*};
+}
+
+hash_traits!(Hash128, Hash160, Hash192, Hash256);

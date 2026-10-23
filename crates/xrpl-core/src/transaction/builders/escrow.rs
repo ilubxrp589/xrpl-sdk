@@ -61,6 +61,7 @@ impl Transaction for EscrowCreate {
 }
 
 /// Builds a [`EscrowCreate`] (from [`EscrowCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct EscrowCreateBuilder {
     common: TxCommon,
     amount: Option<String>,
@@ -130,6 +131,11 @@ impl EscrowCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount` or `destination` is missing
+    /// or empty.
     pub fn build(self) -> Result<EscrowCreate, CoreError> {
         let amount = self
             .amount
@@ -197,6 +203,7 @@ impl Transaction for EscrowFinish {
 }
 
 /// Builds a [`EscrowFinish`] (from [`EscrowFinish::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct EscrowFinishBuilder {
     common: TxCommon,
     owner: Option<String>,
@@ -251,6 +258,11 @@ impl EscrowFinishBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `owner` or `offer_sequence` is
+    /// missing.
     pub fn build(self) -> Result<EscrowFinish, CoreError> {
         let owner = self
             .owner
@@ -303,6 +315,7 @@ impl Transaction for EscrowCancel {
 }
 
 /// Builds a [`EscrowCancel`] (from [`EscrowCancel::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct EscrowCancelBuilder {
     common: TxCommon,
     owner: Option<String>,
@@ -343,6 +356,11 @@ impl EscrowCancelBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `owner` or `offer_sequence` is
+    /// missing.
     pub fn build(self) -> Result<EscrowCancel, CoreError> {
         let owner = self
             .owner

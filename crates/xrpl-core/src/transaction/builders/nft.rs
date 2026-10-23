@@ -43,6 +43,7 @@ impl Transaction for NFTokenMint {
 }
 
 /// Builds a [`NFTokenMint`] (from [`NFTokenMint::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenMintBuilder {
     common: TxCommon,
     nf_token_taxon: Option<u32>,
@@ -102,6 +103,10 @@ impl NFTokenMintBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `nf_token_taxon` is missing.
     pub fn build(self) -> Result<NFTokenMint, CoreError> {
         let nf_token_taxon = self.nf_token_taxon.ok_or_else(|| {
             CoreError::ValidationError("NFTokenMint: nf_token_taxon is required".into())
@@ -151,6 +156,7 @@ impl Transaction for NFTokenBurn {
     }
 }
 /// Builds a [`NFTokenBurn`] (from [`NFTokenBurn::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenBurnBuilder {
     common: TxCommon,
     nf_token_id: Option<String>,
@@ -191,6 +197,10 @@ impl NFTokenBurnBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `nf_token_id` is missing.
     pub fn build(self) -> Result<NFTokenBurn, CoreError> {
         let nf_token_id = self.nf_token_id.ok_or_else(|| {
             CoreError::ValidationError("NFTokenBurn: nf_token_id is required".into())
@@ -251,6 +261,7 @@ impl Transaction for NFTokenCreateOffer {
     }
 }
 /// Builds a [`NFTokenCreateOffer`] (from [`NFTokenCreateOffer::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenCreateOfferBuilder {
     common: TxCommon,
     nf_token_id: Option<String>,
@@ -317,6 +328,10 @@ impl NFTokenCreateOfferBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `nf_token_id` or `amount` is missing.
     pub fn build(self) -> Result<NFTokenCreateOffer, CoreError> {
         let nf_token_id = self.nf_token_id.ok_or_else(|| {
             CoreError::ValidationError("NFTokenCreateOffer: nf_token_id is required".into())
@@ -365,6 +380,7 @@ impl Transaction for NFTokenCancelOffer {
     }
 }
 /// Builds a [`NFTokenCancelOffer`] (from [`NFTokenCancelOffer::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenCancelOfferBuilder {
     common: TxCommon,
     nf_token_offers: Option<Vec<String>>,
@@ -398,6 +414,10 @@ impl NFTokenCancelOfferBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `nf_token_offers` is missing.
     pub fn build(self) -> Result<NFTokenCancelOffer, CoreError> {
         let nf_token_offers = self.nf_token_offers.ok_or_else(|| {
             CoreError::ValidationError("NFTokenCancelOffer: nf_token_offers is required".into())
@@ -456,6 +476,7 @@ impl Transaction for NFTokenAcceptOffer {
     }
 }
 /// Builds a [`NFTokenAcceptOffer`] (from [`NFTokenAcceptOffer::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct NFTokenAcceptOfferBuilder {
     common: TxCommon,
     nf_token_buy_offer: Option<String>,
@@ -503,6 +524,11 @@ impl NFTokenAcceptOfferBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if neither a buy offer nor a sell offer
+    /// is set.
     pub fn build(self) -> Result<NFTokenAcceptOffer, CoreError> {
         let tx = NFTokenAcceptOffer {
             common: self.common,

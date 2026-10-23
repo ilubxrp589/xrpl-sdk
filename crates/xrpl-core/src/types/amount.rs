@@ -46,6 +46,11 @@ impl IouAmount {
 
     /// Create and normalize an IOU amount from mantissa and exponent, as
     /// `rippled` does (see [`IouAmount::from_decimal`] for the rules).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAmount`](crate::CoreError::InvalidAmount) if the
+    /// value is above 9999999999999999e80.
     pub fn new(mantissa: i64, exponent: i8) -> Result<Self, crate::CoreError> {
         Self::normalize(mantissa < 0, mantissa.unsigned_abs(), i64::from(exponent))
     }
@@ -109,6 +114,12 @@ impl IouAmount {
     /// Any number of digits is read exactly, rounded by the same rule.
     /// (`rippled`'s JSON reader takes at most a `u64` of digits; the SDK
     /// writes binary, so a longer value reaches the ledger as written.)
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAmount`](crate::CoreError::InvalidAmount) if `s` is
+    /// not in that syntax (or its exponent does not fit an `i32`), or the value
+    /// is above 9999999999999999e80.
     pub fn from_decimal(s: &str) -> Result<Self, crate::CoreError> {
         let parts = crate::number_text::split(s)?;
         // Sixteen significant digits; the rest only move the exponent and
@@ -225,6 +236,11 @@ pub enum Amount {
 
 impl Amount {
     /// Create an XRP amount from drops.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidAmount`](crate::CoreError::InvalidAmount) if `drops`
+    /// is above 10^17 (100 billion XRP).
     pub fn xrp(drops: u64) -> Result<Self, crate::CoreError> {
         if drops > MAX_XRP_DROPS {
             return Err(crate::CoreError::InvalidAmount(format!(
@@ -250,6 +266,17 @@ impl Amount {
     /// let rlusd = Amount::token("1", "RLUSD", "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De").unwrap();
     /// assert_eq!(serde_json::to_value(&rlusd).unwrap()["currency"], "524C555344000000000000000000000000000000");
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidCurrency`](crate::CoreError::InvalidCurrency) (or
+    /// `InvalidHex`) for a currency code [`Currency::from_code`] refuses, or
+    /// XRP's own code;
+    /// [`CoreError::InvalidAmount`](crate::CoreError::InvalidAmount) for a
+    /// `value` that does not parse;
+    /// [`CoreError::InvalidAddress`](crate::CoreError::InvalidAddress) (or
+    /// `InvalidBase58`, `InvalidChecksum`) for an `issuer` that is not a
+    /// classic address.
     pub fn token(value: &str, currency: &str, issuer: &str) -> Result<Self, crate::CoreError> {
         let currency = Currency::from_code(currency)?;
         if currency.is_xrp() {
@@ -267,6 +294,11 @@ impl Amount {
     /// An MPT amount: `value` in the issuance's smallest unit (an
     /// `AssetScale` of 2 makes 12345 mean 123.45), and its
     /// MPTokenIssuanceID (48 hex digits).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if
+    /// `mpt_issuance_id` is not 48 hex digits.
     pub fn mpt(value: i64, mpt_issuance_id: &str) -> Result<Self, crate::CoreError> {
         Ok(Amount::Mpt {
             value,

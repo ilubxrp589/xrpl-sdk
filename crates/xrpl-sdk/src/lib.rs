@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-sdk = "0.5"
+//! halcyon-xrpl-sdk = "0.7"
 //! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! serde_json = "1"
 //! ```
@@ -516,6 +516,8 @@
 //! credit James Turner with a link to <https://github.com/ilubxrp589/xrpl-sdk>.
 
 #![warn(missing_docs)]
+// docs.rs labels each feature- or platform-gated item with what it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Wallets: keys and address, signing, multi-signing, batches and channel claims.
 pub mod wallet;
@@ -528,8 +530,10 @@ pub use xrpl_core;
 // Re-exports from xrpl-core
 pub use xrpl_core::address::KeyType;
 pub use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
+pub use xrpl_core::crypto::{hd::DerivationPath, mnemonic::Mnemonic};
 pub use xrpl_core::crypto::{
-    sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, Keypair, Seed,
+    sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, verify_transaction,
+    Keypair, Seed,
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::batch;
@@ -553,18 +557,72 @@ pub use xrpl_client::XrplWsClient;
 #[cfg(not(target_arch = "wasm32"))]
 pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
 
-pub use wallet::Wallet;
+pub use wallet::{SignedTransaction, Wallet};
+pub use xrpl_core::transaction::ToTxJson;
 
 /// Generate a new wallet (Ed25519) and fund it with test XRP from `network`'s
 /// faucet; returns once a validated ledger shows the account. Only the
 /// address leaves this machine; keep the seed with [`Wallet::seed`].
+///
+/// # Errors
+///
+/// The errors of [`faucet::fund_and_wait`]: [`ClientError::HttpStatus`]
+/// when the faucet refuses (429 when it limits its rate),
+/// [`ClientError::UnexpectedResponse`] when no validated ledger shows the
+/// funding within about 40 seconds, and a [`ClientError`] when a request fails.
 pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, ClientError> {
     let wallet = Wallet::generate();
     faucet::fund_and_wait(network, wallet.classic_address()).await?;
     Ok(wallet)
 }
 
+/// Autofill a copy of `tx` (a typed transaction, a builder or JSON), sign it
+/// with `wallet`, submit it and wait for the final outcome: `Ok` only for a
+/// transaction validated with `tesSUCCESS`; every other ending is an error
+/// (see [`Client::submit_and_wait`]: on [`ClientError::OutcomeUnknown`] look
+/// the transaction up by its hash before sending it again).
+///
+/// ```no_run
+/// use xrpl_sdk::*;
+///
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
+/// let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
+/// let payment = models::Payment::new(
+///     wallet.classic_address(),
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_500_000)?,
+/// );
+/// let result = sign_and_submit(&client, &payment, &wallet).await?;
+/// println!("validated in ledger {:?}", result.ledger_index);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Errors
+///
+/// [`ClientError`]: the transaction could not be filled in, signed or
+/// encoded, the fee is above the client's cap, or it did not end validated
+/// with `tesSUCCESS`.
+pub async fn sign_and_submit(
+    client: &impl Client,
+    tx: &impl ToTxJson,
+    wallet: &Wallet,
+) -> Result<TxResult, ClientError> {
+    let mut json = tx.to_tx_json()?;
+    client.autofill(&mut json).await?;
+    let signed = wallet.sign(&json)?;
+    client.submit_and_wait(&signed.tx_blob).await
+}
+
 /// Autofill a transaction, sign it, and return the hex-encoded blob.
+///
+/// # Errors
+///
+/// The errors of [`Client::autofill`] ([`ClientError::FeeTooHigh`] above
+/// the client's fee cap, among them), and [`ClientError::Core`] when the
+/// filled transaction cannot be signed or encoded (see
+/// [`Wallet::sign_and_encode`]).
 pub async fn autofill_and_sign(
     client: &impl Client,
     tx: &mut serde_json::Value,
@@ -579,6 +637,13 @@ pub async fn autofill_and_sign(
 /// transaction validated with `tesSUCCESS`. Every other ending is an error;
 /// see [`Client::submit_and_wait`] for which ones are final and which
 /// ([`ClientError::OutcomeUnknown`]) mean "look it up before replacing it".
+///
+/// # Errors
+///
+/// The errors of [`Client::autofill`] ([`ClientError::FeeTooHigh`] above
+/// the client's fee cap, among them); [`ClientError::Core`] when the
+/// transaction cannot be signed or encoded; and every ending of
+/// [`Client::submit_and_wait`] but a validated `tesSUCCESS`.
 pub async fn submit_transaction(
     client: &impl Client,
     tx: &mut serde_json::Value,

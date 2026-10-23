@@ -119,7 +119,7 @@ macro_rules! paginated {
 /// An oracle to read in [`GetAggregatePriceRequest`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct OracleId {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The oracle's document ID.
     pub oracle_document_id: u32,
@@ -131,7 +131,7 @@ pub struct OracleId {
 /// payment channels the account is the source of.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountChannelsRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// Only channels to this destination.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -167,7 +167,7 @@ paginated!(
 /// currencies the account can send and receive.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountCurrenciesRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
@@ -187,7 +187,7 @@ request!(AccountCurrenciesRequest => "account_currencies", AccountCurrenciesResu
 /// an account's settings and XRP balance.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountInfoRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
@@ -213,7 +213,7 @@ request!(AccountInfoRequest => "account_info", AccountInfo);
 /// an account's trust lines.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountLinesRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
@@ -249,7 +249,7 @@ paginated!(
 /// the NFTs an account holds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountNftsRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
@@ -282,7 +282,7 @@ paginated!(
 /// the ledger entries an account owns.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountObjectsRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// Only entries of this type (`offer`, `state`, `check`, `escrow`,
     /// `payment_channel`, `nft_offer`, `ticket`, `did`, `oracle`, `mptoken`, …).
@@ -322,7 +322,7 @@ paginated!(
 /// an account's open DEX offers.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AccountOffersRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The ledger the answer is from.
     pub ledger_index: LedgerIndex,
@@ -356,7 +356,7 @@ paginated!(
 /// latest validated ledger.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AccountTxRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// The earliest ledger searched.
     pub ledger_index_min: i32,
@@ -403,7 +403,7 @@ paginated!(AccountTxRequest, AccountTxEntry, transactions);
 /// what an issuer has issued, and to whom.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct GatewayBalancesRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// Operational addresses to leave out of `obligations` (listed in `balances`).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -429,7 +429,7 @@ request!(GatewayBalancesRequest => "gateway_balances", GatewayBalancesResult);
 /// trust-line settings that do not suit the account's role.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NoRippleCheckRequest {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account to look up (a classic address).
     pub account: String,
     /// `"gateway"` (an issuer) or `"user"`.
     pub role: String,

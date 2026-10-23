@@ -30,12 +30,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.6"
+halcyon-xrpl-sdk = "0.7"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.6"      # types + codec + crypto only
-halcyon-xrpl-client = "0.6"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.7"      # types + codec + crypto only
+halcyon-xrpl-client = "0.7"    # HTTP + WebSocket clients
 ```
 
 ### Minimum supported Rust version
@@ -57,14 +57,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
     let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
 
-    let mut tx = serde_json::json!({
-        "TransactionType": "Payment",
-        "Account": wallet.classic_address(),
-        "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-        "Amount": utils::xrp_to_drops("1.5")?.to_string()
-    });
+    let payment = models::Payment::new(
+        wallet.classic_address(),
+        "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        Amount::xrp(utils::xrp_to_drops("1.5")?)?,
+    );
 
-    let result = submit_transaction(&client, &mut tx, &wallet).await?;
+    // Fills in Fee, Sequence and LastLedgerSequence, signs, submits, and
+    // waits for the validated result.
+    let result = sign_and_submit(&client, &payment, &wallet).await?;
     for change in utils::get_balance_changes(result.meta.as_ref().unwrap())? {
         println!("{}: {:?}", change.account, change.balances);
     }
@@ -210,6 +211,11 @@ assert_eq!(json["TransactionType"], "Payment");
   type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, `bridge`,
   `book_directory`, …), each matching the index rippled computes
 - Payment channel claims: sign and verify
+- Ledger hashes: a header's hash and the transaction and state tree roots (SHAMap), to check that
+  a ledger's transactions are exactly the ones its hash covers (`Client::verified_ledger`)
+- Key backups from other wallets: BIP-39 recovery phrases with BIP-32 paths (`m/44'/144'/0'/0/0`, as
+  Ledger and xrpl.js), Xaman's secret numbers (XLS-12) and RFC 1751 keys (`wallet_propose`'s
+  `master_key`), checked against the BIP-39 and BIP-32 reference vectors, xrpl.js and rippled
 - Utilities: XRP ↔ drops, ledger time ↔ Unix / ISO 8601, text ↔ hex, TransferRate and quality,
   NFTokenID parsing, the NFTokenID a mint created, balance changes from metadata. Amounts are
   computed in exact decimal, never floating point
@@ -243,7 +249,11 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `halcyon-xrpl-sdk`
 
-- `Wallet` — generate, from_seed, seed, sign, sign_and_encode, sign_payment_channel_claim
+- `Wallet` — generate, from_seed, seed, `sign` (a typed transaction, a builder or JSON → signed
+  JSON, blob and hash), sign_and_encode, sign_payment_channel_claim
+- `sign_and_submit` — autofill, sign, submit and wait, for a typed transaction or JSON
+- Open an existing wallet from its backup: `Wallet::from_mnemonic` (BIP-39 phrase),
+  `from_secret_numbers` (Xaman), `from_rfc1751` (`rippled`'s `master_key`)
 - `generate_faucet_wallet` — a funded Testnet / Devnet wallet in one call
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
 - `autofill_and_sign` / `submit_transaction` convenience functions

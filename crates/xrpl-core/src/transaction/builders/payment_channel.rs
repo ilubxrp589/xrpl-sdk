@@ -45,6 +45,7 @@ impl Transaction for PaymentChannelCreate {
     }
 }
 /// Builds a [`PaymentChannelCreate`] (from [`PaymentChannelCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentChannelCreateBuilder {
     common: TxCommon,
     amount: Option<String>,
@@ -113,6 +114,11 @@ impl PaymentChannelCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount`, `destination`,
+    /// `settle_delay` or `public_key` is missing.
     pub fn build(self) -> Result<PaymentChannelCreate, CoreError> {
         let amount = self.amount.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelCreate: amount is required".into())
@@ -176,6 +182,7 @@ impl Transaction for PaymentChannelFund {
     }
 }
 /// Builds a [`PaymentChannelFund`] (from [`PaymentChannelFund::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentChannelFundBuilder {
     common: TxCommon,
     channel: Option<String>,
@@ -223,6 +230,10 @@ impl PaymentChannelFundBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `channel` or `amount` is missing.
     pub fn build(self) -> Result<PaymentChannelFund, CoreError> {
         let channel = self.channel.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelFund: channel is required".into())
@@ -289,6 +300,7 @@ impl Transaction for PaymentChannelClaim {
     }
 }
 /// Builds a [`PaymentChannelClaim`] (from [`PaymentChannelClaim::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct PaymentChannelClaimBuilder {
     common: TxCommon,
     channel: Option<String>,
@@ -355,6 +367,10 @@ impl PaymentChannelClaimBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `channel` is missing.
     pub fn build(self) -> Result<PaymentChannelClaim, CoreError> {
         let channel = self.channel.ok_or_else(|| {
             CoreError::ValidationError("PaymentChannelClaim: channel is required".into())

@@ -146,6 +146,13 @@ pub fn encode_account_id(bytes: &[u8; 20]) -> String {
 
 /// Decode a classic address to a 20-byte account ID.
 /// Validates prefix `0x00` and checksum.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidBase58`] for a character outside the XRPL alphabet
+/// or a string over 128 characters; [`CoreError::InvalidAddress`] if it
+/// does not decode to 25 bytes or the prefix is not `0x00`;
+/// [`CoreError::InvalidChecksum`] if the checksum does not match.
 pub fn decode_account_id(addr: &str) -> Result<[u8; 20], CoreError> {
     let decoded = base58_decode(addr)?;
 
@@ -210,6 +217,14 @@ pub fn encode_x_address(account_id: &[u8; 20], tag: Option<u32>, test: bool) -> 
 
 /// Decode an X-address to (account ID, tag, is_test). Rejects unknown
 /// prefixes and flags, 64-bit tags, and tag bytes without the tag flag.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidBase58`] for a character outside the XRPL alphabet
+/// or a string over 128 characters; [`CoreError::InvalidChecksum`] if the
+/// checksum does not match; [`CoreError::InvalidAddress`] if it does not
+/// decode to 35 bytes, or has an unknown prefix or flag, a 64-bit tag, or
+/// tag bytes without the tag flag.
 pub fn decode_x_address(x_address: &str) -> Result<([u8; 20], Option<u32>, bool), CoreError> {
     let decoded: [u8; 35] = base58_decode(x_address)?.try_into().map_err(|d: Vec<u8>| {
         CoreError::InvalidAddress(format!("X-address: expected 35 bytes, got {}", d.len()))
@@ -257,6 +272,12 @@ pub fn decode_x_address(x_address: &str) -> Result<([u8; 20], Option<u32>, bool)
 }
 
 /// Classic address (+ optional tag) → X-address.
+///
+/// # Errors
+///
+/// As [`decode_account_id`]: [`CoreError::InvalidBase58`],
+/// [`CoreError::InvalidAddress`] or [`CoreError::InvalidChecksum`] when
+/// `classic` is not a valid classic address.
 pub fn classic_to_x_address(
     classic: &str,
     tag: Option<u32>,
@@ -266,18 +287,60 @@ pub fn classic_to_x_address(
 }
 
 /// X-address → (classic address, tag, is_test).
+///
+/// # Errors
+///
+/// As [`decode_x_address`]: [`CoreError::InvalidBase58`],
+/// [`CoreError::InvalidAddress`] or [`CoreError::InvalidChecksum`] when
+/// `x_address` is not a valid X-address.
 pub fn x_address_to_classic(x_address: &str) -> Result<(String, Option<u32>, bool), CoreError> {
     let (account_id, tag, test) = decode_x_address(x_address)?;
     Ok((encode_account_id(&account_id), tag, test))
 }
 
-/// Key type for seed encoding/decoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The signature scheme of a key. Written as `rippled`'s `key_type` writes
+/// it (`"ed25519"`, `"secp256k1"`): by `Display`, `FromStr` and serde.
+///
+/// ```
+/// use xrpl_core::address::KeyType;
+///
+/// assert_eq!("secp256k1".parse::<KeyType>()?, KeyType::Secp256k1);
+/// assert_eq!(KeyType::Ed25519.to_string(), "ed25519");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum KeyType {
-    /// Ed25519: `rippled`'s default for new keys.
+    /// Ed25519: what `Wallet::generate` and xrpl.js make by default.
     Ed25519,
-    /// secp256k1 (ECDSA).
+    /// secp256k1 (ECDSA): `rippled`'s `wallet_propose` default, and Xaman's.
     Secp256k1,
+}
+
+impl core::fmt::Display for KeyType {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            KeyType::Ed25519 => "ed25519",
+            KeyType::Secp256k1 => "secp256k1",
+        })
+    }
+}
+
+impl core::str::FromStr for KeyType {
+    type Err = CoreError;
+
+    /// `"ed25519"` or `"secp256k1"`, in any case.
+    fn from_str(s: &str) -> Result<Self, CoreError> {
+        if s.eq_ignore_ascii_case("ed25519") {
+            Ok(KeyType::Ed25519)
+        } else if s.eq_ignore_ascii_case("secp256k1") {
+            Ok(KeyType::Secp256k1)
+        } else {
+            Err(CoreError::ValidationError(format!(
+                "a key type is \"ed25519\" or \"secp256k1\", not {s:?}"
+            )))
+        }
+    }
 }
 
 /// Encode a 16-byte seed to base58check.
@@ -303,6 +366,12 @@ pub fn encode_seed(bytes: &[u8; 16], key_type: KeyType) -> String {
 /// Errors say only what kind of mistake the string has: never a character
 /// of it or a checksum computed from it, which would put part of a secret
 /// into a log.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidSeed`] if the string is not base58, the checksum
+/// does not match, or it is not 16 bytes behind an Ed25519 or secp256k1
+/// seed prefix.
 pub fn decode_seed(seed: &str) -> Result<([u8; 16], KeyType), CoreError> {
     decode_seed_bytes(seed).map_err(|e| {
         CoreError::InvalidSeed(

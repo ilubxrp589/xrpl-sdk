@@ -9,6 +9,12 @@ use alloc::{string::ToString, vec::Vec};
 /// secret key is SHA-512Half(seed); the public key is 0xED + the 32-byte
 /// point (33 bytes, as on the ledger). The secret key comes back in a buffer
 /// wiped on drop.
+///
+/// # Errors
+///
+/// None: every seed gives a key pair. The `Result` matches
+/// [`secp256k1::derive_keypair`](super::secp256k1::derive_keypair), which
+/// can fail.
 pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), CoreError> {
     let secret = super::secret_sha512_half(&[seed]);
     // SigningKey wipes itself on drop.
@@ -20,6 +26,10 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), 
 }
 
 /// The 33-byte public key (0xED + point) of a 32-byte Ed25519 secret key.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidKeyLength`] if `private_key` is not 32 bytes.
 pub fn public_key(private_key: &[u8]) -> Result<Vec<u8>, CoreError> {
     let mut key_bytes = secret_key_bytes(private_key)?;
     let signing_key = SigningKey::from_bytes(&key_bytes);
@@ -42,6 +52,10 @@ fn secret_key_bytes(private_key: &[u8]) -> Result<[u8; 32], CoreError> {
 /// Sign `message` (the message itself: Ed25519 hashes internally, and
 /// `rippled` verifies Ed25519 over the unhashed signing data) with a 32-byte
 /// secret key. Returns the 64-byte signature.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidKeyLength`] if `private_key` is not 32 bytes.
 pub fn sign(private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, CoreError> {
     let mut key_bytes = secret_key_bytes(private_key)?;
     let signing_key = SigningKey::from_bytes(&key_bytes);
@@ -57,6 +71,12 @@ pub fn sign(private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, CoreError> {
 /// Verification is strict (`verify_strict`: no small-order keys or `R`),
 /// which can refuse a signature `rippled` would take from such a key, never
 /// the other way round.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidKeyLength`] if `public_key` is neither 0xED + 32
+/// bytes nor 32 bytes; [`CoreError::SigningFailed`] if its 32 bytes are not
+/// a point on the curve.
 pub fn verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
     let raw_key = match public_key {
         [0xED, rest @ ..] if rest.len() == 32 => rest,

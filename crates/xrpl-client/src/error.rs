@@ -10,6 +10,18 @@ pub enum ClientError {
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
+    /// The server answered with an HTTP error status, after any retries the
+    /// client's [`RetryPolicy`](crate::http::RetryPolicy) allows.
+    #[error("HTTP status {status}: {excerpt}")]
+    HttpStatus {
+        /// The status code (429 Too Many Requests, 503 Service Unavailable, …).
+        status: u16,
+        /// How long the server asked to wait (`Retry-After`), when it said.
+        retry_after: Option<std::time::Duration>,
+        /// The start of the body (at most 200 characters).
+        excerpt: String,
+    },
+
     /// A response was not the JSON expected.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
@@ -106,11 +118,14 @@ pub enum ClientError {
     #[error("transaction expired: LastLedgerSequence {0} passed")]
     TransactionExpired(u32),
 
-    /// `request_all` stopped after this many pages; page on with `marker`.
-    #[error("pagination limit reached: {0} pages fetched, use marker manually for more")]
+    /// `request_all` stopped after this many pages; read them one at a time
+    /// with [`crate::Client::pages`], which has no limit.
+    #[error(
+        "pagination limit reached after {0} pages; read the pages one at a time with Client::pages"
+    )]
     PaginationLimitReached(usize),
 
-    /// A [`crate::blocking::BlockingClient`] method was called inside an
+    /// A `BlockingClient` method (native targets only) was called inside an
     /// async runtime, which blocking would stall; use the async client.
     #[error("BlockingClient used inside an async runtime; use the async client there")]
     InsideAsyncRuntime,

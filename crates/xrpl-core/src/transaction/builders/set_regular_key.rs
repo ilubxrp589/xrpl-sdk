@@ -37,6 +37,7 @@ impl Transaction for SetRegularKey {
     }
 }
 /// Builds a [`SetRegularKey`] (from [`SetRegularKey::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct SetRegularKeyBuilder {
     common: TxCommon,
     regular_key: Option<String>,
@@ -70,6 +71,12 @@ impl SetRegularKeyBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if the regular key is the account's own
+    /// address; an address error ([`CoreError::InvalidAddress`],
+    /// `InvalidBase58` or `InvalidChecksum`) if it is not a classic address.
     pub fn build(self) -> Result<SetRegularKey, CoreError> {
         let tx = SetRegularKey {
             common: self.common,

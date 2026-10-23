@@ -72,6 +72,32 @@ impl Subscription {
         }
         futures::StreamExt::next(&mut self.rx).await
     }
+
+    /// The events as a [`futures::Stream`] (see the native client's
+    /// `Subscription::into_stream`). It ends when the client is dropped.
+    pub fn into_stream(self) -> impl futures::Stream<Item = WsEvent> {
+        futures::stream::unfold(self, |mut subscription| async move {
+            subscription.recv().await.map(|event| (event, subscription))
+        })
+    }
+}
+
+impl std::fmt::Debug for Subscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Subscription").finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for XrplWsClient {
+    /// The server's host (never the URL, which may carry a token), whether
+    /// connected, and the fee cap.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XrplWsClient")
+            .field("host", &crate::host_of(&self.url))
+            .field("connected", &self.is_connected())
+            .field("max_fee_drops", &self.max_fee_drops)
+            .finish()
+    }
 }
 
 /// WebSocket client for XRPL nodes (WASM version using browser WebSocket API).
@@ -100,6 +126,12 @@ impl XrplWsClient {
 
     /// Connect to an XRPL WebSocket endpoint.
     /// Uses the browser's native WebSocket API.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::UnexpectedResponse`] when the browser cannot create the
+    /// WebSocket (a malformed URL, for one) or the connection fails before
+    /// it opens.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
         let ws = WebSocket::new(url).map_err(|e| {
             ClientError::UnexpectedResponse(format!("WebSocket creation failed: {:?}", e))
@@ -250,6 +282,13 @@ impl XrplWsClient {
     }
 
     /// Subscribe to ledger closes ([`WsEvent::Ledger`] only).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the subscription;
+    /// [`ClientError::Disconnected`] when the connection is closed, or closes
+    /// before the reply; and [`ClientError::Timeout`] after 30 s without a
+    /// reply.
     pub async fn subscribe_ledger(&self) -> Result<Subscription, ClientError> {
         self.subscribe_with(json!({"streams": ["ledger"]}), |e| {
             matches!(e, WsEvent::Ledger(_))
@@ -259,6 +298,10 @@ impl XrplWsClient {
 
     /// Subscribe to every validated transaction ([`WsEvent::Transaction`],
     /// `validated: true`, only).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe_ledger`].
     pub async fn subscribe_transactions(&self) -> Result<Subscription, ClientError> {
         self.subscribe_with(
             json!({"streams": ["transactions"]}),
@@ -268,6 +311,11 @@ impl XrplWsClient {
     }
 
     /// Subscribe to the validated transactions that affect `account` (only those).
+    ///
+    /// # Errors
+    ///
+    /// The same as [`XrplWsClient::subscribe_ledger`] ([`ClientError::RpcError`]
+    /// `actMalformed` for an address that is not valid).
     pub async fn subscribe_account(&self, account: &str) -> Result<Subscription, ClientError> {
         let who = account.to_string();
         self.subscribe_with(

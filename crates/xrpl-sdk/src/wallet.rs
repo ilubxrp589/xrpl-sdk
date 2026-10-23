@@ -1,13 +1,31 @@
 use xrpl_core::address::KeyType;
 use xrpl_core::codec::encode_transaction_json;
+use xrpl_core::crypto::hd::DerivationPath;
+use xrpl_core::crypto::mnemonic::Mnemonic;
 use xrpl_core::crypto::{sign_transaction, verify_signing_data, Keypair, Seed};
+use xrpl_core::transaction::ToTxJson;
 use xrpl_core::types::AccountId;
+use xrpl_core::types::Hash256;
 use xrpl_core::CoreError;
 use zeroize::Zeroizing;
 
 /// The most signers a multi-signed transaction may carry (`rippled`'s
 /// `STTx::maxMultiSigners`).
 pub const MAX_MULTISIGNERS: usize = 32;
+
+/// A signed transaction: what [`Wallet::sign`] returns.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct SignedTransaction {
+    /// The signed transaction as JSON (`SigningPubKey` and `TxnSignature`
+    /// set).
+    pub tx_json: serde_json::Value,
+    /// The blob to submit, in upper-case hex.
+    pub tx_blob: String,
+    /// The transaction's ID: the hash it has on the ledger, known before it
+    /// is submitted (look it up with `tx` to learn its outcome).
+    pub hash: Hash256,
+}
 
 /// High-level wallet for XRPL transactions: a key pair, its address and,
 /// when it was made from one, its seed. `Debug` shows the address and key
@@ -46,15 +64,130 @@ impl Wallet {
     }
 
     /// Create a wallet from a base58-encoded seed string.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if `seed_str` is not a seed: not base58, a
+    /// checksum that does not match, or the wrong length or prefix.
     pub fn from_seed(seed_str: &str) -> Result<Self, CoreError> {
-        let seed = Seed::from_base58(seed_str)?;
-        let keypair = Keypair::from_seed(&seed)?;
-        Ok(Self::from_keypair(keypair).with_seed(seed))
+        Self::from_seed_value(Seed::from_base58(seed_str)?)
     }
 
     /// Alias for `from_seed` — XRPL often uses "secret" to mean seed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::from_seed`].
     pub fn from_secret(secret: &str) -> Result<Self, CoreError> {
         Self::from_seed(secret)
+    }
+
+    /// Open a wallet from a BIP-39 recovery phrase (12 to 24 words, as
+    /// Ledger devices and multi-coin wallets show), with no passphrase, at
+    /// the first XRP account: `m/44'/144'/0'/0/0`, the path Ledger and
+    /// xrpl.js use. The key is secp256k1 and the wallet has no XRPL seed
+    /// ([`Wallet::seed`] is `None`): the phrase is its backup.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_mnemonic(
+    ///     "assault rare scout seed design extend noble drink talk control guitar quote",
+    /// )?;
+    /// assert_eq!(wallet.classic_address(), "rJUr92pXcNtH6PtFfbRhHCo469XmPrbTJU");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidMnemonic`] if a word is not on the BIP-39 English
+    /// list, the word count is wrong or the checksum does not match.
+    pub fn from_mnemonic(phrase: &str) -> Result<Self, CoreError> {
+        Self::from_mnemonic_with(phrase, "", &DerivationPath::default())
+    }
+
+    /// Open a wallet from a BIP-39 recovery phrase with a passphrase (the
+    /// "25th word"; `""` for none) at `path`, for example
+    /// [`DerivationPath::xrp_account`] for a later account. A wrong
+    /// passphrase or path is not an error: it opens a different, empty
+    /// wallet, so check the address.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::from_mnemonic`].
+    pub fn from_mnemonic_with(
+        phrase: &str,
+        passphrase: &str,
+        path: &DerivationPath,
+    ) -> Result<Self, CoreError> {
+        let mnemonic = Mnemonic::parse(phrase)?;
+        Ok(Self::from_keypair(Keypair::from_mnemonic(
+            &mnemonic, passphrase, path,
+        )?))
+    }
+
+    /// Open a wallet from Xaman's secret numbers (eight blocks of six
+    /// digits; separators and row letters are skipped). The key is
+    /// secp256k1, as Xaman makes it and as xrpl.js reads it; use
+    /// [`Wallet::from_secret_numbers_with_type`] for Ed25519.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_secret_numbers(
+    ///     "399150 474506 009147 088773 432160 282843 253738 605430",
+    /// )?;
+    /// assert_eq!(wallet.classic_address(), "rQKQsPeE3iTRyfUypLhuq74gZdcRdwWqDp");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if there are not 48 digits or a block
+    /// fails its check digit.
+    pub fn from_secret_numbers(numbers: &str) -> Result<Self, CoreError> {
+        Self::from_secret_numbers_with_type(numbers, KeyType::Secp256k1)
+    }
+
+    /// Open a wallet from secret numbers with the given key type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::from_secret_numbers`].
+    pub fn from_secret_numbers_with_type(
+        numbers: &str,
+        key_type: KeyType,
+    ) -> Result<Self, CoreError> {
+        Self::from_seed_value(Seed::from_secret_numbers(numbers, key_type)?)
+    }
+
+    /// Open a wallet from an RFC 1751 key: the twelve words `rippled`'s
+    /// `wallet_propose` returns as `master_key`. The words do not record the
+    /// key type, so give the one `wallet_propose` was asked for (its
+    /// `key_type`; `rippled`'s default is secp256k1).
+    ///
+    /// ```
+    /// use xrpl_sdk::{KeyType, Wallet};
+    ///
+    /// let wallet = Wallet::from_rfc1751(
+    ///     "YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY FILE",
+    ///     KeyType::Secp256k1,
+    /// )?;
+    /// assert_eq!(wallet.classic_address(), "rNiNSFyhVr5xfp8o8G5Ku81if8rdDrai5z");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if there are not twelve dictionary words or
+    /// a half fails its parity check.
+    pub fn from_rfc1751(words: &str, key_type: KeyType) -> Result<Self, CoreError> {
+        Self::from_seed_value(Seed::from_rfc1751(words, key_type)?)
+    }
+
+    fn from_seed_value(seed: Seed) -> Result<Self, CoreError> {
+        let keypair = Keypair::from_seed(&seed)?;
+        Ok(Self::from_keypair(keypair).with_seed(seed))
     }
 
     /// Create a wallet from an existing keypair.
@@ -99,6 +232,16 @@ impl Wallet {
     /// Sign a `Batch` as one of its participants (an account with an inner
     /// transaction that is not the batch's own account): the `BatchSigner`
     /// to add with `transaction::batch::add_batch_signers`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of
+    /// [`batch_signing_data`](xrpl_core::transaction::batch::batch_signing_data):
+    /// [`CoreError::ValidationError`] for a `batch` with no `Account`, no
+    /// `Sequence` or `TicketSequence`, no `RawTransactions`, or an inner
+    /// transaction neither signed nor marked `tfInnerBatchTxn`; an address
+    /// error for an `Account` that is not a classic address; and a codec
+    /// error for an inner transaction that does not encode.
     pub fn sign_batch(
         &self,
         batch: &serde_json::Value,
@@ -109,6 +252,12 @@ impl Wallet {
     /// Sign a `Batch` for `account`, an account whose regular key this
     /// wallet holds: the `BatchSigner` to add with
     /// `transaction::batch::add_batch_signers`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_batch`], and an address error
+    /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`)
+    /// for an `account` that is not a classic address.
     pub fn sign_batch_as(
         &self,
         batch: &serde_json::Value,
@@ -119,6 +268,12 @@ impl Wallet {
 
     /// Sign a `Batch` for `batch_signer`, an account whose signer list this
     /// wallet is on: one of the `Signers` of its multi-signed `BatchSigner`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_batch`], and an address error
+    /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`)
+    /// for a `batch_signer` that is not a classic address.
     pub fn sign_batch_for(
         &self,
         batch: &serde_json::Value,
@@ -129,6 +284,10 @@ impl Wallet {
 
     /// Sign a payment channel claim for `amount_drops` (the channel's total
     /// paid out, not an increment) with this wallet's key.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`] if `channel_id` is not 32 bytes of hex.
     pub fn sign_payment_channel_claim(
         &self,
         channel_id: &str,
@@ -137,13 +296,62 @@ impl Wallet {
         xrpl_core::crypto::sign_payment_channel_claim(channel_id, amount_drops, &self.keypair)
     }
 
+    /// Sign `tx` as it is: a typed transaction
+    /// ([`models`](xrpl_core::transaction::models)), a builder (checked
+    /// first) or JSON. Fill in `Fee`, `Sequence` and `LastLedgerSequence`
+    /// before (`Client::autofill`), or use [`crate::sign_and_submit`], which
+    /// does it all. Returns the signed JSON, the blob to submit and the
+    /// transaction's ID.
+    ///
+    /// ```
+    /// use xrpl_sdk::{models, Amount, Wallet};
+    ///
+    /// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// let mut payment = models::Payment::new(
+    ///     wallet.classic_address(),
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// payment.common.fee = Some("12".into());
+    /// payment.common.sequence = Some(1);
+    /// let signed = wallet.sign(&payment)?;
+    /// assert_eq!(signed.hash, xrpl_sdk::hash_signed_tx_blob(&signed.tx_blob)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// A [`CoreError`] when the transaction does not encode (an unknown
+    /// field, a value that does not fit) or is multi-signed (`Signers` set:
+    /// see [`Wallet::sign_for_multisigning`]).
+    pub fn sign(&self, tx: &impl ToTxJson) -> Result<SignedTransaction, CoreError> {
+        let tx_json = sign_transaction(&tx.to_tx_json()?, &self.keypair)?;
+        let blob = encode_transaction_json(&tx_json, false)?;
+        Ok(SignedTransaction {
+            hash: xrpl_core::hashes::transaction_id(&blob),
+            tx_blob: hex::encode_upper(&blob),
+            tx_json,
+        })
+    }
+
     /// Sign a transaction (JSON). Returns the signed tx JSON with
     /// SigningPubKey and TxnSignature fields set.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::CodecError`] if `tx` is not a JSON object,
+    /// [`CoreError::ValidationError`] if it has `Signers` (see
+    /// [`Wallet::sign_for_multisigning`]), and the errors of
+    /// [`encode_transaction_json`] for a field that does not encode.
     pub fn sign_transaction(&self, tx: &serde_json::Value) -> Result<serde_json::Value, CoreError> {
         sign_transaction(tx, &self.keypair)
     }
 
     /// Sign a transaction and return the hex-encoded blob ready for submission.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_transaction`].
     pub fn sign_and_encode(&self, tx: &serde_json::Value) -> Result<String, CoreError> {
         let signed = sign_transaction(tx, &self.keypair)?;
         let encoded = encode_transaction_json(&signed, false)?;
@@ -164,6 +372,14 @@ impl Wallet {
     /// [`collect_signers`]. The transaction is signed with an empty
     /// `SigningPubKey` (a missing one counts as empty; a non-empty one is an
     /// error), as `rippled`'s `sign_for` does.
+    ///
+    /// # Errors
+    ///
+    /// The errors of
+    /// [`encode_for_multisigning`](xrpl_core::codec::encode_for_multisigning):
+    /// [`CoreError::ValidationError`] for a non-empty `SigningPubKey`, and
+    /// the errors of [`encode_transaction_json`] for a field that does not
+    /// encode.
     pub fn sign_for_multisigning(
         &self,
         tx: &serde_json::Value,
@@ -191,6 +407,19 @@ impl Wallet {
 /// order); an account may sign once; at most [`MAX_MULTISIGNERS`] may sign.
 /// `SigningPubKey` is set empty; a `TxnSignature` (a single signature) is an
 /// error.
+///
+/// # Errors
+///
+/// - [`CoreError::ValidationError`] for no signers or more than
+///   [`MAX_MULTISIGNERS`], a transaction with a `TxnSignature`, a `Signer`
+///   entry without its `Account`, `SigningPubKey` or `TxnSignature`, a
+///   signature that is not for this transaction, or an account that signs
+///   twice.
+/// - [`CoreError::InvalidHex`], [`CoreError::InvalidKeyLength`] or
+///   [`CoreError::SigningFailed`] for a key or signature that is malformed.
+/// - The errors of
+///   [`encode_for_multisigning`](xrpl_core::codec::encode_for_multisigning)
+///   for the transaction or a signer's `Account`.
 pub fn collect_signers(
     tx: &mut serde_json::Value,
     signers: Vec<serde_json::Value>,
@@ -529,5 +758,53 @@ mod tests {
         assert_ne!(ed.classic_address(), sec.classic_address());
         // Ed25519 public key starts with 0xED
         assert!(ed.public_key_hex().starts_with("ED"));
+    }
+    /// `sign` takes a typed model, a builder or JSON and signs the same
+    /// transaction from each; the hash is the blob's ID.
+    #[test]
+    fn sign_takes_every_form_of_a_transaction() {
+        use xrpl_core::transaction::{builders, models};
+        use xrpl_core::types::Amount;
+        let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r").unwrap();
+        let destination = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        let json = serde_json::json!({
+            "TransactionType": "Payment",
+            "Account": wallet.classic_address(),
+            "Destination": destination,
+            "Amount": "1000000",
+            "Fee": "12",
+            "Sequence": 1,
+        });
+        let mut model = models::Payment::new(
+            wallet.classic_address(),
+            destination,
+            Amount::xrp(1_000_000).unwrap(),
+        );
+        model.common.fee = Some("12".into());
+        model.common.sequence = Some(1);
+        let builder = builders::Payment::builder(wallet.classic_address())
+            .destination(destination)
+            .amount(serde_json::json!("1000000"))
+            .fee("12")
+            .sequence(1)
+            .build()
+            .unwrap();
+        let from_json = wallet.sign(&json).unwrap();
+        assert_eq!(wallet.sign(&model).unwrap(), from_json);
+        assert_eq!(wallet.sign(&builder).unwrap(), from_json);
+        assert_eq!(wallet.sign(&models::Tx::Payment(model)).unwrap(), from_json);
+        assert_eq!(from_json.tx_blob, wallet.sign_and_encode(&json).unwrap());
+        assert_eq!(
+            from_json.hash,
+            xrpl_core::hashes::hash_signed_tx_blob(&from_json.tx_blob).unwrap()
+        );
+        assert_eq!(
+            from_json.tx_json["TxnSignature"],
+            wallet.sign_transaction(&json).unwrap()["TxnSignature"]
+        );
+        // A multi-signed transaction is refused, as sign_transaction refuses it.
+        let mut multi = json.clone();
+        multi["Signers"] = serde_json::json!([{"Signer": {}}]);
+        assert!(wallet.sign(&multi).is_err());
     }
 }

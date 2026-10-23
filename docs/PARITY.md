@@ -165,9 +165,14 @@ refused without the sequence).
   data itself.
 - **Multi-signatures.** `sign_for` signatures match `rippled` 3.4.1's
   `sign_for` byte for byte.
+- **Verifying signatures.** `verify_transaction` accepts every signed
+  transaction in the test corpus: 179 single-signed and 2 multi-signed
+  mainnet transactions, and 79 that `rippled` 3.4.1 signed offline. Each of
+  them fails once its `Sequence` changes, and a multi-signed one fails with
+  its signers out of account order.
 - **Payment channel claims.** They match `rippled`'s `channel_authorize`
   byte for byte, and a claim made by the SDK was accepted on Testnet.
-- **Batch signatures.** All 6 Testnet batches with `BatchSigners` in the
+- **Batch signatures.** All 6 Devnet batches with `BatchSigners` in the
   recorded set, which `rippled` accepted, verify against the SDK's batch
   signing data (`rippled` 3.4.1's layout, which includes the outer account
   and sequence). A single changed byte makes all of them fail.
@@ -192,6 +197,22 @@ refused without the sequence).
   shows.
 - **NFT and MPT IDs.** `NFTokenID` matches `rippled`'s on a mainnet mint and
   on Testnet; `MPTokenIssuanceID` on Testnet.
+- **Ledger hashes.** Mainnet ledger 107852951's header, read from
+  `rippled`'s JSON, hashes to its `ledger_hash` and serializes to the
+  `ledger_data` its binary answer holds; its 34 transactions and their
+  metadata rebuild the header's `transaction_hash` (the transaction SHAMap),
+  in any order. The state tree uses the same tree with `rippled`'s state
+  leaf; no whole ledger state is in the tests (mainnet's has tens of
+  millions of entries).
+- **Transaction cost.** `transaction::cost` follows `rippled` 3.4.1's
+  `calculateBaseFee` for every type that overrides it (owner reserve for
+  `AccountDelete`, `AMMCreate` and `LedgerStateFix`; 32 + *n*/16 extra base
+  fees for an `EscrowFinish` fulfillment of *n* bytes; 9 extra for
+  Confidential MPT; counterparty signatures for `LoanSet`; every part of a
+  `Batch`). `rippled`'s `simulate` on mainnet refuses one drop less than the
+  computed cost and accepts the cost itself, for `AccountDelete` (200,000
+  drops) and a 100-byte fulfillment (390 drops)
+  (`crates/xrpl-core/scripts/probe_cost.py`).
 
 ## 4. Typed ledger entries and responses
 

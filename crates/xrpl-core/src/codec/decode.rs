@@ -98,6 +98,14 @@ fn ledger_entry_type_name(code: u16) -> Option<&'static str> {
 const MAX_DECODE_DEPTH: usize = 16;
 
 /// Decode a serialized transaction or ledger entry into `rippled`'s JSON.
+///
+/// # Errors
+///
+/// [`CoreError::UnknownField`] for a field code the definitions do not
+/// hold; [`CoreError::InvalidAmount`] for an amount not in `rippled`'s
+/// canonical form; [`CoreError::CodecError`] for any other bytes `rippled`
+/// would refuse: a truncated or non-canonical field, nesting deeper than 16
+/// levels, or bytes left over after the object.
 pub fn decode_transaction_binary(bytes: &[u8]) -> Result<Value, CoreError> {
     let (obj, consumed) = decode_fields(bytes, false, 0)?;
     if consumed != bytes.len() {

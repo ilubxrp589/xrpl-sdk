@@ -77,6 +77,7 @@ impl Transaction for SignerListSet {
     }
 }
 /// Builds a [`SignerListSet`] (from [`SignerListSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct SignerListSetBuilder {
     common: TxCommon,
     signer_quorum: Option<u32>,
@@ -117,6 +118,16 @@ impl SignerListSetBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `signer_quorum` is missing, a quorum
+    /// of 0 comes with entries, there are not 1 to 32 entries, an entry is
+    /// malformed, names the account itself or an account already listed, or has
+    /// a weight outside 1 to 65535, or the weights add up to less than the
+    /// quorum; an address error ([`CoreError::InvalidAddress`], `InvalidBase58`
+    /// or `InvalidChecksum`) for an entry's account that is not a classic
+    /// address.
     pub fn build(self) -> Result<SignerListSet, CoreError> {
         let signer_quorum = self.signer_quorum.ok_or_else(|| {
             CoreError::ValidationError("SignerListSet: signer_quorum is required".into())

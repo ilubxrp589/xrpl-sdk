@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-core"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.85"
 description = "XRP Ledger types, binary codec, Ed25519/secp256k1 signing, transaction hashes and ledger entry IDs, checked byte for byte against rippled"
@@ -8,7 +8,6 @@ license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["James Turner"]
 readme = "../../README.md"
-homepage = "https://github.com/ilubxrp589/xrpl-sdk"
 documentation = "https://docs.rs/halcyon-xrpl-core"
 keywords = ["xrpl", "xrp", "ripple", "blockchain", "sdk"]
 categories = ["cryptography::cryptocurrencies", "encoding", "no-std", "wasm"]
@@ -36,6 +35,7 @@ k256 = { workspace = true }
 rand = { workspace = true, optional = true }
 zeroize = { workspace = true }
 subtle = { workspace = true }
+unicode-normalization = { workspace = true }
 
 # WASM support
 wasm-bindgen = { version = "0.2", optional = true }

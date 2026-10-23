@@ -31,6 +31,14 @@ pub trait Transaction {
     fn to_json(&self) -> Value;
 
     /// Validate that all required fields are present and valid.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] when a field breaks a rule the builder
+    /// checks (each builder's `build` lists its rules); some builders also pass
+    /// on [`CoreError::InvalidAddress`] (or `InvalidBase58`, `InvalidChecksum`)
+    /// for an address, or [`CoreError::InvalidAmount`] for an amount, that does
+    /// not parse.
     fn validate(&self) -> Result<(), CoreError>;
 }
 
@@ -39,7 +47,7 @@ pub trait Transaction {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TxCommon {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account that sends the transaction (`Account`).
     pub account: String,
     /// The transaction cost, in drops (`Fee`).
     #[serde(skip_serializing_if = "Option::is_none")]

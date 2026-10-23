@@ -42,6 +42,13 @@ impl Currency {
     /// (no currency), a three-character ISO code, or 40 hex digits. The
     /// result is canonical: the same currency compares equal however it was
     /// written (`"USD"` and its 40-digit form are one value).
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidCurrency`](crate::CoreError::InvalidCurrency) for a
+    /// string of any other length, or three characters outside `rippled`'s ISO
+    /// character set; [`CoreError::InvalidHex`](crate::CoreError::InvalidHex)
+    /// for 40 characters that are not hex.
     pub fn parse(s: &str) -> Result<Self, crate::CoreError> {
         match s {
             "XRP" => Ok(Self::xrp()),
@@ -57,6 +64,10 @@ impl Currency {
     /// A currency code as people write one: anything [`Currency::parse`]
     /// takes, or 4 to 20 ASCII characters (`"RLUSD"`), stored as their bytes
     /// padded with zeros, as the ledger holds such codes.
+    ///
+    /// # Errors
+    ///
+    /// As [`Currency::parse`], for a code that is not 4 to 20 ASCII characters.
     pub fn from_code(code: &str) -> Result<Self, crate::CoreError> {
         if (4..=20).contains(&code.len()) && code.len() != 40 && code.is_ascii() {
             let mut bytes = [0u8; 20];
@@ -70,6 +81,12 @@ impl Currency {
 
     /// Create a standard 3-char currency from a string. `"XRP"` is XRP's
     /// currency (20 zero bytes), as `rippled`'s `to_currency` reads it.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidCurrency`](crate::CoreError::InvalidCurrency) if `s`
+    /// is not three bytes, or uses characters outside `rippled`'s ISO character
+    /// set.
     pub fn from_ascii(s: &str) -> Result<Self, crate::CoreError> {
         if s == "XRP" {
             return Ok(Self::xrp());
@@ -90,6 +107,12 @@ impl Currency {
     }
 
     /// Create from 20-byte hex string.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex; [`CoreError::InvalidCurrency`](crate::CoreError::InvalidCurrency)
+    /// if it is not 20 bytes.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         if bytes.len() != 20 {

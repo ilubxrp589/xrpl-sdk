@@ -8,11 +8,21 @@ use crate::CoreError;
 const BILLION: u64 = 1_000_000_000;
 
 /// `"1%"` → 1_010_000_000. `"0%"` is 0 (no fee). The fee must be 0–100%.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `percent` does not end with `%`, is not a
+/// number, is outside 0–100%, or is finer than a billionth of the amount.
 pub fn percent_to_transfer_rate(percent: &str) -> Result<u32, CoreError> {
     decimal_to_transfer_rate(&percent_to_decimal(percent)?.to_string())
 }
 
 /// `"0.01"` → 1_010_000_000. `"0"` is 0 (no fee). The fee must be 0–1.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `decimal` is not a number, is outside 0–1,
+/// or is finer than a billionth.
 pub fn decimal_to_transfer_rate(decimal: &str) -> Result<u32, CoreError> {
     let fee = parse(decimal)?;
     if fee.is_negative() || fee > Decimal::from_u64(1) {
@@ -26,6 +36,10 @@ pub fn decimal_to_transfer_rate(decimal: &str) -> Result<u32, CoreError> {
 
 /// 1_010_000_000 → `"0.01"`; 0 (no fee) → `"0"`. A rate rippled would refuse
 /// (between 1 and 999,999,999, or over 2,000,000,000) is an error.
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for such a rate.
 pub fn transfer_rate_to_decimal(rate: u32) -> Result<String, CoreError> {
     if rate == 0 {
         return Ok("0".into());
@@ -41,11 +55,23 @@ pub fn transfer_rate_to_decimal(rate: u32) -> Result<String, CoreError> {
 }
 
 /// `"101%"` → 1_010_000_000; `"100%"` → 0 (rippled's default, 1:1).
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `percent` does not end with `%`, is not a
+/// number, is negative, is finer than a billionth, or is too large for a `u32`
+/// quality (above 429.4967295%).
 pub fn percent_to_quality(percent: &str) -> Result<u32, CoreError> {
     decimal_to_quality(&percent_to_decimal(percent)?.to_string())
 }
 
 /// `"1.01"` → 1_010_000_000; `"1"` → 0 (rippled's default, 1:1).
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] if `decimal` is not a number, is negative, is
+/// finer than a billionth, or is too large for a `u32` quality (above
+/// 4.294967295).
 pub fn decimal_to_quality(decimal: &str) -> Result<u32, CoreError> {
     let q = parse(decimal)?;
     if q.is_negative() {

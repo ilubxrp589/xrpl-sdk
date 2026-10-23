@@ -42,6 +42,7 @@ impl Transaction for DelegateSet {
     }
 }
 /// Builds a [`DelegateSet`] (from [`DelegateSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct DelegateSetBuilder {
     common: TxCommon,
     authorize: Option<String>,
@@ -82,6 +83,14 @@ impl DelegateSetBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `authorize` or `permissions` is
+    /// missing, `authorize` is the account itself, there are more than 10
+    /// permissions, or one is listed twice; an address error
+    /// ([`CoreError::InvalidAddress`], `InvalidBase58` or `InvalidChecksum`) if
+    /// `authorize` is not a classic address.
     pub fn build(self) -> Result<DelegateSet, CoreError> {
         let authorize = self.authorize.ok_or_else(|| {
             CoreError::ValidationError("DelegateSet: authorize is required".into())

@@ -23,17 +23,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let client = XrplHttpClient::new(network.rpc_url())?;
-    let mut tx = serde_json::json!({
-        "TransactionType": "Payment",
-        "Account": wallet.classic_address(),
-        "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-        "Amount": utils::xrp_to_drops("1.5")?.to_string(),
-    });
+    let payment = models::Payment::new(
+        wallet.classic_address(),
+        "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        Amount::xrp(utils::xrp_to_drops("1.5")?)?,
+    );
+    // Step by step, to show the hash before it is sent; `sign_and_submit`
+    // does all of this in one call.
+    let mut tx = payment.to_tx_json()?;
     client.autofill(&mut tx).await?;
-    let blob = wallet.sign_and_encode(&tx)?;
-    println!("Hash:    {}", hash_signed_tx_blob(&blob)?);
+    let signed = wallet.sign(&tx)?;
+    println!("Hash:    {}", signed.hash);
 
-    let result = client.submit_and_wait(&blob).await?;
+    let result = client.submit_and_wait(&signed.tx_blob).await?;
     if let Some(meta) = &result.meta {
         let result = meta.get("TransactionResult").and_then(|v| v.as_str());
         println!("Result:  {}", result.unwrap_or("?"));

@@ -13,12 +13,22 @@ pub const MAX_XRP_DROPS: u64 = 100_000_000_000_000_000;
 /// range: mainnet ledger objects exist whose XRP amounts exceed the
 /// nominal supply (e.g. an Offer asking 10× total supply). Supply-range
 /// VALIDATION is a transaction-preflight concern, not a codec concern.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if `drops` does not fit the 61-bit wire
+/// field.
 pub fn encode_amount_xrp(drops: u64) -> Result<[u8; 8], CoreError> {
     encode_xrp_signed(false, drops)
 }
 
 /// Encode XRP with a sign, as `rippled` writes it: a negative amount has
 /// bit 62 clear. Zero is always written positive.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if `drops` does not fit the 61-bit wire
+/// field.
 pub fn encode_xrp_signed(negative: bool, drops: u64) -> Result<[u8; 8], CoreError> {
     // Bit 61 would mark the amount as an MPT.
     if drops > 0x1FFF_FFFF_FFFF_FFFF {
@@ -36,6 +46,11 @@ pub fn encode_xrp_signed(negative: bool, drops: u64) -> Result<[u8; 8], CoreErro
 
 /// Decode 8-byte wire format to XRP drops, refusing a negative amount
 /// (which [`Amount::Xrp`] cannot hold; [`decode_xrp_signed`] reads one).
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] for a negative amount, or when
+/// [`decode_xrp_signed`] refuses the bytes.
 pub fn decode_amount_xrp(bytes: &[u8; 8]) -> Result<u64, CoreError> {
     match decode_xrp_signed(bytes)? {
         (false, drops) => Ok(drops),
@@ -48,6 +63,11 @@ pub fn decode_amount_xrp(bytes: &[u8; 8]) -> Result<u64, CoreError> {
 /// Decode 8-byte XRP wire format as `rippled` reads it
 /// (`STAmount(SerialIter&)`): whether it is negative (bit 62 clear), and the
 /// drops. Negative zero is refused, as `rippled` refuses it.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if bit 63 (a token amount) or bit 61 (an
+/// MPT amount) is set, or for negative zero.
 pub fn decode_xrp_signed(bytes: &[u8; 8]) -> Result<(bool, u64), CoreError> {
     let value = u64::from_be_bytes(*bytes);
     if value & 0x8000_0000_0000_0000 != 0 {
@@ -72,6 +92,12 @@ pub fn decode_xrp_signed(bytes: &[u8; 8]) -> Result<(bool, u64), CoreError> {
 
 /// Encode IOU mantissa/exponent to 8-byte wire format.
 /// Bit 63 = 1 (IOU), Bit 62 = positive flag, Bits 54-61 = exponent + 97, Bits 0-53 = mantissa.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] for a non-zero value whose mantissa or
+/// exponent is outside the normalized range (one built by hand rather than
+/// with [`IouAmount::new`] or `from_decimal`).
 pub fn encode_iou_value(iou: &IouAmount) -> Result<[u8; 8], CoreError> {
     if iou.is_zero() {
         // Special zero encoding: bit 63 set, everything else 0
@@ -106,6 +132,11 @@ pub fn encode_iou_value(iou: &IouAmount) -> Result<[u8; 8], CoreError> {
 /// Only `rippled`'s canonical form is accepted, as `rippled` accepts only it
 /// (`STAmount(SerialIter&)`): a mantissa of 10^15 to 10^16 - 1 with an
 /// exponent of -96 to 80, or zero written as exactly `0x8000000000000000`.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if bit 63 is clear (an XRP amount), or the
+/// value is not in that canonical form.
 pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
     let value = u64::from_be_bytes(*bytes);
 
@@ -147,6 +178,11 @@ pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
 /// Encode a full IOU Amount to 48 bytes (8B value + 20B currency + 20B
 /// issuer). A value not in canonical form, XRP's currency code or the zero
 /// account as issuer is refused, as `rippled` refuses to read them.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] in those cases: the currency or issuer is
+/// all zeros, or [`encode_iou_value`] refuses the value.
 pub fn encode_amount_iou(
     iou: &IouAmount,
     currency: &Currency,
@@ -165,6 +201,11 @@ pub fn encode_amount_iou(
 }
 
 /// Decode 48 bytes to (IouAmount, Currency, AccountId).
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if [`decode_iou_value`] refuses the first 8
+/// bytes, or the currency or issuer is all zeros.
 pub fn decode_amount_iou(bytes: &[u8; 48]) -> Result<(IouAmount, Currency, AccountId), CoreError> {
     let mut value_bytes = [0u8; 8];
     value_bytes.copy_from_slice(&bytes[..8]);
@@ -189,6 +230,12 @@ pub fn decode_amount_iou(bytes: &[u8; 48]) -> Result<(IouAmount, Currency, Accou
 }
 
 /// Encode an Amount (XRP or IOU) to wire format bytes.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] for XRP drops that do not fit 61 bits, a
+/// token amount [`encode_amount_iou`] refuses, or an MPT value of
+/// `i64::MIN`.
 pub fn encode_amount(amount: &Amount) -> Result<Vec<u8>, CoreError> {
     match amount {
         Amount::Xrp(drops) => Ok(encode_amount_xrp(*drops)?.to_vec()),
@@ -217,6 +264,13 @@ pub fn encode_amount(amount: &Amount) -> Result<Vec<u8>, CoreError> {
 }
 
 /// Decode wire format bytes to Amount.
+///
+/// # Errors
+///
+/// [`CoreError::InvalidAmount`] if the bytes are not the length their kind
+/// needs (8 for XRP, 48 for a token, 33 for an MPT), an MPT magnitude is
+/// above `i64::MAX`, or [`decode_amount_xrp`] or [`decode_amount_iou`]
+/// refuses the value.
 pub fn decode_amount(bytes: &[u8]) -> Result<Amount, CoreError> {
     if bytes.len() < 8 {
         return Err(CoreError::InvalidAmount(format!(

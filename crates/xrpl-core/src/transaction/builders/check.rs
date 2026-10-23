@@ -44,6 +44,7 @@ impl Transaction for CheckCreate {
     }
 }
 /// Builds a [`CheckCreate`] (from [`CheckCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct CheckCreateBuilder {
     common: TxCommon,
     destination: Option<String>,
@@ -105,6 +106,11 @@ impl CheckCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `destination` or `send_max` is
+    /// missing.
     pub fn build(self) -> Result<CheckCreate, CoreError> {
         let destination = self.destination.ok_or_else(|| {
             CoreError::ValidationError("CheckCreate: destination is required".into())
@@ -163,6 +169,7 @@ impl Transaction for CheckCash {
     }
 }
 /// Builds a [`CheckCash`] (from [`CheckCash::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct CheckCashBuilder {
     common: TxCommon,
     check_id: Option<String>,
@@ -210,6 +217,10 @@ impl CheckCashBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `check_id` is missing.
     pub fn build(self) -> Result<CheckCash, CoreError> {
         let check_id = self
             .check_id
@@ -253,6 +264,7 @@ impl Transaction for CheckCancel {
     }
 }
 /// Builds a [`CheckCancel`] (from [`CheckCancel::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct CheckCancelBuilder {
     common: TxCommon,
     check_id: Option<String>,
@@ -286,6 +298,10 @@ impl CheckCancelBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `check_id` is missing.
     pub fn build(self) -> Result<CheckCancel, CoreError> {
         let check_id = self.check_id.ok_or_else(|| {
             CoreError::ValidationError("CheckCancel: check_id is required".into())

@@ -85,6 +85,7 @@ impl Transaction for AMMCreate {
     }
 }
 /// Builds a [`AMMCreate`] (from [`AMMCreate::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMCreateBuilder {
     common: TxCommon,
     amount: Option<Value>,
@@ -132,6 +133,12 @@ impl AMMCreateBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `amount`, `amount2` or `trading_fee`
+    /// is missing, the trading fee is above 1000 (1%), or the two amounts are
+    /// equal.
     pub fn build(self) -> Result<AMMCreate, CoreError> {
         let amount = self
             .amount
@@ -249,6 +256,7 @@ impl Transaction for AMMDeposit {
     }
 }
 /// Builds a [`AMMDeposit`] (from [`AMMDeposit::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMDepositBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -329,6 +337,13 @@ impl AMMDepositBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `asset` or `asset2` is missing, the
+    /// flags hold more than one mode flag (or the fields set fit no mode), the
+    /// amounts set do not fit the mode, or a `TradingFee` is set without
+    /// `tfTwoAssetIfEmpty` or is above 1000 (1%).
     pub fn build(self) -> Result<AMMDeposit, CoreError> {
         let asset = self
             .asset
@@ -453,6 +468,7 @@ impl Transaction for AMMWithdraw {
     }
 }
 /// Builds a [`AMMWithdraw`] (from [`AMMWithdraw::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMWithdrawBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -526,6 +542,12 @@ impl AMMWithdrawBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `asset` or `asset2` is missing, the
+    /// flags hold more than one mode flag (or the fields set fit no mode), or
+    /// the amounts set do not fit the mode.
     pub fn build(self) -> Result<AMMWithdraw, CoreError> {
         let asset = self
             .asset
@@ -614,6 +636,7 @@ impl Transaction for AMMVote {
     }
 }
 /// Builds a [`AMMVote`] (from [`AMMVote::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMVoteBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -661,6 +684,11 @@ impl AMMVoteBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `asset`, `asset2` or `trading_fee` is
+    /// missing, or the trading fee is above 1000 (1%).
     pub fn build(self) -> Result<AMMVote, CoreError> {
         let asset = self
             .asset
@@ -733,6 +761,7 @@ impl Transaction for AMMBid {
     }
 }
 /// Builds a [`AMMBid`] (from [`AMMBid::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AMMBidBuilder {
     common: TxCommon,
     asset: Option<Value>,
@@ -794,6 +823,11 @@ impl AMMBidBuilder {
         self
     }
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `asset` or `asset2` is missing, or
+    /// there are more than 4 `AuthAccounts`.
     pub fn build(self) -> Result<AMMBid, CoreError> {
         let asset = self
             .asset

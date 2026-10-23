@@ -19,6 +19,11 @@ impl Blob {
     }
 
     /// From hex.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidHex`](crate::CoreError::InvalidHex) if `s` is not
+    /// hex.
     pub fn from_hex(s: &str) -> Result<Self, crate::CoreError> {
         let bytes = hex::decode(s).map_err(|e| crate::CoreError::InvalidHex(e.to_string()))?;
         Ok(Self(bytes))

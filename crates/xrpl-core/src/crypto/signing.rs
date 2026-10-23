@@ -44,6 +44,11 @@ impl Seed {
     }
 
     /// Decode from base58check string.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if `s` is not a base58check seed (see
+    /// [`address::decode_seed`]).
     pub fn from_base58(s: &str) -> Result<Self, CoreError> {
         let (bytes, key_type) = address::decode_seed(s)?;
         Ok(Self { bytes, key_type })
@@ -65,8 +70,73 @@ impl Seed {
     }
 
     /// Derive a keypair from this seed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Keypair::from_seed`].
     pub fn derive_keypair(&self) -> Result<Keypair, CoreError> {
         Keypair::from_seed(self)
+    }
+
+    /// Read a seed from its secret numbers (XLS-12, as Xaman shows them:
+    /// eight blocks of six digits). The numbers do not say the key type;
+    /// Xaman's accounts are [`KeyType::Secp256k1`].
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_secret_numbers(
+    ///     "399150 474506 009147 088773 432160 282843 253738 605430",
+    ///     KeyType::Secp256k1,
+    /// )?;
+    /// assert_eq!(seed.to_base58().as_str(), "sh1HiK7SwjS1VxFdXi7qeMHRedrYX");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if the text is not 48 digits or a block
+    /// fails its check digit (see [`secret_numbers::decode`](super::secret_numbers::decode)).
+    pub fn from_secret_numbers(numbers: &str, key_type: KeyType) -> Result<Self, CoreError> {
+        let bytes = super::secret_numbers::decode(numbers)?;
+        Ok(Self::from_bytes(*bytes, key_type))
+    }
+
+    /// This seed as secret numbers (eight blocks of six digits), in a string
+    /// wiped on drop. They hold the 16 bytes only, not the key type.
+    pub fn to_secret_numbers(&self) -> Zeroizing<String> {
+        super::secret_numbers::encode(&self.bytes)
+    }
+
+    /// Read a seed from its RFC 1751 key: the twelve words `rippled`'s
+    /// `wallet_propose` returns as `master_key`. The words do not say the
+    /// key type: give the one the account uses.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_rfc1751(
+    ///     "YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY FILE",
+    ///     KeyType::Secp256k1,
+    /// )?;
+    /// assert_eq!(seed.to_base58().as_str(), "sp6M2Pi6H9S6YW47PKUsQJxd3Pgi5");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if there are not twelve dictionary words or
+    /// a half fails its parity check (see [`rfc1751::decode`](super::rfc1751::decode)).
+    pub fn from_rfc1751(words: &str, key_type: KeyType) -> Result<Self, CoreError> {
+        let bytes = super::rfc1751::decode(words)?;
+        Ok(Self::from_bytes(*bytes, key_type))
+    }
+
+    /// This seed as an RFC 1751 key (twelve words, as `wallet_propose`'s
+    /// `master_key`), in a string wiped on drop. The words hold the 16 bytes
+    /// only, not the key type.
+    pub fn to_rfc1751(&self) -> Zeroizing<String> {
+        super::rfc1751::encode(&self.bytes)
     }
 }
 
@@ -93,6 +163,13 @@ pub struct Keypair {
 
 impl Keypair {
     /// Derive a keypair from a seed.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::KeyDerivationFailed`] only for a secp256k1 seed with no
+    /// valid key, which has no real chance of happening (see
+    /// [`secp256k1::derive_keypair`](super::secp256k1::derive_keypair)). An
+    /// Ed25519 seed always derives.
     pub fn from_seed(seed: &Seed) -> Result<Self, CoreError> {
         let (mut private_key, public_key) = match seed.key_type {
             KeyType::Ed25519 => super::ed25519::derive_keypair(&seed.bytes)?,
@@ -106,7 +183,42 @@ impl Keypair {
         })
     }
 
+    /// The secp256k1 keypair a BIP-39 recovery phrase derives at `path`
+    /// (BIP-32), with `passphrase` (`""` for none). Ledger devices and xrpl.js
+    /// use [`DerivationPath::default`](super::hd::DerivationPath::default),
+    /// `m/44'/144'/0'/0/0`, for the first XRP account.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::hd::DerivationPath;
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    /// use xrpl_core::crypto::Keypair;
+    ///
+    /// let phrase: Mnemonic =
+    ///     "assault rare scout seed design extend noble drink talk control guitar quote".parse()?;
+    /// let keypair = Keypair::from_mnemonic(&phrase, "", &DerivationPath::default())?;
+    /// assert_eq!(keypair.classic_address(), "rJUr92pXcNtH6PtFfbRhHCo469XmPrbTJU");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::KeyDerivationFailed`] in the case BIP-32 calls invalid
+    /// (probability below 2^-127).
+    pub fn from_mnemonic(
+        mnemonic: &super::mnemonic::Mnemonic,
+        passphrase: &str,
+        path: &super::hd::DerivationPath,
+    ) -> Result<Self, CoreError> {
+        path.derive(mnemonic.to_seed(passphrase).as_slice())
+    }
+
     /// A keypair from a 32-byte secret key; the public key is derived from it.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidKeyLength`] if `private_key` is not 32 bytes; for
+    /// secp256k1, [`CoreError::SigningFailed`] if it is zero or not below the
+    /// curve order.
     pub fn from_private_key(key_type: KeyType, private_key: &[u8]) -> Result<Self, CoreError> {
         let public_key = match key_type {
             KeyType::Ed25519 => super::ed25519::public_key(private_key)?,
@@ -150,6 +262,12 @@ impl Keypair {
     /// (`PublicKey.cpp` `verify`): Ed25519 signs the message itself;
     /// secp256k1 signs SHA-512Half(message). Use this for any message,
     /// including XRPL signing data (a hash prefix plus serialized fields).
+    ///
+    /// # Errors
+    ///
+    /// None for Ed25519. For secp256k1, [`CoreError::SigningFailed`] only if
+    /// the ECDSA primitive fails (a zero nonce or signature value), which has
+    /// no real chance of happening.
     pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, CoreError> {
         match self.key_type {
             KeyType::Ed25519 => super::ed25519::sign(&self.private_key, message),
@@ -159,12 +277,21 @@ impl Keypair {
 
     /// Whether `signature` is this key's [`Keypair::sign_message`] signature
     /// over `message`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::SigningFailed`] for a secp256k1 key when `signature` is
+    /// not DER. For an Ed25519 key, a malformed signature is `Ok(false)`.
     pub fn verify_message(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
         verify_signing_data(&self.public_key, message, signature)
     }
 
     /// Sign XRPL signing data (a hash prefix plus serialized fields) the way
     /// rippled verifies it: the same as [`Keypair::sign_message`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Keypair::sign_message`].
     pub fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
         self.sign_message(data)
     }
@@ -173,6 +300,11 @@ impl Keypair {
     /// `message` as an already-computed 32-byte hash (any other length is an
     /// error). The two key types mean different things by the same call, so
     /// prefer [`Keypair::sign_message`].
+    ///
+    /// # Errors
+    ///
+    /// For secp256k1, [`CoreError::SigningFailed`] if `message` is not 32
+    /// bytes. Ed25519 never fails.
     #[deprecated(
         since = "0.6.0",
         note = "use sign_message (hashes for secp256k1 as rippled verifies); sign signs a 32-byte hash for secp256k1"
@@ -185,6 +317,11 @@ impl Keypair {
     }
 
     /// Verify a [`Keypair::sign`] signature (secp256k1: over a 32-byte hash).
+    ///
+    /// # Errors
+    ///
+    /// For secp256k1, [`CoreError::SigningFailed`] if `message` is not 32
+    /// bytes or `signature` is not DER. Ed25519 never fails.
     #[deprecated(since = "0.6.0", note = "use verify_message")]
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
         match self.key_type {
@@ -208,6 +345,14 @@ impl fmt::Debug for Keypair {
 /// (or any message), as `rippled` checks it: the key type is the key's
 /// first byte (0xED for Ed25519), Ed25519 over the data itself, secp256k1
 /// over SHA-512Half of it.
+///
+/// # Errors
+///
+/// For a key starting 0xED, as [`ed25519::verify`](super::ed25519::verify);
+/// for any other, as [`secp256k1::verify`](super::secp256k1::verify):
+/// [`CoreError::InvalidKeyLength`] for a key of the wrong length or prefix,
+/// [`CoreError::SigningFailed`] for a key not on the curve or a secp256k1
+/// signature that is not DER.
 pub fn verify_signing_data(
     public_key: &[u8],
     data: &[u8],
@@ -220,32 +365,36 @@ pub fn verify_signing_data(
     }
 }
 
-/// 16 random bytes from the operating system (`getrandom`), never a
+/// Random bytes from the operating system (`getrandom`), never a
 /// user-space generator: a forked process must not repeat its parent's seeds.
 #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 #[allow(
     clippy::expect_used,
     reason = "no OS random source means no safe key; there is nothing to fall back to"
 )]
-fn generate_random_bytes_16() -> [u8; 16] {
+pub(crate) fn fill_random(bytes: &mut [u8]) {
     use rand::TryRngCore;
-    let mut bytes = [0u8; 16];
     rand::rngs::OsRng
-        .try_fill_bytes(&mut bytes)
+        .try_fill_bytes(bytes)
         .expect("the operating system's random source failed");
-    bytes
 }
 
-/// Generate 16 random bytes using browser WebCrypto (WASM).
+/// Random bytes from the browser's WebCrypto (WASM).
 #[cfg(all(feature = "std", target_arch = "wasm32"))]
 #[allow(
     clippy::expect_used,
     reason = "no CSPRNG means no safe key; there is nothing to fall back to"
 )]
+pub(crate) fn fill_random(bytes: &mut [u8]) {
+    getrandom::getrandom(bytes)
+        .expect("CSPRNG not available — cannot generate secure random bytes");
+}
+
+/// 16 random bytes for a seed, from [`fill_random`].
+#[cfg(feature = "std")]
 fn generate_random_bytes_16() -> [u8; 16] {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes)
-        .expect("CSPRNG not available — cannot generate secure random bytes");
+    fill_random(&mut bytes);
     bytes
 }
 
@@ -276,12 +425,18 @@ pub fn sha512_half(data: &[u8]) -> [u8; 32] {
 /// 4. Signs it (`Keypair::sign_signing_data`), sets TxnSignature
 ///
 /// Returns the signed transaction as a JSON Value with TxnSignature and SigningPubKey set.
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] if `tx_json` is not a JSON object;
+/// [`CoreError::ValidationError`] if it has `Signers` (it is multi-signed);
+/// and the errors of [`encode_transaction_json`](crate::codec::encode_transaction_json)
+/// when it does not encode.
 #[cfg(feature = "std")]
 pub fn sign_transaction(
     tx_json: &serde_json::Value,
     keypair: &Keypair,
 ) -> Result<serde_json::Value, CoreError> {
-    use crate::codec::encode_transaction_json;
     let mut tx = tx_json.clone();
     let obj = tx
         .as_object_mut()
@@ -308,14 +463,7 @@ pub fn sign_transaction(
     // Remove TxnSignature for signing
     obj.remove("TxnSignature");
 
-    // Serialize for signing
-    let encoded = encode_transaction_json(&tx, true)?;
-
-    // Prepend signing prefix "STX\0"
-    let mut payload = vec![0x53, 0x54, 0x58, 0x00];
-    payload.extend_from_slice(&encoded);
-
-    let signature = keypair.sign_signing_data(&payload)?;
+    let signature = keypair.sign_signing_data(&single_signing_data(&tx)?)?;
 
     // Set TxnSignature — tx was cloned from a known object, so this always succeeds
     let obj = tx
@@ -327,6 +475,109 @@ pub fn sign_transaction(
     );
 
     Ok(tx)
+}
+
+/// What a single signature covers: the prefix `"STX\0"` and the
+/// transaction's signing fields (`rippled`'s `HashPrefix::txSign`).
+#[cfg(feature = "std")]
+fn single_signing_data(tx: &serde_json::Value) -> Result<Vec<u8>, CoreError> {
+    let mut data = vec![0x53, 0x54, 0x58, 0x00];
+    data.extend_from_slice(&crate::codec::encode_transaction_json(tx, true)?);
+    Ok(data)
+}
+
+/// Whether a signed transaction's signatures verify, as `rippled` checks
+/// them (`STTx::checkSign`): the `TxnSignature` against the `SigningPubKey`
+/// over the transaction's signing data; or, for a multi-signed transaction
+/// (empty `SigningPubKey`, `Signers` set), each signer's signature over its
+/// multi-signing data, with the signers in strictly ascending account-ID
+/// order (a repeat or the wrong order is `false`, as `rippled` refuses it). A
+/// `Batch`'s `BatchSigners` are checked too
+/// ([`verify_batch_signers`](crate::transaction::batch::verify_batch_signers)).
+///
+/// This checks the cryptography only. Whether the key may sign for the
+/// account (its master key, its regular key, or its signer list with enough
+/// weight) is the ledger's to say.
+///
+/// ```
+/// use xrpl_core::crypto::{sign_transaction, verify_transaction, Keypair, Seed};
+/// use serde_json::json;
+///
+/// let keypair = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// let tx = json!({"TransactionType": "Payment", "Account": keypair.classic_address(),
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "1000000",
+///     "Fee": "12", "Sequence": 1});
+/// let mut signed = sign_transaction(&tx, &keypair)?;
+/// assert!(verify_transaction(&signed)?);
+/// signed["Amount"] = json!("2000000");
+/// assert!(!verify_transaction(&signed)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for a transaction with no signature (no
+/// `TxnSignature` and no `Signers`) or with both, [`CoreError::InvalidHex`]
+/// for a key or signature that is not hex, and a codec error when the
+/// transaction does not encode.
+#[cfg(feature = "std")]
+pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
+    use crate::codec::encode_for_multisigning;
+    let invalid = |m: &str| CoreError::ValidationError(m.to_string());
+    fn text<'a>(v: Option<&'a serde_json::Value>, name: &str) -> Result<&'a str, CoreError> {
+        v.and_then(serde_json::Value::as_str)
+            .ok_or_else(|| CoreError::ValidationError(format!("{name} is missing or not a string")))
+    }
+    let hex = |s: &str| hex::decode(s).map_err(|e| CoreError::InvalidHex(e.to_string()));
+    let signers = tx
+        .get("Signers")
+        .and_then(serde_json::Value::as_array)
+        .filter(|s| !s.is_empty());
+    let single = tx.get("TxnSignature").is_some();
+    let signed = match (single, signers) {
+        (true, Some(_)) => {
+            return Err(invalid(
+                "the transaction has both a TxnSignature and Signers",
+            ))
+        }
+        (false, None) => return Err(invalid("the transaction is not signed")),
+        (true, None) => {
+            let key = hex(text(tx.get("SigningPubKey"), "SigningPubKey")?)?;
+            let signature = hex(text(tx.get("TxnSignature"), "TxnSignature")?)?;
+            if key.is_empty() {
+                return Ok(false);
+            }
+            verify_signing_data(&key, &single_signing_data(tx)?, &signature)?
+        }
+        (false, Some(signers)) => {
+            if !text(tx.get("SigningPubKey"), "SigningPubKey")?.is_empty() {
+                return Ok(false);
+            }
+            let mut previous: Option<[u8; 20]> = None;
+            let mut all = true;
+            for entry in signers {
+                let signer = entry.get("Signer").unwrap_or(entry);
+                let account = text(signer.get("Account"), "a signer's Account")?;
+                let id = crate::address::decode_account_id(account)?;
+                if previous.is_some_and(|p| p >= id) {
+                    return Ok(false);
+                }
+                previous = Some(id);
+                let key = hex(text(
+                    signer.get("SigningPubKey"),
+                    "a signer's SigningPubKey",
+                )?)?;
+                let signature = hex(text(signer.get("TxnSignature"), "a signer's TxnSignature")?)?;
+                let data = encode_for_multisigning(tx, account)?;
+                all &= verify_signing_data(&key, &data, &signature)?;
+            }
+            all
+        }
+    };
+    if signed && tx.get("BatchSigners").is_some() {
+        return crate::transaction::batch::verify_batch_signers(tx);
+    }
+    Ok(signed)
 }
 
 #[cfg(test)]

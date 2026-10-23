@@ -85,6 +85,7 @@ impl Transaction for AccountSet {
 }
 
 /// Builds a [`AccountSet`] (from [`AccountSet::builder`]); `build` checks the required fields.
+#[derive(Debug)]
 pub struct AccountSetBuilder {
     common: TxCommon,
     set_flag: Option<u32>,
@@ -162,6 +163,12 @@ impl AccountSetBuilder {
     }
 
     /// Check the required fields and build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::ValidationError`] if `SetFlag` and `ClearFlag` are the same
+    /// flag, `TickSize` or `TransferRate` is out of range, or `Domain`,
+    /// `MessageKey` or `EmailHash` is not hex of the right length.
     pub fn build(self) -> Result<AccountSet, CoreError> {
         let tx = AccountSet {
             common: self.common,

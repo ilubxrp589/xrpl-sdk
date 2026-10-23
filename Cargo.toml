@@ -8,10 +8,12 @@ members = [
 ]
 exclude = ["fuzz"]
 
-# The CLAUDE.md safety rules, enforced: no unsafe, and no unwrap/expect/
-# unchecked indexing in library code (test modules opt out explicitly).
+# The safety rules, enforced: no unsafe, and no unwrap/expect/unchecked
+# indexing in library code (test modules opt out explicitly). Every public
+# type can be printed with `{:?}` (secrets show as redacted).
 [workspace.lints.rust]
 unsafe_code = "forbid"
+missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
@@ -20,6 +22,7 @@ indexing_slicing = "deny"
 # A narrowing `as` cast wraps silently: DestinationTag 2^32+12345 was once
 # signed as 12345. Convert with try_from, or say why the value fits.
 cast_possible_truncation = "deny"
+missing_errors_doc = "warn"
 
 [workspace.dependencies]
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
@@ -40,3 +43,4 @@ futures = "0.3"
 tracing = "0.1"
 zeroize = { version = "1", features = ["derive", "alloc"] }
 subtle = "2"
+unicode-normalization = { version = "0.1", default-features = false }

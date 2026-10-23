@@ -1,6 +1,166 @@
 # Changelog
 
-## v0.6.0 (2026-10-23)
+Every change that matters to someone using the SDK, newest first. The format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the crates
+follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor release
+may break the API, and says so under "Changed (breaking)").
+
+## [Unreleased]
+
+## [v0.7.0] (2026-10-23)
+
+Complete and professional, with no breaking changes: code that builds
+against 0.6 builds against 0.7 (checked with cargo-semver-checks). Open a
+wallet from another wallet's backup, sign typed transactions, check a ledger
+against its hash, and configure the clients; `autofill` prices every
+transaction type as `rippled` does, and wasm waits work outside a browser
+window.
+
+### Fixed
+- `KeyType::Ed25519`'s documentation called it `rippled`'s default for new
+  keys; `wallet_propose` defaults to secp256k1. (`Wallet::generate` and
+  xrpl.js default to Ed25519.)
+- `WsEvent::Reconnected`'s documentation now says a restored stream's first
+  events can arrive just before it. Two WebSocket tests assumed one order of
+  events that only Linux happened to give; they failed on macOS and Windows,
+  now in CI.
+- docs/PARITY.md said the 6 recorded batches with `BatchSigners` were on
+  Testnet; they are on Devnet.
+- **`BlockingClient` has every `Client` method**, as its documentation
+  said: the 18 it lacked (`account_tx`, `account_objects`, `book_offers`,
+  `amm_info`, `ledger_entry`, the `_all` variants, …) are added, and a test
+  keeps the two in step.
+- **`autofill` prices each transaction type as `rippled` does.** It charged
+  every type one base fee (the open-ledger fee), so an `AccountDelete` or
+  `AMMCreate`, which cost one owner reserve (0.2 XRP on mainnet), was
+  refused (`telCAN_NOT_QUEUE`), and `submit_and_wait` resubmitted it until
+  it expired; an `EscrowFinish` with a fulfillment and the Confidential MPT
+  types were refused the same way. Now the fee is the type's base cost at the
+  open-ledger fee: one owner reserve (scaled when the open ledger escalates)
+  for `AccountDelete`, `AMMCreate` and `LedgerStateFix`, 32 + *n*/16 extra
+  base fees for an *n*-byte fulfillment, 9 extra for Confidential MPT, and for
+  a `LoanSet` one per signature its counterparty will add (its signer list's
+  size, or one). A `Batch` is priced from each inner transaction's own cost.
+  The boundaries are checked with `rippled`'s `simulate`
+  (`scripts/probe_cost.py`). The fee cap still applies.
+- **wasm: waiting works outside a browser window.** The wait between
+  `submit_and_wait`'s and `fund_and_wait`'s polls, and the browser WebSocket
+  client's request timeout, set their timer on `window`, which a Web Worker,
+  a Service Worker, Node.js and Cloudflare Workers do not have: there they
+  waited forever. The timer is now the JavaScript global's `setTimeout`. A
+  CI job runs the client's wasm tests in Node.js to keep it so.
+
+### Added
+- **Sign typed transactions.** `Wallet::sign(&tx)` takes a typed model
+  (`models::Payment`, …), a `models::Tx`, a builder (its `validate` runs
+  first) or JSON, and returns a `SignedTransaction`: the signed JSON, the
+  blob and the transaction's ID (`hash`), as xrpl.js's `wallet.sign` does.
+  `sign_and_submit(&client, &tx, &wallet)` autofills a copy, signs, submits
+  and waits for the final outcome. The forms are one trait,
+  `transaction::ToTxJson`. The README's quick start and the
+  `testnet_quickstart` example now use a typed `Payment`.
+- `verify_transaction(&tx)`: whether a signed transaction's signatures
+  verify as `rippled` checks them: the single signature, or each
+  multi-signer's (in account order), and a `Batch`'s `BatchSigners`. Every
+  signed mainnet transaction in the test corpus (179 single, 2 multi-signed)
+  and every one `rippled` signed offline (79) verifies; none does with a
+  changed field.
+- `Client::balances(account, ledger)`: an account's XRP, trust-line
+  balances and MPTs as typed `Amount`s, all read from one ledger.
+- **HTTP client settings and polite retries.** `XrplHttpClient::builder(url)`
+  sets the timeout, connect timeout, headers (a provider's API key; `Debug`
+  shows header names, never values), user agent, fee cap and `RetryPolicy`.
+  A request is sent again only when the server says it is busy and did not
+  take it (HTTP 429 or 503, `rippled`'s `slowDown` or `tooBusy`), waiting
+  what `Retry-After` asks (at most 10 s) or 1 s, 2 s; never after a timeout
+  or a dropped connection, so a transaction is never sent twice by a retry.
+  `XrplHttpClient::new` uses these defaults (two retries). An HTTP error
+  status is now `ClientError::HttpStatus { status, retry_after, excerpt }`
+  (it was `UnexpectedResponse` text), from the faucet too.
+- **WebSocket client settings.** `XrplWsClient::builder(url)` sets the
+  request and connect timeouts, the ping interval, the silence limit after
+  which a connection is replaced, the per-subscription event buffer and the
+  fee cap (they were fixed). `XrplWsClient::connect` keeps the defaults.
+- **Read any number of pages.** `Client::pages(request)` streams the
+  pages of a paginated request one at a time with no page limit (an
+  account's whole history, a list longer than 50 pages), each from the first
+  page's ledger; `BlockingClient::pages` is the same as an iterator.
+  `request_all` keeps its 50-page limit, and its error now points to
+  `pages`.
+- **Check a ledger against its hash.** `xrpl_core::ledger`: `LedgerHeader`
+  (from bytes or `rippled`'s JSON) and its `hash`, `transaction_tree_hash`
+  and `state_tree_hash` (the SHAMap roots), and `verify_ledger_response`.
+  `Client::verified_ledger(ledger)` fetches a ledger with its transactions
+  and checks that the header hashes to the ledger hash and the transactions
+  rebuild the header's transaction tree, so they are exactly that ledger's.
+  Checked on mainnet ledger 107852951 (34 transactions): a transaction
+  removed, a metadata byte changed or a wrong ledger hash is caught.
+- **Ledger entry flags by name.** Each typed ledger entry with flags has
+  its `rippled` 3.4.1 flags as constants (`AccountRoot::LSF_DEFAULT_RIPPLE`,
+  `RippleState::LSF_LOW_FREEZE`, `Offer::LSF_SELL`, … 51 in all, from
+  `server_definitions`' `LEDGER_ENTRY_FLAGS`), `ALL_FLAGS`, and `has_flag`.
+  Every flag on the mainnet entries in the test sample is a named one.
+- **Standard traits.** `XrplHttpClient` is `Clone` (clones share one
+  connection pool). The HTTP, WebSocket (native and wasm) and blocking
+  clients are `Debug`, showing the server's host only, never a URL that may
+  carry a token. `Subscription::into_stream` gives the events as a
+  `futures::Stream`. `Hash128`/`160`/`192`/`256` are `FromStr` (hex),
+  `Ord` and `AsRef<[u8]>`. `AccountId` is `Ord` (by its bytes, the order
+  `rippled` sorts multi-signers in) and `AsRef<[u8]>`. `KeyType` is
+  `Display`, `FromStr`, `Hash` and serde, written as `rippled` writes
+  `key_type`. Every public type is `Debug` (the
+  `missing_debug_implementations` lint is on), including the 28 transaction
+  builders.
+- `transaction::cost::transaction_cost`: a transaction's base cost (base
+  fees and owner reserves) as `rippled` 3.4.1's `calculateBaseFee` computes
+  it, for pricing a transaction offline.
+- **Open a wallet from the backup another wallet gave you.**
+  - `Wallet::from_mnemonic(phrase)`: a BIP-39 recovery phrase (12 to 24
+    words, as Ledger devices and multi-coin wallets show) at
+    `m/44'/144'/0'/0/0`, the first XRP account on Ledger and in xrpl.js.
+    `Wallet::from_mnemonic_with(phrase, passphrase, &path)` takes a
+    passphrase and another path (`DerivationPath::xrp_account(n)`).
+  - `Wallet::from_secret_numbers(numbers)`: Xaman's eight blocks of six
+    digits (XLS-12), secp256k1 as Xaman makes them;
+    `from_secret_numbers_with_type` for Ed25519. A block above 65535 is
+    refused (xrpl.js reads 99999 as 0x869F).
+  - `Wallet::from_rfc1751(words, key_type)`: the twelve words `rippled`'s
+    `wallet_propose` returns as `master_key`.
+- In `xrpl_core::crypto`: `mnemonic::Mnemonic` (parse, generate, from
+  entropy, `to_seed` with an NFKD passphrase), `hd::DerivationPath` (BIP-32
+  secp256k1 derivation), `secret_numbers` and `rfc1751` encoders,
+  `Seed::{from,to}_secret_numbers`, `Seed::{from,to}_rfc1751` and
+  `Keypair::from_mnemonic`. Errors name a word's or block's position, never
+  the word. New `CoreError::InvalidMnemonic` and
+  `CoreError::InvalidDerivationPath`.
+- Checked against the 24 BIP-39 reference vectors (with their BIP-32 master
+  keys), the 17 private BIP-32 reference vectors, xrpl.js's wallet tests and
+  `rippled` 3.4.1's `wallet_propose` for 23 seeds with both key types.
+  `rippled` writes some RFC 1751 keys it cannot read back (the word `YOU`;
+  about one key in 170); this crate reads them.
+
+### Docs and project
+- **Every function that can fail says how.** Each public function or method
+  returning `Result` (268) has an `# Errors` section naming the errors it
+  returns and when; the `rippled` error codes named (`actNotFound`,
+  `actMalformed`, `lgrNotFound`, `entryNotFound`) were checked against
+  `rippled` 3.4.1. Clippy's `missing_errors_doc` keeps it so.
+- ROADMAP.md: the 0.7 section, and the plan for 0.8 (one consistent API) and
+  1.0.
+- docs.rs labels each feature- or platform-gated item with what it needs
+  (`doc_cfg`); CI builds the docs as docs.rs does (nightly, `--cfg docsrs`).
+- CONTRIBUTING.md, issue forms (bug, feature; security reports go to the
+  private channel) and a pull-request checklist.
+- CI: tests on Linux, macOS and Windows; a SemVer check against the latest
+  release (`cargo-semver-checks`); a `cargo package` dry run; the live
+  Testnet job can fail again (it was `continue-on-error`).
+- The request types' `account` fields, and `Signer`, `SignerEntry`,
+  `BatchSigner` and `PathStep`'s, had one pasted description ("the account
+  that sends the transaction or owns the entry"); each now says what it is.
+- CHANGELOG.md follows Keep a Changelog, with the v0.3.0 and v0.2.0
+  headings it had lost (their notes ran on under v0.4.0) and compare links.
+
+## [v0.6.0] (2026-10-23)
 
 Security. A full adversarial review of every crate found ways the SDK could
 sign something other than what the caller wrote, report a payment that went
@@ -193,7 +353,7 @@ compiles against 0.5 needs only a few edits.
   to `docs/design/` and are marked historical (they described signing that
   `rippled` rejects for Ed25519).
 
-## v0.5.0 (2026-10-22)
+## [v0.5.0] (2026-10-22)
 
 Trust: fuzzing in CI, benchmarks, a minimum Rust version, and a parity report.
 
@@ -271,7 +431,7 @@ Trust: fuzzing in CI, benchmarks, a minimum Rust version, and a parity report.
 - The XRPLF codec fixtures are now checked in both directions (bytes → JSON as well as
   JSON → bytes).
 
-## v0.4.0 (2026-10-22)
+## [v0.4.0] (2026-10-22)
 
 Developer experience: a cookbook, the command line, a blocking client, typed streams.
 
@@ -304,6 +464,7 @@ Developer experience: a cookbook, the command line, a blocking client, typed str
 - The examples `send_payment`, `mint_nft` and `place_offer` (which needed manual funding) are
   replaced by the cookbook.
 
+## [v0.3.0] (2026-10-22)
 
 Every transaction type typed, and Batch.
 
@@ -330,6 +491,7 @@ Every transaction type typed, and Batch.
   types; batch signatures verify against 6 real batches; the live Testnet test (29 checks) runs a
   one-account and a two-account batch.
 
+## [v0.2.0] (2026-10-22)
 
 The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
 `halcyon-xrpl-sdk`. v0.1.0 (below) was released on GitHub only.
@@ -447,7 +609,7 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
   an unsorted Signers array); it now returns `Result`.
 - docs/TESTING.md: the two known-address vectors were wrong; replaced by xrpl.js's fixtures.
 
-## v0.1.0 (2026-03-19)
+## [v0.1.0] (2026-03-19)
 
 Initial release.
 
@@ -481,3 +643,12 @@ Initial release.
 - autofill_and_sign and submit_transaction convenience functions
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
+
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...HEAD
+[v0.7.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...v0.7.0
+[v0.6.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.5.0...v0.6.0
+[v0.5.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.4.0...v0.5.0
+[v0.4.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.3.0...v0.4.0
+[v0.3.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.2.0...v0.3.0
+[v0.2.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.1.0...v0.2.0
+[v0.1.0]: https://github.com/ilubxrp589/xrpl-sdk/releases/tag/v0.1.0

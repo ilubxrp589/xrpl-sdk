@@ -1,0 +1,32 @@
+name: Bug report
+description: Something the SDK does wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security issue?** Do not file it here: see SECURITY.md (Security tab → Report a vulnerability).
+        Never paste a seed, secret key, recovery phrase or an API key. Use a Testnet account for examples.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The crate and version (`cargo tree -i halcyon-xrpl-sdk`), and your Rust version (`rustc --version`).
+      placeholder: halcyon-xrpl-sdk 0.7.0, rustc 1.90.0
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Include the full error text, and what `rippled` answered if a server was involved.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The smallest code that shows it, and the network (Mainnet, Testnet, Devnet, a local node) and server version if it matters.
+      render: rust
+    validations:
+      required: true

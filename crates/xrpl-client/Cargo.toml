@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-client"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.88"
 description = "XRP Ledger clients: one async Client trait over HTTP JSON-RPC, WebSocket (subscriptions, auto-reconnect) and browser WebSocket, with typed requests and responses"
@@ -8,7 +8,6 @@ license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["James Turner"]
 readme = "../../README.md"
-homepage = "https://github.com/ilubxrp589/xrpl-sdk"
 documentation = "https://docs.rs/halcyon-xrpl-client"
 keywords = ["xrpl", "xrp", "ripple", "blockchain", "sdk"]
 categories = ["cryptography::cryptocurrencies", "api-bindings", "network-programming", "wasm"]
@@ -18,7 +17,7 @@ name = "xrpl_client"
 crate-type = ["rlib"]
 
 [dependencies]
-xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.6" }
+xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.7" }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true, features = ["std"] }
@@ -49,6 +48,9 @@ futures = "0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [features]
 default = ["http"]
