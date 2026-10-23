@@ -72,12 +72,15 @@ pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding
         .await
         .map_err(http_error)?;
     let status = response.status();
+    let retry_after = crate::http::retry_after(response.headers());
     let text = read_capped(response, 1024 * 1024).await?;
     if !status.is_success() {
-        let excerpt: String = text.chars().take(200).collect();
-        return Err(ClientError::UnexpectedResponse(format!(
-            "faucet answered {status}: {excerpt}"
-        )));
+        // A faucet that limits its rate answers 429, often with Retry-After.
+        return Err(ClientError::HttpStatus {
+            status: status.as_u16(),
+            retry_after,
+            excerpt: text.chars().take(200).collect(),
+        });
     }
     let body: Value = serde_json::from_str(&text)?;
     let funded = body

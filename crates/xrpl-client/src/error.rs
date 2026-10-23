@@ -10,6 +10,18 @@ pub enum ClientError {
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
+    /// The server answered with an HTTP error status, after any retries the
+    /// client's [`RetryPolicy`](crate::http::RetryPolicy) allows.
+    #[error("HTTP status {status}: {excerpt}")]
+    HttpStatus {
+        /// The status code (429 Too Many Requests, 503 Service Unavailable, …).
+        status: u16,
+        /// How long the server asked to wait (`Retry-After`), when it said.
+        retry_after: Option<std::time::Duration>,
+        /// The start of the body (at most 200 characters).
+        excerpt: String,
+    },
+
     /// A response was not the JSON expected.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),

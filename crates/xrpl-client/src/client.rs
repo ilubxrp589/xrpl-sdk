@@ -1172,19 +1172,23 @@ pub(crate) fn ws_response(message: &Value) -> Result<Value, ClientError> {
 }
 
 /// Platform-aware async sleep.
-#[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn sleep_secs(secs: u64) {
-    tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+    sleep_for(std::time::Duration::from_secs(secs)).await;
 }
 
-/// Wait `secs` seconds with the JavaScript global's `setTimeout`, which a
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn sleep_for(duration: std::time::Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+/// Wait `duration` with the JavaScript global's `setTimeout`, which a
 /// browser window, a Web Worker, a Service Worker, Node.js and Cloudflare
 /// Workers all have (`web_sys::window()` exists only in a window: a worker
 /// waited forever). In a runtime without `setTimeout` it returns at once.
 #[cfg(target_arch = "wasm32")]
-pub(crate) async fn sleep_secs(secs: u64) {
+pub(crate) async fn sleep_for(duration: std::time::Duration) {
     use wasm_bindgen::{JsCast, JsValue};
-    let millis = i32::try_from(secs.saturating_mul(1000)).unwrap_or(i32::MAX);
+    let millis = i32::try_from(duration.as_millis()).unwrap_or(i32::MAX);
     let promise = js_sys::Promise::new(&mut |resolve, reject| {
         let global = js_sys::global();
         let set_timeout = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))

@@ -49,6 +49,16 @@
   changed field.
 - `Client::balances(account, ledger)`: an account's XRP, trust-line
   balances and MPTs as typed `Amount`s, all read from one ledger.
+- **HTTP client settings and polite retries.** `XrplHttpClient::builder(url)`
+  sets the timeout, connect timeout, headers (a provider's API key; `Debug`
+  shows header names, never values), user agent, fee cap and `RetryPolicy`.
+  A request is sent again only when the server says it is busy and did not
+  take it (HTTP 429 or 503, `rippled`'s `slowDown` or `tooBusy`), waiting
+  what `Retry-After` asks (at most 10 s) or 1 s, 2 s; never after a timeout
+  or a dropped connection, so a transaction is never sent twice by a retry.
+  `XrplHttpClient::new` uses these defaults (two retries). An HTTP error
+  status is now `ClientError::HttpStatus { status, retry_after, excerpt }`
+  (it was `UnexpectedResponse` text), from the faucet too.
 - **Read any number of pages.** `Client::pages(request)` streams the
   pages of a paginated request one at a time with no page limit (an
   account's whole history, a list longer than 50 pages), each from the first
