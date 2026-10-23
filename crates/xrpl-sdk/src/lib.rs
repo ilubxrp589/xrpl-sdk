@@ -512,8 +512,11 @@
 //!
 //! ## License
 //!
-//! MIT, with an attribution requirement: if you use, copy or modify this code,
-//! credit James Turner with a link to <https://github.com/ilubxrp589/xrpl-sdk>.
+//! Apache License 2.0, with a NOTICE that must travel with any redistribution
+//! or derived work (Apache 2.0, section 4(d)). If you use, copy or modify this
+//! code, please credit James Turner with a link to
+//! <https://github.com/ilubxrp589/xrpl-sdk>. Releases up to 0.7.0 were licensed
+//! MIT with an attribution clause, and stay so.
 
 #![warn(missing_docs)]
 // docs.rs labels each feature- or platform-gated item with what it needs.

@@ -133,6 +133,17 @@ jobs:
       # Not continue-on-error: a failure against the live network shows.
       - run: cargo test --workspace --features live-tests
 
+  # Every dependency's licence is one deny.toml allows, from crates.io only,
+  # with no wildcard versions.
+  deny:
+    name: Licences and sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans sources
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest

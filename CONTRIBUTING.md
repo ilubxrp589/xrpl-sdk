@@ -61,4 +61,4 @@ generated files by hand.
 ## Licence
 
 By contributing you agree that your contribution is licensed under the
-project's [LICENSE](LICENSE), including its attribution clause.
+[Apache License 2.0](LICENSE), as the project is (see also [NOTICE](NOTICE)).
