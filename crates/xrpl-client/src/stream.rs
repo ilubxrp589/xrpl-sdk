@@ -14,6 +14,9 @@
 //!
 //! Each event type is checked against messages recorded from `rippled` 3.4.1
 //! on mainnet (`tests/stream_events.rs`): it must parse, and keep every field.
+//! Manifests are rare (a validator rotating its key), so `manifestReceived` is
+//! checked against a real validator's manifest in the message shape
+//! `rippled` builds (`NetworkOPs::pubManifest`).
 
 use crate::types::{count_as_string, BookChange, BookOffer, PathFindResult};
 use serde::{Deserialize, Serialize};
@@ -521,10 +524,13 @@ pub struct BookChangesEvent {
 ///     "master_key": "nHUVPzAmAmQ2QSc4oE1iLfsGi17qN2ado8PhxvgEkou76FLxAz7C",
 ///     "signing_key": "n9JeA5Q54JhUQYHieb2j7ZTCg9RTBagDkam3UP2kWQxTXfxFkA8R",
 ///     "signature": "304402200296DCF23518D44E47B28D3722C139399AB87C2504F19CCCF127B3733089569E022015116F6EA2B131A73557E49FB689F27E15823EB4F4E599925C0C6CCAF1AE4A56",
-///     "master_signature": "10B6C15F942827A98FAF41AB5EC02A358B7DF6D1288A719C68BEF11333FF9CEAC48E4FE6D659086C993DCC87B549C7330D4FECBA48AA66423B500DCB3011C601"});
+///     "master_signature": "10B6C15F942827A98FAF41AB5EC02A358B7DF6D1288A719C68BEF11333FF9CEAC48E4FE6D659086C993DCC87B549C7330D4FECBA48AA66423B500DCB3011C601",
+///     "manifest": "24000000027121ED95C5172B2AD7D39434EEBC436B65B3BB7E58D5C1CEFC820B6972ACAD776E286A7321020EA2AB574A644ED75DF19E0A8F54ED8E2163FA5CF0444DBDA293BE0EDA7BFB3B7646304402200296DCF23518D44E47B28D3722C139399AB87C2504F19CCCF127B3733089569E022015116F6EA2B131A73557E49FB689F27E15823EB4F4E599925C0C6CCAF1AE4A567712726970706C652E697474632E6B752E65647570124010B6C15F942827A98FAF41AB5EC02A358B7DF6D1288A719C68BEF11333FF9CEAC48E4FE6D659086C993DCC87B549C7330D4FECBA48AA66423B500DCB3011C601"});
 /// let Some(WsEvent::Manifest(manifest)) = WsEvent::from_message(message) else { panic!() };
 /// assert_eq!(manifest.seq, 2);
 /// assert_eq!(manifest.domain.as_deref(), Some("ripple.ittc.ku.edu"));
+/// // The serialized manifest starts with its Sequence field (2).
+/// assert!(manifest.manifest.as_deref().unwrap().starts_with("2400000002"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -542,6 +548,9 @@ pub struct ManifestEvent {
     /// The domain the validator claims, as text (`example.com`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+    /// The whole manifest, serialized, in hex (`manifest`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<String>,
 }
 
 /// `peerStatusChange`: a peer's ledger or state changed.

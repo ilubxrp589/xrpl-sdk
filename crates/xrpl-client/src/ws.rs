@@ -990,10 +990,14 @@ impl XrplWsClient {
     /// use xrpl_client::requests::PathFindRequest;
     /// use xrpl_client::stream::WsEvent;
     ///
-    /// let usd = serde_json::json!({"currency": "USD", "issuer": "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq", "value": "10"});
-    /// let (first, mut updates) = ws
-    ///     .path_find(&PathFindRequest::new("rSender…", "rReceiver…", usd))
-    ///     .await?;
+    /// // Pay 10 USD (issued by rHb9…) to rPT1…, from rU6K…'s funds.
+    /// let usd = serde_json::json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "10"});
+    /// let search = PathFindRequest::new(
+    ///     "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     usd,
+    /// );
+    /// let (first, mut updates) = ws.path_find(&search).await?;
     /// println!("{} ways to pay", first.alternatives.len());
     /// while let Some(WsEvent::PathFind(update)) = updates.recv().await {
     ///     if update.full_reply {

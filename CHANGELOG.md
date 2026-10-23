@@ -7,6 +7,12 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Fixed
+- **`ManifestEvent` keeps the serialized manifest**: `rippled` sends it with
+  every `manifestReceived` message (`manifest`, hex), and the type dropped
+  it. It is now checked against a real validator's manifest in the message
+  shape `rippled` builds.
+
 ### Changed
 - **Faster encoding of a Payment that carries `DeliverMax`.** Since 0.6 the
   encoder copied the whole transaction to drop or rename `DeliverMax`; it now

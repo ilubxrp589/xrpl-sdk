@@ -93,6 +93,55 @@ fn every_recorded_stream_message_is_typed_and_keeps_every_field() {
     assert!(count >= 18, "{count}");
 }
 
+/// A `manifestReceived` message as `rippled` builds it (`NetworkOPs::pubManifest`:
+/// master and signing keys, sequence, signature, master signature, domain and
+/// the serialized manifest in hex), with a real validator's manifest (from
+/// `rippled`'s `manifest` answer in tests/fixtures/rippled/manifest.json).
+#[test]
+fn a_manifest_message_is_typed_and_keeps_every_field() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rippled/manifest.json");
+    let recorded: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let details = &recorded["result"]["details"];
+    let manifest = base64_to_hex(recorded["result"]["manifest"].as_str().unwrap());
+    let message = serde_json::json!({
+        "type": "manifestReceived",
+        "master_key": details["master_key"],
+        "signing_key": details["ephemeral_key"],
+        "seq": details["seq"],
+        "signature": "304402200296DCF23518D44E47B28D3722C139399AB87C2504F19CCCF127B3733089569E022015116F6EA2B131A73557E49FB689F27E15823EB4F4E599925C0C6CCAF1AE4A56",
+        "master_signature": "10B6C15F942827A98FAF41AB5EC02A358B7DF6D1288A719C68BEF11333FF9CEAC48E4FE6D659086C993DCC87B549C7330D4FECBA48AA66423B500DCB3011C601",
+        "domain": details["domain"],
+        "manifest": manifest,
+    });
+    match WsEvent::from_message(message.clone()).unwrap() {
+        WsEvent::Manifest(e) => {
+            // The signatures above are the ones inside the serialized manifest.
+            let m = e.manifest.as_deref().unwrap();
+            assert!(m.contains(&e.signature) && m.contains(&e.master_signature));
+            keeps_every_field("manifestReceived", &message, &e);
+        }
+        other => panic!("not typed: {other:?}"),
+    }
+}
+
+/// Standard base64 (the `manifest` answer) to upper-case hex (the stream's).
+fn base64_to_hex(text: &str) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut bits = 0u32;
+    let mut count = 0;
+    let mut out = String::new();
+    for c in text.bytes().filter(|&c| c != b'=') {
+        let value = u32::try_from(ALPHABET.iter().position(|&a| a == c).unwrap()).unwrap();
+        bits = (bits << 6) | value;
+        count += 6;
+        if count >= 8 {
+            count -= 8;
+            out.push_str(&format!("{:02X}", (bits >> count) & 0xFF));
+        }
+    }
+    out
+}
+
 #[test]
 fn an_order_book_snapshot_is_typed() {
     let path =
