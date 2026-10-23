@@ -44,105 +44,94 @@ impl IouAmount {
         self.mantissa == 0
     }
 
-    /// Create and normalize an IOU amount from mantissa and exponent.
+    /// Create and normalize an IOU amount from mantissa and exponent, as
+    /// `rippled` does (see [`IouAmount::from_decimal`] for the rules).
     pub fn new(mantissa: i64, exponent: i8) -> Result<Self, crate::CoreError> {
+        Self::normalize(mantissa < 0, mantissa.unsigned_abs(), i64::from(exponent))
+    }
+
+    /// `rippled`'s normal form of ±`mantissa`×10^`exponent` (its `Number`
+    /// normalization, then `IOUAmount`'s range): a mantissa in
+    /// [10^15, 10^16), digits past the sixteenth rounded to nearest (a tie
+    /// goes to the even digit, unless a later digit is non-zero); an exponent
+    /// below -96 is zero, one above 80 an error.
+    fn normalize(negative: bool, mantissa: u64, exponent: i64) -> Result<Self, crate::CoreError> {
         if mantissa == 0 {
             return Ok(Self::zero());
         }
-
-        let is_negative = mantissa < 0;
-        let mut m = mantissa.unsigned_abs();
-        let mut e = exponent as i16;
-
-        // Normalize: shift mantissa until 10^15 <= m < 10^16
-        while m < IOU_MANTISSA_MIN && e > IOU_EXPONENT_MIN as i16 {
+        let (mut m, mut e) = (mantissa, exponent);
+        while m < IOU_MANTISSA_MIN {
             m *= 10;
             e -= 1;
         }
-        while m >= IOU_MANTISSA_MAX && e < IOU_EXPONENT_MAX as i16 {
+        // The most significant dropped digit, and whether any after it was not 0.
+        let (mut dropped, mut sticky) = (0, false);
+        while m >= IOU_MANTISSA_MAX {
+            sticky |= dropped != 0;
+            dropped = m % 10;
             m /= 10;
             e += 1;
         }
-
-        if !(IOU_MANTISSA_MIN..IOU_MANTISSA_MAX).contains(&m) {
-            return Err(crate::CoreError::InvalidAmount(
-                "mantissa out of normalized range after adjustment".to_string(),
-            ));
+        if dropped > 5 || (dropped == 5 && (sticky || m % 2 == 1)) {
+            m += 1;
+            if m == IOU_MANTISSA_MAX {
+                m /= 10;
+                e += 1;
+            }
         }
-        if e < IOU_EXPONENT_MIN as i16 || e > IOU_EXPONENT_MAX as i16 {
-            return Err(crate::CoreError::InvalidAmount(format!(
-                "exponent {e} out of range [{}, {}]",
-                IOU_EXPONENT_MIN, IOU_EXPONENT_MAX
-            )));
+        if e < i64::from(IOU_EXPONENT_MIN) {
+            return Ok(Self::zero());
         }
-
+        let exponent = i8::try_from(e)
+            .ok()
+            .filter(|e| *e <= IOU_EXPONENT_MAX)
+            .ok_or_else(|| {
+                crate::CoreError::InvalidAmount(format!(
+                    "{}{mantissa}e{exponent} is larger than a token amount can be (9999999999999999e80)",
+                    if negative { "-" } else { "" }
+                ))
+            })?;
         Ok(Self {
             mantissa: m,
-            exponent: e as i8,
-            is_negative,
+            exponent,
+            is_negative: negative,
         })
     }
 
-    /// Parse from decimal string (e.g., "1.5", "-0.001", "1000000", "1.5e10").
+    /// Parse a token value written in `rippled`'s JSON number syntax
+    /// (`amountFromString`): `[-+]?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?`,
+    /// so `"1.5"`, `"-0.001"`, `"1e-3"` and `"+5"`, but not `""`, `".5"`,
+    /// `"5."` or `"007"`. Past sixteen significant digits the value rounds
+    /// to nearest, as `rippled` rounds it (a tie goes to the even digit
+    /// unless a later digit is non-zero); below 10^-81 it is zero; above
+    /// 9999999999999999e80 it is an error.
+    ///
+    /// Any number of digits is read exactly, rounded by the same rule.
+    /// (`rippled`'s JSON reader takes at most a `u64` of digits; the SDK
+    /// writes binary, so a longer value reaches the ledger as written.)
     pub fn from_decimal(s: &str) -> Result<Self, crate::CoreError> {
-        if s == "0" || s == "0.0" || s == "-0" {
-            return Ok(Self::zero());
+        let parts = crate::number_text::split(s)?;
+        // Sixteen significant digits; the rest only move the exponent and
+        // decide the rounding.
+        let (mut m, mut e) = (0u64, parts.exponent);
+        let (mut dropped, mut sticky) = (None, false);
+        for d in parts.digits() {
+            if m < IOU_MANTISSA_MIN {
+                m = m * 10 + d;
+            } else {
+                match dropped {
+                    None => dropped = Some(d),
+                    Some(_) => sticky |= d != 0,
+                }
+                e += 1;
+            }
         }
-
-        let (is_negative, s) = if let Some(stripped) = s.strip_prefix('-') {
-            (true, stripped)
-        } else {
-            (false, s)
-        };
-
-        // Handle scientific notation (e.g., "9999999999999999e80", "1.5e10")
-        let (base, sci_exp) = if let Some((b, e)) = s.split_once('e').or_else(|| s.split_once('E'))
-        {
-            let exp: i16 = e
-                .parse()
-                .map_err(|_| crate::CoreError::InvalidAmount(format!("invalid exponent: {e}")))?;
-            (b, exp)
-        } else {
-            (s, 0i16)
-        };
-
-        let (integer_part, decimal_part) = match base.split_once('.') {
-            Some((i, d)) => (i, d),
-            None => (base, ""),
-        };
-
-        // Combine into a single mantissa string
-        let combined = format!("{integer_part}{decimal_part}");
-        let combined = combined.trim_start_matches('0');
-        if combined.is_empty() {
-            return Ok(Self::zero());
+        if let Some(d) = dropped {
+            if d > 5 || (d == 5 && (sticky || m % 2 == 1)) {
+                m += 1;
+            }
         }
-        // Trailing zeros carry no precision — fold them into the exponent
-        // before parsing, so a plain expansion of a huge value (e.g. 1e27
-        // written as 28 digits) fits u64.
-        let stripped = combined.trim_end_matches('0');
-        let zeros = (combined.len() - stripped.len()) as i16;
-        let combined = stripped;
-
-        let mantissa: u64 = combined.parse().map_err(|e: core::num::ParseIntError| {
-            crate::CoreError::InvalidAmount(e.to_string())
-        })?;
-        let base_exp = -(decimal_part.len() as i16) + sci_exp + zeros;
-
-        // Clamp to i8 range for IouAmount::new
-        if !(-128..=127).contains(&base_exp) {
-            return Err(crate::CoreError::InvalidAmount(format!(
-                "exponent {base_exp} out of i8 range"
-            )));
-        }
-
-        let signed_mantissa = if is_negative {
-            -(mantissa as i64)
-        } else {
-            mantissa as i64
-        };
-
-        Self::new(signed_mantissa, base_exp as i8)
+        Self::normalize(parts.negative, m, e)
     }
 
     /// Convert to decimal string representation.
@@ -543,5 +532,129 @@ mod getext_tests {
         // plain giant expansion parses losslessly too
         let c = IouAmount::from_decimal("1000000000000000000000000000").unwrap();
         assert_eq!((c.mantissa, c.exponent), (1_000_000_000_000_000, 12));
+    }
+
+    /// Token values as rippled 3.4.1 reads them from JSON: `simulate` of a
+    /// Payment from genesis (applies nothing), mantissa and exponent read
+    /// back from the bytes rippled wrote (scripts/probe_iou.py, 2026-10-23).
+    /// `None` = zero.
+    #[test]
+    fn reads_token_values_as_rippled_does() {
+        type Read = Option<(bool, u64, i8)>;
+        let cases: &[(&str, Read)] = &[
+            ("1.5", Some((false, 1_500_000_000_000_000, -15))),
+            ("+5", Some((false, 5_000_000_000_000_000, -15))),
+            (
+                "1.99999999999999999",
+                Some((false, 2_000_000_000_000_000, -15)),
+            ),
+            ("12345678901234565", Some((false, 1_234_567_890_123_456, 1))),
+            ("12345678901234575", Some((false, 1_234_567_890_123_458, 1))),
+            (
+                "1234567890123456501",
+                Some((false, 1_234_567_890_123_457, 3)),
+            ),
+            (
+                "1234567890123456500",
+                Some((false, 1_234_567_890_123_456, 3)),
+            ),
+            ("-12345678901234565", Some((true, 1_234_567_890_123_456, 1))),
+            ("-12345678901234575", Some((true, 1_234_567_890_123_458, 1))),
+            (
+                "-1234567890123456501",
+                Some((true, 1_234_567_890_123_457, 3)),
+            ),
+            ("99999999999999995", Some((false, 1_000_000_000_000_000, 2))),
+            ("99999999999999994", Some((false, 9_999_999_999_999_999, 1))),
+            (
+                "1234567890123456789",
+                Some((false, 1_234_567_890_123_457, 3)),
+            ),
+            (
+                "9223372036854775807",
+                Some((false, 9_223_372_036_854_776, 3)),
+            ),
+            (
+                "1000000000000000000",
+                Some((false, 1_000_000_000_000_000, 3)),
+            ),
+            (
+                "9999999999999999e80",
+                Some((false, 9_999_999_999_999_999, 80)),
+            ),
+            ("1e95", Some((false, 1_000_000_000_000_000, 80))),
+            ("1e81", Some((false, 1_000_000_000_000_000, 66))),
+            (
+                "1000000000000000e-96",
+                Some((false, 1_000_000_000_000_000, -96)),
+            ),
+            ("1e-81", Some((false, 1_000_000_000_000_000, -96))),
+            ("1e-96", None),
+            ("1e-110", None),
+            ("1.5e-32768", None),
+            ("0", None),
+            ("-0", None),
+            ("0.0", None),
+        ];
+        for (text, want) in cases {
+            let got = IouAmount::from_decimal(text).unwrap_or_else(|e| panic!("{text}: {e}"));
+            match want {
+                None => assert!(got.is_zero(), "{text}: {got:?}"),
+                Some((negative, mantissa, exponent)) => assert_eq!(
+                    (got.is_negative, got.mantissa, got.exponent),
+                    (*negative, *mantissa, *exponent),
+                    "{text}"
+                ),
+            }
+        }
+        // rippled refuses these ("Field 'tx_json.Amount' has invalid data").
+        for text in [
+            "",
+            "-",
+            ".",
+            "e5",
+            "1e",
+            "1.2.3",
+            ".5",
+            "5.",
+            "007",
+            "1e96",
+            "99999999999999995e80",
+            "9999999999999999e81",
+            "1,5",
+            " 1",
+            "0x10",
+            "1e2147483648",
+        ] {
+            assert!(IouAmount::from_decimal(text).is_err(), "{text:?} was read");
+        }
+        // More digits than rippled's JSON reader takes: read as
+        // written, rounded by the same rule.
+        let deliberate: &[(&str, (bool, u64, i8))] = &[
+            ("9999999999999999999", (false, 1_000_000_000_000_000, 4)),
+            ("-9999999999999999999", (true, 1_000_000_000_000_000, 4)),
+            ("18446744073709551615", (false, 1_844_674_407_370_955, 4)),
+            ("18446744073709551616", (false, 1_844_674_407_370_955, 4)),
+            ("10000000000000000000", (false, 1_000_000_000_000_000, 4)),
+            ("9223372036854775808", (false, 9_223_372_036_854_776, 3)),
+            ("-9223372036854775808", (true, 9_223_372_036_854_776, 3)),
+            ("0.9999999999999999999", (false, 1_000_000_000_000_000, -15)),
+            (
+                "1000000000000000000000000000",
+                (false, 1_000_000_000_000_000, 12),
+            ),
+            (
+                "1234567890123456500000000000000001",
+                (false, 1_234_567_890_123_457, 18),
+            ),
+        ];
+        for (text, want) in deliberate {
+            let got = IouAmount::from_decimal(text).unwrap_or_else(|e| panic!("{text}: {e}"));
+            assert_eq!(
+                (got.is_negative, got.mantissa, got.exponent),
+                *want,
+                "{text}"
+            );
+        }
     }
 }

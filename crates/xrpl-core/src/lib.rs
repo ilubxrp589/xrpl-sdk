@@ -175,6 +175,7 @@ pub mod crypto;
 pub mod error;
 #[cfg(feature = "std")]
 pub mod hashes;
+mod number_text;
 pub mod transaction;
 pub mod types;
 pub mod utils;

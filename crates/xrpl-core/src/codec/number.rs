@@ -118,53 +118,7 @@ pub(crate) fn decode(bytes: [u8; 12]) -> Result<String, CoreError> {
     }))
 }
 
-/// `rippled`'s `partsFromString`: sign, mantissa and exponent of a decimal
-/// string matching `^[-+]?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$`,
-/// with the digits fitting a `u64` and the written exponent an `i32`.
-pub(crate) fn parse(s: &str) -> Result<(bool, u64, i64), CoreError> {
-    let not_read = |why: &str| CoreError::InvalidAmount(format!("{s:?} {why}"));
-    let bad = || not_read("is not a number rippled reads");
-    let (negative, rest) = match (s.strip_prefix('-'), s.strip_prefix('+')) {
-        (Some(rest), _) => (true, rest),
-        (_, Some(rest)) => (false, rest),
-        _ => (false, s),
-    };
-    let (body, exp) = match rest.split_once(['e', 'E']) {
-        Some((body, exp)) => (body, Some(exp)),
-        None => (rest, None),
-    };
-    let (int, frac) = match body.split_once('.') {
-        Some((i, f)) => (i, Some(f)),
-        None => (body, None),
-    };
-    let digits = |d: &str| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit());
-    if !digits(int) || (int.len() > 1 && int.starts_with('0')) || frac.is_some_and(|f| !digits(f)) {
-        return Err(bad());
-    }
-    let mut mantissa: u64 = 0;
-    for b in int.bytes().chain(frac.unwrap_or("").bytes()) {
-        mantissa = mantissa
-            .checked_mul(10)
-            .and_then(|m| m.checked_add(u64::from(b - b'0')))
-            .ok_or_else(|| not_read("has more digits than rippled reads"))?;
-    }
-    let mut exponent = -(frac.map_or(0, str::len) as i64);
-    if let Some(exp) = exp {
-        let (sign, n) = match (exp.strip_prefix('-'), exp.strip_prefix('+')) {
-            (Some(n), _) => (-1, n),
-            (_, Some(n)) => (1, n),
-            _ => (1, exp),
-        };
-        if !digits(n) {
-            return Err(bad());
-        }
-        let n: i32 = n
-            .parse()
-            .map_err(|_| not_read("has an exponent rippled does not read"))?;
-        exponent += sign * i64::from(n);
-    }
-    Ok((negative, mantissa, exponent))
-}
+pub(crate) use crate::number_text::parse;
 
 /// `rippled`'s normal form of `mantissa`e`exponent`, or why it has none that
 /// is exactly the same value (`numberFromJson` refuses any it would round).
