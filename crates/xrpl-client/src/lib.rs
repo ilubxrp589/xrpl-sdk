@@ -149,6 +149,8 @@
 //! `ledger_entry` return typed [`xrpl_core::types::LedgerObject`]s.
 
 #![warn(missing_docs)]
+// docs.rs labels each feature- or platform-gated item with what it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// The host (and port) of a URL, without scheme, credentials, path or query:
 /// what logs, errors and `Debug` show of a server (its URL may carry a token).

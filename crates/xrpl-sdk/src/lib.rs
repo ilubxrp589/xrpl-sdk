@@ -516,6 +516,8 @@
 //! credit James Turner with a link to <https://github.com/ilubxrp589/xrpl-sdk>.
 
 #![warn(missing_docs)]
+// docs.rs labels each feature- or platform-gated item with what it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Wallets: keys and address, signing, multi-signing, batches and channel claims.
 pub mod wallet;

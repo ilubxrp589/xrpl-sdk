@@ -8,7 +8,6 @@ license-file = "../../LICENSE"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
 authors = ["James Turner"]
 readme = "README.md"
-homepage = "https://github.com/ilubxrp589/xrpl-sdk"
 documentation = "https://docs.rs/halcyon-xrpl-sdk"
 keywords = ["xrpl", "xrp", "ripple", "cli", "blockchain"]
 categories = ["command-line-utilities", "cryptography::cryptocurrencies"]

@@ -1,0 +1,16 @@
+name: Feature request
+description: Something the SDK should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: The task, and what is missing or awkward today. A link to the XRPL docs or an amendment helps.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it might look
+      description: An API sketch, or how another library (xrpl.js, xrpl-py) does it.

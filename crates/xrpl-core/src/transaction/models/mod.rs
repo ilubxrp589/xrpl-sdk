@@ -239,7 +239,7 @@ pub struct Memo {
 /// One signature of a multi-signed transaction (`Signers`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signer {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The signer's account (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
     /// The signing public key, hex; empty when multi-signed (`SigningPubKey`).
@@ -253,7 +253,7 @@ pub struct Signer {
 /// A member of a signer list (SignerListSet's `SignerEntries`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignerEntry {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// An account on the signer list (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
     /// The signer's weight toward the quorum (`SignerWeight`).
@@ -325,7 +325,7 @@ pub struct CredentialSpec {
 /// `transaction::batch`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatchSigner {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account signing the batch (`Account`): one with an inner transaction in it.
     #[serde(rename = "Account")]
     pub account: String,
     /// Hex; empty when `signers` is used.
@@ -410,7 +410,7 @@ pub struct XChainBridge {
 /// writes back; the codec derives them from the other fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathStep {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// An account to ripple through (`account`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
     /// The currency code (`currency`).

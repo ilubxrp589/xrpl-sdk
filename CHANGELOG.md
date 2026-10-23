@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+Every change that matters to someone using the SDK, newest first. The format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the crates
+follow [Semantic Versioning](https://semver.org/) (before 1.0, a minor release
+may break the API, and says so under "Changed (breaking)").
+
+## [Unreleased]
 
 ### Fixed
 - `KeyType::Ed25519`'s documentation called it `rippled`'s default for new
@@ -108,7 +113,21 @@
   `rippled` writes some RFC 1751 keys it cannot read back (the word `YOU`;
   about one key in 170); this crate reads them.
 
-## v0.6.0 (2026-10-23)
+### Docs and project
+- docs.rs labels each feature- or platform-gated item with what it needs
+  (`doc_cfg`); CI builds the docs as docs.rs does (nightly, `--cfg docsrs`).
+- CONTRIBUTING.md, issue forms (bug, feature; security reports go to the
+  private channel) and a pull-request checklist.
+- CI: tests on Linux, macOS and Windows; a SemVer check against the latest
+  release (`cargo-semver-checks`); a `cargo package` dry run; the live
+  Testnet job can fail again (it was `continue-on-error`).
+- The request types' `account` fields, and `Signer`, `SignerEntry`,
+  `BatchSigner` and `PathStep`'s, had one pasted description ("the account
+  that sends the transaction or owns the entry"); each now says what it is.
+- CHANGELOG.md follows Keep a Changelog, with the v0.3.0 and v0.2.0
+  headings it had lost (their notes ran on under v0.4.0) and compare links.
+
+## [v0.6.0] (2026-10-23)
 
 Security. A full adversarial review of every crate found ways the SDK could
 sign something other than what the caller wrote, report a payment that went
@@ -301,7 +320,7 @@ compiles against 0.5 needs only a few edits.
   to `docs/design/` and are marked historical (they described signing that
   `rippled` rejects for Ed25519).
 
-## v0.5.0 (2026-10-22)
+## [v0.5.0] (2026-10-22)
 
 Trust: fuzzing in CI, benchmarks, a minimum Rust version, and a parity report.
 
@@ -379,7 +398,7 @@ Trust: fuzzing in CI, benchmarks, a minimum Rust version, and a parity report.
 - The XRPLF codec fixtures are now checked in both directions (bytes → JSON as well as
   JSON → bytes).
 
-## v0.4.0 (2026-10-22)
+## [v0.4.0] (2026-10-22)
 
 Developer experience: a cookbook, the command line, a blocking client, typed streams.
 
@@ -412,6 +431,7 @@ Developer experience: a cookbook, the command line, a blocking client, typed str
 - The examples `send_payment`, `mint_nft` and `place_offer` (which needed manual funding) are
   replaced by the cookbook.
 
+## [v0.3.0] (2026-10-22)
 
 Every transaction type typed, and Batch.
 
@@ -438,6 +458,7 @@ Every transaction type typed, and Batch.
   types; batch signatures verify against 6 real batches; the live Testnet test (29 checks) runs a
   one-account and a two-account batch.
 
+## [v0.2.0] (2026-10-22)
 
 The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` and
 `halcyon-xrpl-sdk`. v0.1.0 (below) was released on GitHub only.
@@ -555,7 +576,7 @@ The first release on crates.io, as `halcyon-xrpl-core`, `halcyon-xrpl-client` an
   an unsorted Signers array); it now returns `Result`.
 - docs/TESTING.md: the two known-address vectors were wrong; replaced by xrpl.js's fixtures.
 
-## v0.1.0 (2026-03-19)
+## [v0.1.0] (2026-03-19)
 
 Initial release.
 
@@ -589,3 +610,11 @@ Initial release.
 - autofill_and_sign and submit_transaction convenience functions
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
+
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.5.0...v0.6.0
+[v0.5.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.4.0...v0.5.0
+[v0.4.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.3.0...v0.4.0
+[v0.3.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.2.0...v0.3.0
+[v0.2.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.1.0...v0.2.0
+[v0.1.0]: https://github.com/ilubxrp589/xrpl-sdk/releases/tag/v0.1.0

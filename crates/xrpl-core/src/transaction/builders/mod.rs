@@ -39,7 +39,7 @@ pub trait Transaction {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TxCommon {
-    /// The account that sends the transaction or owns the entry (`Account`).
+    /// The account that sends the transaction (`Account`).
     pub account: String,
     /// The transaction cost, in drops (`Fee`).
     #[serde(skip_serializing_if = "Option::is_none")]

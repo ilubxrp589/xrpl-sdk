@@ -21,10 +21,7 @@ exceptions = []
 multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
-deny = [
-    # openssl/openssl-sys are allowed because xrpl-node needs openssl for
-    # SSL_get_finished (XRPL peer protocol session cookie derivation).
-]
+deny = []
 
 [sources]
 unknown-registry = "deny"

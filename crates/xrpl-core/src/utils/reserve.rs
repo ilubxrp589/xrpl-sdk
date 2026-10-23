@@ -2,7 +2,7 @@
 //!
 //! The reserves come from the network: `server_state` and the `ledger`
 //! stream give `reserve_base` / `reserve_inc` in drops; `server_info` gives
-//! `reserve_base_xrp` / `reserve_inc_xrp` in XRP, which [`reserve_xrp_to_drops`](crate::utils::reserve::reserve_xrp_to_drops)
+//! `reserve_base_xrp` / `reserve_inc_xrp` in XRP, which [`reserve_xrp_to_drops`]
 //! converts exactly from the JSON number's text.
 
 use crate::CoreError;

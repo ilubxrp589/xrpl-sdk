@@ -169,6 +169,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
+// docs.rs labels each feature- or platform-gated item with what it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(feature = "std"))]
 #[macro_use]
