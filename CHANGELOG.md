@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Open a wallet from the backup another wallet gave you.**
+  - `Wallet::from_mnemonic(phrase)`: a BIP-39 recovery phrase (12 to 24
+    words, as Ledger devices and multi-coin wallets show) at
+    `m/44'/144'/0'/0/0`, the first XRP account on Ledger and in xrpl.js.
+    `Wallet::from_mnemonic_with(phrase, passphrase, &path)` takes a
+    passphrase and another path (`DerivationPath::xrp_account(n)`).
+  - `Wallet::from_secret_numbers(numbers)`: Xaman's eight blocks of six
+    digits (XLS-12), secp256k1 as Xaman makes them;
+    `from_secret_numbers_with_type` for Ed25519. A block above 65535 is
+    refused (xrpl.js reads 99999 as 0x869F).
+  - `Wallet::from_rfc1751(words, key_type)`: the twelve words `rippled`'s
+    `wallet_propose` returns as `master_key`.
+- In `xrpl_core::crypto`: `mnemonic::Mnemonic` (parse, generate, from
+  entropy, `to_seed` with an NFKD passphrase), `hd::DerivationPath` (BIP-32
+  secp256k1 derivation), `secret_numbers` and `rfc1751` encoders,
+  `Seed::{from,to}_secret_numbers`, `Seed::{from,to}_rfc1751` and
+  `Keypair::from_mnemonic`. Errors name a word's or block's position, never
+  the word. New `CoreError::InvalidMnemonic` and
+  `CoreError::InvalidDerivationPath`.
+- Checked against the 24 BIP-39 reference vectors (with their BIP-32 master
+  keys), the 17 private BIP-32 reference vectors, xrpl.js's wallet tests and
+  `rippled` 3.4.1's `wallet_propose` for 23 seeds with both key types.
+  `rippled` writes some RFC 1751 keys it cannot read back (the word `YOU`;
+  about one key in 170); this crate reads them.
+
 ## v0.6.0 (2026-10-23)
 
 Security. A full adversarial review of every crate found ways the SDK could

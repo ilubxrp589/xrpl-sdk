@@ -528,6 +528,7 @@ pub use xrpl_core;
 // Re-exports from xrpl-core
 pub use xrpl_core::address::KeyType;
 pub use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
+pub use xrpl_core::crypto::{hd::DerivationPath, mnemonic::Mnemonic};
 pub use xrpl_core::crypto::{
     sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, Keypair, Seed,
 };

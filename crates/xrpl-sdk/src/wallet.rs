@@ -1,5 +1,7 @@
 use xrpl_core::address::KeyType;
 use xrpl_core::codec::encode_transaction_json;
+use xrpl_core::crypto::hd::DerivationPath;
+use xrpl_core::crypto::mnemonic::Mnemonic;
 use xrpl_core::crypto::{sign_transaction, verify_signing_data, Keypair, Seed};
 use xrpl_core::types::AccountId;
 use xrpl_core::CoreError;
@@ -47,14 +49,120 @@ impl Wallet {
 
     /// Create a wallet from a base58-encoded seed string.
     pub fn from_seed(seed_str: &str) -> Result<Self, CoreError> {
-        let seed = Seed::from_base58(seed_str)?;
-        let keypair = Keypair::from_seed(&seed)?;
-        Ok(Self::from_keypair(keypair).with_seed(seed))
+        Self::from_seed_value(Seed::from_base58(seed_str)?)
     }
 
     /// Alias for `from_seed` — XRPL often uses "secret" to mean seed.
     pub fn from_secret(secret: &str) -> Result<Self, CoreError> {
         Self::from_seed(secret)
+    }
+
+    /// Open a wallet from a BIP-39 recovery phrase (12 to 24 words, as
+    /// Ledger devices and multi-coin wallets show), with no passphrase, at
+    /// the first XRP account: `m/44'/144'/0'/0/0`, the path Ledger and
+    /// xrpl.js use. The key is secp256k1 and the wallet has no XRPL seed
+    /// ([`Wallet::seed`] is `None`): the phrase is its backup.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_mnemonic(
+    ///     "assault rare scout seed design extend noble drink talk control guitar quote",
+    /// )?;
+    /// assert_eq!(wallet.classic_address(), "rJUr92pXcNtH6PtFfbRhHCo469XmPrbTJU");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidMnemonic`] if a word is not on the BIP-39 English
+    /// list, the word count is wrong or the checksum does not match.
+    pub fn from_mnemonic(phrase: &str) -> Result<Self, CoreError> {
+        Self::from_mnemonic_with(phrase, "", &DerivationPath::default())
+    }
+
+    /// Open a wallet from a BIP-39 recovery phrase with a passphrase (the
+    /// "25th word"; `""` for none) at `path`, for example
+    /// [`DerivationPath::xrp_account`] for a later account. A wrong
+    /// passphrase or path is not an error: it opens a different, empty
+    /// wallet, so check the address.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::from_mnemonic`].
+    pub fn from_mnemonic_with(
+        phrase: &str,
+        passphrase: &str,
+        path: &DerivationPath,
+    ) -> Result<Self, CoreError> {
+        let mnemonic = Mnemonic::parse(phrase)?;
+        Ok(Self::from_keypair(Keypair::from_mnemonic(
+            &mnemonic, passphrase, path,
+        )?))
+    }
+
+    /// Open a wallet from Xaman's secret numbers (eight blocks of six
+    /// digits; separators and row letters are skipped). The key is
+    /// secp256k1, as Xaman makes it and as xrpl.js reads it; use
+    /// [`Wallet::from_secret_numbers_with_type`] for Ed25519.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_secret_numbers(
+    ///     "399150 474506 009147 088773 432160 282843 253738 605430",
+    /// )?;
+    /// assert_eq!(wallet.classic_address(), "rQKQsPeE3iTRyfUypLhuq74gZdcRdwWqDp");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if there are not 48 digits or a block
+    /// fails its check digit.
+    pub fn from_secret_numbers(numbers: &str) -> Result<Self, CoreError> {
+        Self::from_secret_numbers_with_type(numbers, KeyType::Secp256k1)
+    }
+
+    /// Open a wallet from secret numbers with the given key type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::from_secret_numbers`].
+    pub fn from_secret_numbers_with_type(
+        numbers: &str,
+        key_type: KeyType,
+    ) -> Result<Self, CoreError> {
+        Self::from_seed_value(Seed::from_secret_numbers(numbers, key_type)?)
+    }
+
+    /// Open a wallet from an RFC 1751 key: the twelve words `rippled`'s
+    /// `wallet_propose` returns as `master_key`. The words do not record the
+    /// key type, so give the one `wallet_propose` was asked for (its
+    /// `key_type`; `rippled`'s default is secp256k1).
+    ///
+    /// ```
+    /// use xrpl_sdk::{KeyType, Wallet};
+    ///
+    /// let wallet = Wallet::from_rfc1751(
+    ///     "YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY FILE",
+    ///     KeyType::Secp256k1,
+    /// )?;
+    /// assert_eq!(wallet.classic_address(), "rNiNSFyhVr5xfp8o8G5Ku81if8rdDrai5z");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if there are not twelve dictionary words or
+    /// a half fails its parity check.
+    pub fn from_rfc1751(words: &str, key_type: KeyType) -> Result<Self, CoreError> {
+        Self::from_seed_value(Seed::from_rfc1751(words, key_type)?)
+    }
+
+    fn from_seed_value(seed: Seed) -> Result<Self, CoreError> {
+        let keypair = Keypair::from_seed(&seed)?;
+        Ok(Self::from_keypair(keypair).with_seed(seed))
     }
 
     /// Create a wallet from an existing keypair.

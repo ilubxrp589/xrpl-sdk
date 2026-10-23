@@ -68,6 +68,67 @@ impl Seed {
     pub fn derive_keypair(&self) -> Result<Keypair, CoreError> {
         Keypair::from_seed(self)
     }
+
+    /// Read a seed from its secret numbers (XLS-12, as Xaman shows them:
+    /// eight blocks of six digits). The numbers do not say the key type;
+    /// Xaman's accounts are [`KeyType::Secp256k1`].
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_secret_numbers(
+    ///     "399150 474506 009147 088773 432160 282843 253738 605430",
+    ///     KeyType::Secp256k1,
+    /// )?;
+    /// assert_eq!(seed.to_base58().as_str(), "sh1HiK7SwjS1VxFdXi7qeMHRedrYX");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if the text is not 48 digits or a block
+    /// fails its check digit (see [`secret_numbers::decode`](super::secret_numbers::decode)).
+    pub fn from_secret_numbers(numbers: &str, key_type: KeyType) -> Result<Self, CoreError> {
+        let bytes = super::secret_numbers::decode(numbers)?;
+        Ok(Self::from_bytes(*bytes, key_type))
+    }
+
+    /// This seed as secret numbers (eight blocks of six digits), in a string
+    /// wiped on drop. They hold the 16 bytes only, not the key type.
+    pub fn to_secret_numbers(&self) -> Zeroizing<String> {
+        super::secret_numbers::encode(&self.bytes)
+    }
+
+    /// Read a seed from its RFC 1751 key: the twelve words `rippled`'s
+    /// `wallet_propose` returns as `master_key`. The words do not say the
+    /// key type: give the one the account uses.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_rfc1751(
+    ///     "YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY FILE",
+    ///     KeyType::Secp256k1,
+    /// )?;
+    /// assert_eq!(seed.to_base58().as_str(), "sp6M2Pi6H9S6YW47PKUsQJxd3Pgi5");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidSeed`] if there are not twelve dictionary words or
+    /// a half fails its parity check (see [`rfc1751::decode`](super::rfc1751::decode)).
+    pub fn from_rfc1751(words: &str, key_type: KeyType) -> Result<Self, CoreError> {
+        let bytes = super::rfc1751::decode(words)?;
+        Ok(Self::from_bytes(*bytes, key_type))
+    }
+
+    /// This seed as an RFC 1751 key (twelve words, as `wallet_propose`'s
+    /// `master_key`), in a string wiped on drop. The words hold the 16 bytes
+    /// only, not the key type.
+    pub fn to_rfc1751(&self) -> Zeroizing<String> {
+        super::rfc1751::encode(&self.bytes)
+    }
 }
 
 impl fmt::Debug for Seed {
@@ -104,6 +165,35 @@ impl Keypair {
             public_key,
             key_type: seed.key_type,
         })
+    }
+
+    /// The secp256k1 keypair a BIP-39 recovery phrase derives at `path`
+    /// (BIP-32), with `passphrase` (`""` for none). Ledger devices and xrpl.js
+    /// use [`DerivationPath::default`](super::hd::DerivationPath::default),
+    /// `m/44'/144'/0'/0/0`, for the first XRP account.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::hd::DerivationPath;
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    /// use xrpl_core::crypto::Keypair;
+    ///
+    /// let phrase: Mnemonic =
+    ///     "assault rare scout seed design extend noble drink talk control guitar quote".parse()?;
+    /// let keypair = Keypair::from_mnemonic(&phrase, "", &DerivationPath::default())?;
+    /// assert_eq!(keypair.classic_address(), "rJUr92pXcNtH6PtFfbRhHCo469XmPrbTJU");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::KeyDerivationFailed`] in the case BIP-32 calls invalid
+    /// (probability below 2^-127).
+    pub fn from_mnemonic(
+        mnemonic: &super::mnemonic::Mnemonic,
+        passphrase: &str,
+        path: &super::hd::DerivationPath,
+    ) -> Result<Self, CoreError> {
+        path.derive(mnemonic.to_seed(passphrase).as_slice())
     }
 
     /// A keypair from a 32-byte secret key; the public key is derived from it.
@@ -220,32 +310,36 @@ pub fn verify_signing_data(
     }
 }
 
-/// 16 random bytes from the operating system (`getrandom`), never a
+/// Random bytes from the operating system (`getrandom`), never a
 /// user-space generator: a forked process must not repeat its parent's seeds.
 #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 #[allow(
     clippy::expect_used,
     reason = "no OS random source means no safe key; there is nothing to fall back to"
 )]
-fn generate_random_bytes_16() -> [u8; 16] {
+pub(crate) fn fill_random(bytes: &mut [u8]) {
     use rand::TryRngCore;
-    let mut bytes = [0u8; 16];
     rand::rngs::OsRng
-        .try_fill_bytes(&mut bytes)
+        .try_fill_bytes(bytes)
         .expect("the operating system's random source failed");
-    bytes
 }
 
-/// Generate 16 random bytes using browser WebCrypto (WASM).
+/// Random bytes from the browser's WebCrypto (WASM).
 #[cfg(all(feature = "std", target_arch = "wasm32"))]
 #[allow(
     clippy::expect_used,
     reason = "no CSPRNG means no safe key; there is nothing to fall back to"
 )]
+pub(crate) fn fill_random(bytes: &mut [u8]) {
+    getrandom::getrandom(bytes)
+        .expect("CSPRNG not available — cannot generate secure random bytes");
+}
+
+/// 16 random bytes for a seed, from [`fill_random`].
+#[cfg(feature = "std")]
 fn generate_random_bytes_16() -> [u8; 16] {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes)
-        .expect("CSPRNG not available — cannot generate secure random bytes");
+    fill_random(&mut bytes);
     bytes
 }
 

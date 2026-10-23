@@ -12,3 +12,12 @@ sEdTM1uX8pu2do5XvTnutH6HsouMaM2
 sp5fghtJtpUorTwvof1NpDXAzNwf6
 sp5fghtJtpUorTwvof1NpDXAzNwf0
 sp5fghtJtpUorTwvof1NpDXAz
+# Wallet-import doc examples (crypto/signing.rs, xrpl-sdk wallet.rs): the
+# xrpl.js secret-numbers test vector's seed, and the seed of hex
+# 00112233445566778899AABBCCDDEEFF as rippled's wallet_propose returns it.
+# Unfunded, published test values.
+sh1HiK7SwjS1VxFdXi7qeMHRedrYX
+sp6M2Pi6H9S6YW47PKUsQJxd3Pgi5
+# BIP-32 reference test vector 4's seed (bitcoin/bips bip-0032.mediawiki),
+# in crates/xrpl-core/tests/vectors/bip32.json. Published, not a key of ours.
+seed": "3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678

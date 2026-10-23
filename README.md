@@ -210,6 +210,9 @@ assert_eq!(json["TransactionType"], "Payment");
   type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, `bridge`,
   `book_directory`, …), each matching the index rippled computes
 - Payment channel claims: sign and verify
+- Key backups from other wallets: BIP-39 recovery phrases with BIP-32 paths (`m/44'/144'/0'/0/0`, as
+  Ledger and xrpl.js), Xaman's secret numbers (XLS-12) and RFC 1751 keys (`wallet_propose`'s
+  `master_key`), checked against the BIP-39 and BIP-32 reference vectors, xrpl.js and rippled
 - Utilities: XRP ↔ drops, ledger time ↔ Unix / ISO 8601, text ↔ hex, TransferRate and quality,
   NFTokenID parsing, the NFTokenID a mint created, balance changes from metadata. Amounts are
   computed in exact decimal, never floating point
@@ -244,6 +247,8 @@ assert_eq!(json["TransactionType"], "Payment");
 ### `halcyon-xrpl-sdk`
 
 - `Wallet` — generate, from_seed, seed, sign, sign_and_encode, sign_payment_channel_claim
+- Open an existing wallet from its backup: `Wallet::from_mnemonic` (BIP-39 phrase),
+  `from_secret_numbers` (Xaman), `from_rfc1751` (`rippled`'s `master_key`)
 - `generate_faucet_wallet` — a funded Testnet / Devnet wallet in one call
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
 - `autofill_and_sign` / `submit_transaction` convenience functions

@@ -41,6 +41,15 @@ pub enum CoreError {
     #[error("unknown field: {0}")]
     UnknownField(String),
 
+    /// Not a valid BIP-39 recovery phrase (the error names a word's
+    /// position, never the word).
+    #[error("invalid recovery phrase: {0}")]
+    InvalidMnemonic(String),
+
+    /// Not a valid BIP-32 derivation path.
+    #[error("invalid derivation path: {0}")]
+    InvalidDerivationPath(String),
+
     /// No key could be derived from the seed.
     #[error("key derivation failed")]
     KeyDerivationFailed,
