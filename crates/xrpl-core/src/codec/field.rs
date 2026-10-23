@@ -1,6 +1,14 @@
 use crate::CoreError;
 
 /// Type codes from the XRPL serialization spec.
+///
+/// ```
+/// use xrpl_core::codec::field::TypeCode;
+///
+/// assert_eq!(TypeCode::AccountId as u16, 8);
+/// assert_eq!(TypeCode::from_u16(8), Some(TypeCode::AccountId));
+/// assert!(TypeCode::AccountId.is_vl_encoded());
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum TypeCode {
@@ -58,6 +66,13 @@ pub enum TypeCode {
 
 impl TypeCode {
     /// The type with this code, if known.
+    ///
+    /// ```
+    /// use xrpl_core::codec::field::TypeCode;
+    ///
+    /// assert_eq!(TypeCode::from_u16(6), Some(TypeCode::Amount));
+    /// assert_eq!(TypeCode::from_u16(13), None);
+    /// ```
     pub fn from_u16(v: u16) -> Option<Self> {
         match v {
             1 => Some(Self::UInt16),
@@ -89,12 +104,29 @@ impl TypeCode {
     }
 
     /// Returns true if this type uses variable-length prefix encoding.
+    ///
+    /// ```
+    /// use xrpl_core::codec::field::TypeCode;
+    ///
+    /// assert!(TypeCode::Blob.is_vl_encoded());
+    /// assert!(!TypeCode::UInt32.is_vl_encoded());
+    /// ```
     pub fn is_vl_encoded(self) -> bool {
         matches!(self, Self::Blob | Self::AccountId | Self::Vector256)
     }
 }
 
 /// A field identifier combining type code and field code.
+///
+/// ```
+/// use xrpl_core::codec::FieldId;
+///
+/// // TransactionType: type 1 (UInt16), field 2.
+/// let field = FieldId::new(1, 2);
+/// assert_eq!(field.encode(), [0x12]);
+/// assert_eq!(FieldId::decode(&[0x12])?, (field, 1));
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldId {
     /// The type's code.
@@ -105,6 +137,15 @@ pub struct FieldId {
 
 impl FieldId {
     /// A field ID from its type and field codes.
+    ///
+    /// ```
+    /// use xrpl_core::codec::{lookup_field_def, FieldId};
+    ///
+    /// let sequence = lookup_field_def("Sequence").expect("rippled defines Sequence");
+    /// let field = FieldId::new(sequence.type_code, sequence.field_code);
+    /// assert_eq!(field, FieldId::new(2, 4));
+    /// assert_eq!(field.encode(), [0x24]);
+    /// ```
     pub fn new(type_code: u16, field_code: u16) -> Self {
         Self {
             type_code,
@@ -113,11 +154,28 @@ impl FieldId {
     }
 
     /// Sort key for canonical field ordering: (type_code, field_code).
+    ///
+    /// ```
+    /// use xrpl_core::codec::FieldId;
+    ///
+    /// // Sequence (UInt32) is written before Fee (Amount).
+    /// let (sequence, fee) = (FieldId::new(2, 4), FieldId::new(6, 8));
+    /// assert_eq!(sequence.sort_key(), (2, 4));
+    /// assert!(sequence.sort_key() < fee.sort_key());
+    /// ```
     pub fn sort_key(&self) -> (u16, u16) {
         (self.type_code, self.field_code)
     }
 
     /// Encode field header to 1, 2, or 3 bytes per XRPL spec.
+    ///
+    /// ```
+    /// use xrpl_core::codec::FieldId;
+    ///
+    /// assert_eq!(FieldId::new(1, 2).encode(), [0x12]); // TransactionType
+    /// assert_eq!(FieldId::new(2, 27).encode(), [0x20, 27]); // LastLedgerSequence
+    /// assert_eq!(FieldId::new(16, 16).encode(), [0x00, 16, 16]); // TickSize
+    /// ```
     #[allow(
         clippy::cast_possible_truncation,
         reason = "only serialized fields are encoded; their codes are all below 256 (test every_code_fits_a_byte)"
@@ -146,6 +204,16 @@ impl FieldId {
     /// Only the shortest header for each code is read, as `rippled`'s
     /// `SerialIter::getFieldID` requires: a type or name byte in a longer
     /// header must be 16 or more ("uncommon type/name out of range").
+    ///
+    /// ```
+    /// use xrpl_core::codec::FieldId;
+    ///
+    /// // LastLedgerSequence's header, then the field's value.
+    /// assert_eq!(FieldId::decode(&[0x20, 0x1B, 0x00])?, (FieldId::new(2, 27), 2));
+    /// // Sequence (2, 4) fits one byte, so a two-byte header for it is refused.
+    /// assert!(FieldId::decode(&[0x20, 0x04]).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -201,10 +269,28 @@ impl FieldId {
 }
 
 /// The longest length a VL prefix can carry (`Serializer::addEncoded`).
+///
+/// ```
+/// use xrpl_core::codec::field::{decode_vl, encode_vl, MAX_VL_LENGTH};
+///
+/// let prefix = encode_vl(MAX_VL_LENGTH)?;
+/// assert_eq!(decode_vl(&prefix)?, (MAX_VL_LENGTH, 3));
+/// assert!(encode_vl(MAX_VL_LENGTH + 1).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const MAX_VL_LENGTH: usize = 918_744;
 
 /// The variable-length prefix for `len` bytes: 1, 2 or 3 bytes, as
 /// `rippled`'s `Serializer::addEncoded` writes it.
+///
+/// ```
+/// use xrpl_core::codec::encode_vl;
+///
+/// assert_eq!(encode_vl(33)?, [33]); // a public key's length
+/// assert_eq!(encode_vl(193)?, [193, 0]);
+/// assert_eq!(encode_vl(12_481)?, [241, 0, 0]);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -237,6 +323,15 @@ fn too_long(len: usize) -> CoreError {
 }
 
 /// Decode variable-length prefix. Returns (length, bytes_consumed).
+///
+/// ```
+/// use xrpl_core::codec::{decode_vl, encode_vl};
+///
+/// assert_eq!(decode_vl(&[33])?, (33, 1));
+/// assert_eq!(decode_vl(&encode_vl(500)?)?, (500, 2));
+/// assert!(decode_vl(&[0xFF]).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

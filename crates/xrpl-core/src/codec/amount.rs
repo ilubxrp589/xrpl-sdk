@@ -4,6 +4,14 @@ use crate::CoreError;
 
 /// Maximum valid XRP supply in drops: 100 billion XRP * 10^6 drops per XRP.
 /// rippled rejects any transaction with an XRP amount exceeding this value.
+///
+/// ```
+/// use xrpl_core::codec::amount::{encode_amount_xrp, MAX_XRP_DROPS};
+///
+/// assert_eq!(MAX_XRP_DROPS, 100_000_000_000 * 1_000_000);
+/// // The codec still writes more: ledger entries on mainnet hold such amounts.
+/// assert!(encode_amount_xrp(MAX_XRP_DROPS + 1).is_ok());
+/// ```
 pub const MAX_XRP_DROPS: u64 = 100_000_000_000_000_000;
 
 /// Encode XRP amount to 8-byte wire format.
@@ -13,6 +21,15 @@ pub const MAX_XRP_DROPS: u64 = 100_000_000_000_000_000;
 /// range: mainnet ledger objects exist whose XRP amounts exceed the
 /// nominal supply (e.g. an Offer asking 10× total supply). Supply-range
 /// VALIDATION is a transaction-preflight concern, not a codec concern.
+///
+/// ```
+/// use xrpl_core::codec::amount::encode_amount_xrp;
+///
+/// // 1 XRP: 1,000,000 drops (0x0F4240) with the "positive" bit.
+/// assert_eq!(encode_amount_xrp(1_000_000)?, [0x40, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x42, 0x40]);
+/// assert!(encode_amount_xrp(u64::MAX).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -24,6 +41,15 @@ pub fn encode_amount_xrp(drops: u64) -> Result<[u8; 8], CoreError> {
 
 /// Encode XRP with a sign, as `rippled` writes it: a negative amount has
 /// bit 62 clear. Zero is always written positive.
+///
+/// ```
+/// use xrpl_core::codec::amount::encode_xrp_signed;
+///
+/// assert_eq!(hex::encode_upper(encode_xrp_signed(false, 100)?), "4000000000000064");
+/// assert_eq!(hex::encode_upper(encode_xrp_signed(true, 100)?), "0000000000000064");
+/// assert_eq!(hex::encode_upper(encode_xrp_signed(true, 0)?), "4000000000000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -47,6 +73,15 @@ pub fn encode_xrp_signed(negative: bool, drops: u64) -> Result<[u8; 8], CoreErro
 /// Decode 8-byte wire format to XRP drops, refusing a negative amount
 /// (which [`Amount::Xrp`] cannot hold; [`decode_xrp_signed`] reads one).
 ///
+/// ```
+/// use xrpl_core::codec::amount::decode_amount_xrp;
+///
+/// assert_eq!(decode_amount_xrp(&0x4000_0000_0000_0064u64.to_be_bytes())?, 100);
+/// // -100 drops.
+/// assert!(decode_amount_xrp(&0x0000_0000_0000_0064u64.to_be_bytes()).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::InvalidAmount`] for a negative amount, or when
@@ -63,6 +98,15 @@ pub fn decode_amount_xrp(bytes: &[u8; 8]) -> Result<u64, CoreError> {
 /// Decode 8-byte XRP wire format as `rippled` reads it
 /// (`STAmount(SerialIter&)`): whether it is negative (bit 62 clear), and the
 /// drops. Negative zero is refused, as `rippled` refuses it.
+///
+/// ```
+/// use xrpl_core::codec::amount::decode_xrp_signed;
+///
+/// assert_eq!(decode_xrp_signed(&0x4000_0000_0000_0064u64.to_be_bytes())?, (false, 100));
+/// assert_eq!(decode_xrp_signed(&0x0000_0000_0000_0064u64.to_be_bytes())?, (true, 100));
+/// assert!(decode_xrp_signed(&[0; 8]).is_err()); // negative zero
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -92,6 +136,17 @@ pub fn decode_xrp_signed(bytes: &[u8; 8]) -> Result<(bool, u64), CoreError> {
 
 /// Encode IOU mantissa/exponent to 8-byte wire format.
 /// Bit 63 = 1 (IOU), Bit 62 = positive flag, Bits 54-61 = exponent + 97, Bits 0-53 = mantissa.
+///
+/// ```
+/// use xrpl_core::codec::amount::encode_iou_value;
+/// use xrpl_core::types::IouAmount;
+///
+/// // The bytes rippled 3.4.1 reads as 1 and as 100.
+/// assert_eq!(hex::encode_upper(encode_iou_value(&IouAmount::from_decimal("1")?)?), "D4838D7EA4C68000");
+/// assert_eq!(hex::encode_upper(encode_iou_value(&IouAmount::from_decimal("100")?)?), "D5038D7EA4C68000");
+/// assert_eq!(hex::encode_upper(encode_iou_value(&IouAmount::zero())?), "8000000000000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -132,6 +187,16 @@ pub fn encode_iou_value(iou: &IouAmount) -> Result<[u8; 8], CoreError> {
 /// Only `rippled`'s canonical form is accepted, as `rippled` accepts only it
 /// (`STAmount(SerialIter&)`): a mantissa of 10^15 to 10^16 - 1 with an
 /// exponent of -96 to 80, or zero written as exactly `0x8000000000000000`.
+///
+/// ```
+/// use xrpl_core::codec::amount::decode_iou_value;
+///
+/// let value = decode_iou_value(&0x9483_8D7E_A4C6_8000u64.to_be_bytes())?;
+/// assert_eq!(value.to_decimal(), "-1");
+/// // A mantissa of 10: not rippled's canonical form.
+/// assert!(decode_iou_value(&0x9400_0000_0000_000Au64.to_be_bytes()).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -179,6 +244,19 @@ pub fn decode_iou_value(bytes: &[u8; 8]) -> Result<IouAmount, CoreError> {
 /// issuer). A value not in canonical form, XRP's currency code or the zero
 /// account as issuer is refused, as `rippled` refuses to read them.
 ///
+/// ```
+/// use xrpl_core::codec::amount::encode_amount_iou;
+/// use xrpl_core::types::{AccountId, Currency, IouAmount};
+///
+/// let issuer = AccountId::from_address("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+/// let usd = Currency::from_ascii("USD")?;
+/// let bytes = encode_amount_iou(&IouAmount::from_decimal("1")?, &usd, &issuer)?;
+/// assert_eq!(hex::encode_upper(&bytes[..8]), "D4838D7EA4C68000");
+/// assert_eq!(bytes[8..28], usd.to_bytes());
+/// assert_eq!(&bytes[28..], issuer.as_bytes());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::InvalidAmount`] in those cases: the currency or issuer is
@@ -201,6 +279,22 @@ pub fn encode_amount_iou(
 }
 
 /// Decode 48 bytes to (IouAmount, Currency, AccountId).
+///
+/// ```
+/// use xrpl_core::codec::amount::decode_amount_iou;
+///
+/// // 100 USD issued by rHb9CJ…, as rippled 3.4.1 reads these bytes.
+/// let mut bytes = [0u8; 48];
+/// hex::decode_to_slice(
+///     "D5038D7EA4C680000000000000000000000000005553440000000000B5F762798A53D543A014CAF8B297CFF8F2F937E8",
+///     &mut bytes,
+/// )?;
+/// let (value, currency, issuer) = decode_amount_iou(&bytes)?;
+/// assert_eq!(value.to_decimal(), "100");
+/// assert_eq!(currency.to_string(), "USD");
+/// assert_eq!(issuer.to_address(), "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -230,6 +324,19 @@ pub fn decode_amount_iou(bytes: &[u8; 48]) -> Result<(IouAmount, Currency, Accou
 }
 
 /// Encode an Amount (XRP or IOU) to wire format bytes.
+///
+/// ```
+/// use xrpl_core::codec::amount::{decode_amount, encode_amount};
+/// use xrpl_core::types::Amount;
+///
+/// let xrp = encode_amount(&Amount::Xrp(1_000_000))?;
+/// assert_eq!(xrp.len(), 8);
+/// let usd = Amount::token("10.5", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+/// let bytes = encode_amount(&usd)?;
+/// assert_eq!(bytes.len(), 48);
+/// assert_eq!(decode_amount(&bytes)?, usd);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -264,6 +371,16 @@ pub fn encode_amount(amount: &Amount) -> Result<Vec<u8>, CoreError> {
 }
 
 /// Decode wire format bytes to Amount.
+///
+/// ```
+/// use xrpl_core::codec::amount::decode_amount;
+/// use xrpl_core::types::Amount;
+///
+/// assert_eq!(decode_amount(&0x4000_0000_000F_4240u64.to_be_bytes())?, Amount::Xrp(1_000_000));
+/// // 8 bytes of a token amount, without its currency and issuer.
+/// assert!(decode_amount(&0xD483_8D7E_A4C6_8000u64.to_be_bytes()).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

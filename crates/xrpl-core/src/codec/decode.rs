@@ -99,6 +99,20 @@ const MAX_DECODE_DEPTH: usize = 16;
 
 /// Decode a serialized transaction or ledger entry into `rippled`'s JSON.
 ///
+/// ```
+/// use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
+///
+/// let entry = serde_json::json!({"LedgerEntryType": "AccountRoot",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Balance": "148446663", "Flags": 0,
+///     "OwnerCount": 0, "Sequence": 336, "PreviousTxnLgrSeq": 14091160,
+///     "PreviousTxnID": "0D5FB50FA65C9FE1538FD7E398FFFE9D1908DFA4576D8D7A020040686F93C77D"});
+/// let bytes = encode_transaction_json(&entry)?;
+/// assert_eq!(decode_transaction_binary(&bytes)?, entry);
+/// // A truncated entry is refused.
+/// assert!(decode_transaction_binary(&bytes[..bytes.len() - 1]).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::UnknownField`] for a field code the definitions do not

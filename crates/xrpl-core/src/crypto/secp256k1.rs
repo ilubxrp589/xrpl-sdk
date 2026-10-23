@@ -24,6 +24,19 @@ fn first_valid(candidate: impl Fn(u32) -> Zeroizing<[u8; 32]>) -> Result<SecretK
 /// wiped on drop, and the 33-byte compressed public key. Every
 /// intermediate secret is wiped too.
 ///
+/// ```
+/// use xrpl_core::crypto::{secp256k1, Seed};
+///
+/// let seed = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+/// let (secret, public_key) = secp256k1::derive_keypair(seed.as_bytes())?;
+/// assert_eq!(secret.len(), 32);
+/// assert_eq!(
+///     hex::encode_upper(&public_key),
+///     "030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D435",
+/// );
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::KeyDerivationFailed`] if no valid secret key turns up in
@@ -53,6 +66,16 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), 
 }
 
 /// The 33-byte compressed public key of a 32-byte secp256k1 secret key.
+///
+/// ```
+/// use xrpl_core::crypto::{secp256k1, Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// assert_eq!(secp256k1::public_key(keys.private_key())?, keys.public_key());
+/// // Zero is not a secret key.
+/// assert!(secp256k1::public_key(&[0; 32]).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -96,6 +119,18 @@ fn prehash32(prehash: &[u8]) -> Result<&[u8; 32], CoreError> {
 /// (HMAC-SHA256), as in `rippled`, so the same key and hash always give the
 /// same signature. A hash that is not exactly 32 bytes is an error.
 ///
+/// ```
+/// use xrpl_core::crypto::{secp256k1, sha512_half, Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// let signature = secp256k1::sign(keys.private_key(), &sha512_half(b"message"))?;
+/// assert!(secp256k1::verify(keys.public_key(), &sha512_half(b"message"), &signature)?);
+/// // `Keypair::sign_message` hashes first, then signs the same way.
+/// assert_eq!(signature, keys.sign_message(b"message")?);
+/// assert!(secp256k1::sign(keys.private_key(), b"message").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::SigningFailed`] if `prehash` is not 32 bytes or the key is
@@ -120,6 +155,17 @@ pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
 /// be 33 bytes, compressed (0x02/0x03), the only form `rippled` takes; the
 /// signature must be low-S. A hash that is not 32 bytes, or a malformed key
 /// or signature, is an error; a signature that does not match is `Ok(false)`.
+///
+/// ```
+/// use xrpl_core::crypto::{secp256k1, sha512_half, Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// let signature = keys.sign_message(b"message")?;
+/// assert!(secp256k1::verify(keys.public_key(), &sha512_half(b"message"), &signature)?);
+/// assert!(!secp256k1::verify(keys.public_key(), &sha512_half(b"other"), &signature)?);
+/// assert!(secp256k1::verify(keys.public_key(), &sha512_half(b"message"), b"not DER").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

@@ -25,6 +25,15 @@ use zeroize::{Zeroize, Zeroizing};
 use alloc::{format, string::String, vec::Vec};
 
 /// The bit that marks a hardened step (`2^31`).
+///
+/// ```
+/// use xrpl_core::crypto::hd::{DerivationPath, HARDENED};
+///
+/// assert_eq!(HARDENED, 1 << 31);
+/// let path = DerivationPath::from_indices(&[44 | HARDENED, 144 | HARDENED, 7])?;
+/// assert_eq!(path.to_string(), "m/44'/144'/7");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const HARDENED: u32 = 0x8000_0000;
 
 /// A BIP-32 derivation path: the child index of each step, hardened ones
@@ -47,6 +56,15 @@ pub struct DerivationPath {
 impl DerivationPath {
     /// `m/44'/144'/{account}'/0/0`: XRP account `account` (0 for the first).
     ///
+    /// ```
+    /// use xrpl_core::crypto::hd::{DerivationPath, HARDENED};
+    ///
+    /// assert_eq!(DerivationPath::xrp_account(0)?, DerivationPath::default());
+    /// assert_eq!(DerivationPath::xrp_account(1)?.to_string(), "m/44'/144'/1'/0/0");
+    /// assert!(DerivationPath::xrp_account(HARDENED).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidDerivationPath`] if `account` is `2^31` or more.
@@ -62,6 +80,15 @@ impl DerivationPath {
     }
 
     /// A path from its child indices (hardened ones with [`HARDENED`] set).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::hd::{DerivationPath, HARDENED};
+    ///
+    /// let path = DerivationPath::from_indices(&[44 | HARDENED, 144 | HARDENED, HARDENED, 0, 0])?;
+    /// assert_eq!(path, DerivationPath::default());
+    /// assert!(DerivationPath::from_indices(&[0; 256]).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -80,12 +107,32 @@ impl DerivationPath {
     }
 
     /// The child index of each step.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::hd::{DerivationPath, HARDENED};
+    ///
+    /// let path: DerivationPath = "m/0'/1".parse()?;
+    /// assert_eq!(path.indices(), &[HARDENED, 1]);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn indices(&self) -> &[u32] {
         &self.indices
     }
 
     /// The secp256k1 key pair at this path below `seed` (16 to 64 bytes: a
     /// BIP-39 seed is 64, from [`Mnemonic::to_seed`](super::mnemonic::Mnemonic::to_seed)).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::hd::DerivationPath;
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// let phrase: Mnemonic =
+    ///     "assault rare scout seed design extend noble drink talk control guitar quote".parse()?;
+    /// let keypair = DerivationPath::default().derive(phrase.to_seed("").as_slice())?;
+    /// assert_eq!(keypair.classic_address(), "rJUr92pXcNtH6PtFfbRhHCo469XmPrbTJU");
+    /// assert!(DerivationPath::default().derive(&[0; 15]).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
