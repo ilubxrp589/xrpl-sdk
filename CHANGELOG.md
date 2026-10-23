@@ -59,6 +59,10 @@
   `XrplHttpClient::new` uses these defaults (two retries). An HTTP error
   status is now `ClientError::HttpStatus { status, retry_after, excerpt }`
   (it was `UnexpectedResponse` text), from the faucet too.
+- **WebSocket client settings.** `XrplWsClient::builder(url)` sets the
+  request and connect timeouts, the ping interval, the silence limit after
+  which a connection is replaced, the per-subscription event buffer and the
+  fee cap (they were fixed). `XrplWsClient::connect` keeps the defaults.
 - **Read any number of pages.** `Client::pages(request)` streams the
   pages of a paginated request one at a time with no page limit (an
   account's whole history, a list longer than 50 pages), each from the first

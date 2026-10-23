@@ -25,20 +25,153 @@ type WsStream = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::Tc
 
 pub use crate::stream::*;
 
-/// How long a request waits for its reply.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-/// How long opening a connection may take.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-/// How often the server is pinged.
-const PING_EVERY: Duration = Duration::from_secs(15);
-/// A connection that has said nothing for this long is taken as dead (a
-/// laptop that slept, a NAT that dropped it) and replaced.
-const SILENT_LIMIT: Duration = Duration::from_secs(45);
 /// The ping's request ID; its replies are not routed.
 const PING_ID: u64 = u64::MAX;
-/// Events buffered per receiver before the oldest are dropped (and reported
-/// as [`WsEvent::Missed`]).
-const EVENT_BUFFER: usize = 1024;
+
+/// The settings of an [`XrplWsClient`], from [`XrplWsClient::builder`].
+///
+/// ```no_run
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use std::time::Duration;
+/// use xrpl_client::XrplWsClient;
+///
+/// let client = XrplWsClient::builder("wss://xrplcluster.com")
+///     .request_timeout(Duration::from_secs(10))
+///     .ping_interval(Duration::from_secs(5))
+///     .connect()
+///     .await?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Clone)]
+pub struct WsClientBuilder {
+    url: String,
+    request_timeout: Duration,
+    connect_timeout: Duration,
+    ping_interval: Duration,
+    silence_limit: Duration,
+    event_buffer: usize,
+    max_fee_drops: u64,
+}
+
+impl std::fmt::Debug for WsClientBuilder {
+    /// The host only: a URL may carry a token.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WsClientBuilder")
+            .field("host", &host_of(&self.url))
+            .field("request_timeout", &self.request_timeout)
+            .field("connect_timeout", &self.connect_timeout)
+            .field("ping_interval", &self.ping_interval)
+            .field("silence_limit", &self.silence_limit)
+            .field("event_buffer", &self.event_buffer)
+            .field("max_fee_drops", &self.max_fee_drops)
+            .finish()
+    }
+}
+
+impl WsClientBuilder {
+    /// How long a request waits for its reply (default 30 s), connection
+    /// included while the client reconnects.
+    #[must_use]
+    pub fn request_timeout(mut self, timeout: Duration) -> Self {
+        self.request_timeout = timeout;
+        self
+    }
+
+    /// How long opening a connection may take (default 15 s).
+    #[must_use]
+    pub fn connect_timeout(mut self, timeout: Duration) -> Self {
+        self.connect_timeout = timeout;
+        self
+    }
+
+    /// How often the server is pinged (default 15 s).
+    #[must_use]
+    pub fn ping_interval(mut self, interval: Duration) -> Self {
+        self.ping_interval = interval;
+        self
+    }
+
+    /// How long a connection may say nothing before it is taken as dead (a
+    /// laptop that slept, a NAT that dropped it) and replaced (default 45 s;
+    /// make it longer than the ping interval).
+    #[must_use]
+    pub fn silence_limit(mut self, limit: Duration) -> Self {
+        self.silence_limit = limit;
+        self
+    }
+
+    /// Events buffered for each subscription before the oldest are dropped
+    /// and reported as [`WsEvent::Missed`] (default 1,024; at least 1).
+    #[must_use]
+    pub fn event_buffer(mut self, events: usize) -> Self {
+        self.event_buffer = events.max(1);
+        self
+    }
+
+    /// The most [`Client::autofill`] sets as a `Fee` (default
+    /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    #[must_use]
+    pub fn max_fee_drops(mut self, drops: u64) -> Self {
+        self.max_fee_drops = drops;
+        self
+    }
+
+    /// Connect, with automatic reconnection.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Timeout`] when the connection does not open within the
+    /// connect timeout, and [`ClientError::UnexpectedResponse`] when it is
+    /// refused.
+    pub async fn connect(self) -> Result<XrplWsClient, ClientError> {
+        let settings = Settings {
+            request_timeout: self.request_timeout,
+            connect_timeout: self.connect_timeout,
+            ping_interval: self.ping_interval,
+            silence_limit: self.silence_limit,
+        };
+        let stream = open(&self.url, settings.connect_timeout).await?;
+        let (event_tx, _) = broadcast::channel(self.event_buffer);
+        let (shutdown, shutdown_rx) = watch::channel(false);
+        let shared = Arc::new(Shared {
+            pending: Mutex::new(HashMap::new()),
+            event_tx,
+            ids: AtomicU64::new(1),
+            connected: AtomicBool::new(false),
+            write_tx: Mutex::new(None),
+            active_subs: Mutex::new(Vec::new()),
+            started: Instant::now(),
+            last_heard: AtomicU64::new(0),
+            host: host_of(&self.url),
+            shutdown: shutdown_rx,
+            settings,
+        });
+        tokio::spawn(supervise(shared.clone(), self.url.clone(), stream));
+        // The supervisor marks the connection up before it reads; wait for it.
+        let waited = Instant::now();
+        while !shared.connected.load(Ordering::Relaxed)
+            && waited.elapsed() < settings.connect_timeout
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        Ok(XrplWsClient {
+            shared,
+            url: self.url,
+            max_fee_drops: self.max_fee_drops,
+            shutdown,
+        })
+    }
+}
+
+/// The timing a connection runs with.
+#[derive(Debug, Clone, Copy)]
+struct Settings {
+    request_timeout: Duration,
+    connect_timeout: Duration,
+    ping_interval: Duration,
+    silence_limit: Duration,
+}
 
 /// What the client and its supervisor task share.
 struct Shared {
@@ -54,6 +187,7 @@ struct Shared {
     /// The server's host, for logs (never the URL: it may carry a token).
     host: String,
     shutdown: watch::Receiver<bool>,
+    settings: Settings,
 }
 
 impl Shared {
@@ -78,7 +212,7 @@ impl Shared {
     async fn request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
         let waited = Instant::now();
         while !self.connected.load(Ordering::Relaxed) {
-            if *self.shutdown.borrow() || waited.elapsed() >= REQUEST_TIMEOUT {
+            if *self.shutdown.borrow() || waited.elapsed() >= self.settings.request_timeout {
                 return Err(ClientError::Disconnected);
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -105,12 +239,12 @@ impl Shared {
             return Err(ClientError::Disconnected);
         }
 
-        match tokio::time::timeout(REQUEST_TIMEOUT, rx).await {
+        match tokio::time::timeout(self.settings.request_timeout, rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(ClientError::Disconnected),
             Err(_) => {
                 self.pending.lock().await.remove(&id);
-                Err(ClientError::Timeout(REQUEST_TIMEOUT))
+                Err(ClientError::Timeout(self.settings.request_timeout))
             }
         }
     }
@@ -137,14 +271,14 @@ impl Shared {
     }
 }
 
-async fn open(url: &str) -> Result<WsStream, ClientError> {
-    match tokio::time::timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(url)).await {
+async fn open(url: &str, timeout: Duration) -> Result<WsStream, ClientError> {
+    match tokio::time::timeout(timeout, tokio_tungstenite::connect_async(url)).await {
         Ok(Ok((stream, _))) => Ok(stream),
         Ok(Err(e)) => Err(ClientError::UnexpectedResponse(format!(
             "WebSocket connection to {} failed: {e}",
             host_of(url)
         ))),
-        Err(_) => Err(ClientError::Timeout(CONNECT_TIMEOUT)),
+        Err(_) => Err(ClientError::Timeout(timeout)),
     }
 }
 
@@ -175,7 +309,7 @@ async fn supervise(shared: Arc<Shared>, url: String, first: WsStream) {
             _ = tokio::time::sleep(delay) => {}
             _ = shutdown.changed() => return,
         }
-        match open(&url).await {
+        match open(&url, shared.settings.connect_timeout).await {
             Ok(ws) => stream = Some(ws),
             Err(e) => {
                 tracing::warn!(host = %shared.host, attempt, error = %e, "WebSocket reconnect failed")
@@ -200,7 +334,7 @@ async fn run_connection(
     if reconnect {
         tokio::spawn(resubscribe(shared.clone()));
     }
-    let mut ping = tokio::time::interval(PING_EVERY);
+    let mut ping = tokio::time::interval(shared.settings.ping_interval);
     ping.tick().await;
     loop {
         tokio::select! {
@@ -214,8 +348,9 @@ async fn run_connection(
                 }
             }
             _ = ping.tick() => {
-                if shared.silent_for() > SILENT_LIMIT {
-                    tracing::warn!(host = %shared.host, "WebSocket silent for {:?}; replacing it", SILENT_LIMIT);
+                let limit = shared.settings.silence_limit;
+                if shared.silent_for() > limit {
+                    tracing::warn!(host = %shared.host, "WebSocket silent for {:?}; replacing it", limit);
                     return;
                 }
                 let ping = json!({"command": "ping", "id": PING_ID}).to_string();
@@ -298,35 +433,24 @@ impl XrplWsClient {
     }
 
     /// Connect to an XRPL WebSocket endpoint (within 15 s) with automatic
-    /// reconnection.
+    /// reconnection and the default settings (see [`XrplWsClient::builder`]).
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
-        let stream = open(url).await?;
-        let (event_tx, _) = broadcast::channel(EVENT_BUFFER);
-        let (shutdown, shutdown_rx) = watch::channel(false);
-        let shared = Arc::new(Shared {
-            pending: Mutex::new(HashMap::new()),
-            event_tx,
-            ids: AtomicU64::new(1),
-            connected: AtomicBool::new(false),
-            write_tx: Mutex::new(None),
-            active_subs: Mutex::new(Vec::new()),
-            started: Instant::now(),
-            last_heard: AtomicU64::new(0),
-            host: host_of(url),
-            shutdown: shutdown_rx,
-        });
-        tokio::spawn(supervise(shared.clone(), url.to_string(), stream));
-        // The supervisor marks the connection up before it reads; wait for it.
-        let waited = Instant::now();
-        while !shared.connected.load(Ordering::Relaxed) && waited.elapsed() < CONNECT_TIMEOUT {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-        Ok(Self {
-            shared,
+        Self::builder(url).connect().await
+    }
+
+    /// Settings for a client of the server at `url`: request and connect
+    /// timeouts, the ping interval, the silence limit, the event buffer and
+    /// the fee cap.
+    pub fn builder(url: &str) -> WsClientBuilder {
+        WsClientBuilder {
             url: url.to_string(),
+            request_timeout: Duration::from_secs(30),
+            connect_timeout: Duration::from_secs(15),
+            ping_interval: Duration::from_secs(15),
+            silence_limit: Duration::from_secs(45),
+            event_buffer: 1024,
             max_fee_drops: crate::client::DEFAULT_MAX_FEE_DROPS,
-            shutdown,
-        })
+        }
     }
 
     /// Close the connection and stop reconnecting (the same as dropping the
@@ -652,6 +776,57 @@ mod tests {
         for _ in 0..3 {
             next(&mut all).await;
         }
+    }
+
+    /// The builder's request timeout applies: a server that never answers
+    /// is a Timeout of that length, not of the 30 s default.
+    #[tokio::test]
+    async fn the_request_timeout_is_the_one_set() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(tcp).await.unwrap();
+            while let Some(Ok(_)) = ws.next().await {}
+        });
+        let timeout = Duration::from_millis(300);
+        let ws = XrplWsClient::builder(&url)
+            .request_timeout(timeout)
+            .connect()
+            .await
+            .unwrap();
+        let started = Instant::now();
+        let err = ws.raw_request("fee", json!({})).await.unwrap_err();
+        assert!(
+            matches!(err, ClientError::Timeout(t) if t == timeout),
+            "{err:?}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(!format!("{:?}", XrplWsClient::builder("wss://u:tok@h.example/x")).contains("tok"));
+    }
+
+    /// A subscription read as a Stream.
+    #[tokio::test]
+    async fn a_subscription_is_a_stream() {
+        use futures::StreamExt;
+        let ledger = |n: u32| {
+            json!({"type": "ledgerClosed", "ledger_index": n, "ledger_hash": "AB",
+            "ledger_time": 1, "fee_base": 10, "reserve_base": 1, "reserve_inc": 1, "txn_count": 0})
+        };
+        let (url, _server) = server(vec![ledger(6), ledger(7)]).await;
+        let ws = XrplWsClient::connect(&url).await.unwrap();
+        let events: Vec<WsEvent> = tokio::time::timeout(
+            Duration::from_secs(5),
+            ws.subscribe_ledger()
+                .await
+                .unwrap()
+                .into_stream()
+                .take(2)
+                .collect(),
+        )
+        .await
+        .unwrap();
+        assert!(events.iter().all(|e| matches!(e, WsEvent::Ledger(_))));
     }
 
     /// Dropping the client closes the connection: the server sees it end.

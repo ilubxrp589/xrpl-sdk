@@ -180,7 +180,7 @@ pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use ws::{Subscription, XrplWsClient};
+pub use ws::{Subscription, WsClientBuilder, XrplWsClient};
 
 #[cfg(target_arch = "wasm32")]
 pub use ws_wasm::{Subscription, XrplWsClient};
