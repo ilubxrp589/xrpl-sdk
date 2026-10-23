@@ -46,21 +46,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     // 1. The pool: 40 XRP and 100 USD, 0.5% trading fee (500 / 100,000).
-    //    AMMCreate costs one owner reserve instead of the usual fee.
-    let state = client.request(&requests::ServerStateRequest {}).await?;
-    let reserve_inc = state
-        .state
-        .validated_ledger
-        .and_then(|l| l.reserve_inc)
-        .ok_or("no reserve")?;
-    let mut tx = AMMCreate::new(
+    //    AMMCreate costs one owner reserve instead of the usual fee;
+    //    autofill charges it.
+    let tx = AMMCreate::new(
         provider.classic_address(),
         Amount::Xrp(40_000_000),
         usd("100")?,
         500,
     )
     .to_json()?;
-    tx["Fee"] = json!(reserve_inc.to_string());
     send(&client, &provider, tx).await?;
 
     let (xrp, token) = (

@@ -57,14 +57,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
     let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
 
-    let mut tx = serde_json::json!({
-        "TransactionType": "Payment",
-        "Account": wallet.classic_address(),
-        "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-        "Amount": utils::xrp_to_drops("1.5")?.to_string()
-    });
+    let payment = models::Payment::new(
+        wallet.classic_address(),
+        "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        Amount::xrp(utils::xrp_to_drops("1.5")?)?,
+    );
 
-    let result = submit_transaction(&client, &mut tx, &wallet).await?;
+    // Fills in Fee, Sequence and LastLedgerSequence, signs, submits, and
+    // waits for the validated result.
+    let result = sign_and_submit(&client, &payment, &wallet).await?;
     for change in utils::get_balance_changes(result.meta.as_ref().unwrap())? {
         println!("{}: {:?}", change.account, change.balances);
     }
@@ -246,7 +247,9 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `halcyon-xrpl-sdk`
 
-- `Wallet` — generate, from_seed, seed, sign, sign_and_encode, sign_payment_channel_claim
+- `Wallet` — generate, from_seed, seed, `sign` (a typed transaction, a builder or JSON → signed
+  JSON, blob and hash), sign_and_encode, sign_payment_channel_claim
+- `sign_and_submit` — autofill, sign, submit and wait, for a typed transaction or JSON
 - Open an existing wallet from its backup: `Wallet::from_mnemonic` (BIP-39 phrase),
   `from_secret_numbers` (Xaman), `from_rfc1751` (`rippled`'s `master_key`)
 - `generate_faucet_wallet` — a funded Testnet / Devnet wallet in one call

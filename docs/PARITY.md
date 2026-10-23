@@ -165,9 +165,14 @@ refused without the sequence).
   data itself.
 - **Multi-signatures.** `sign_for` signatures match `rippled` 3.4.1's
   `sign_for` byte for byte.
+- **Verifying signatures.** `verify_transaction` accepts every signed
+  transaction in the test corpus: 179 single-signed and 2 multi-signed
+  mainnet transactions, and 79 that `rippled` 3.4.1 signed offline. Each of
+  them fails once its `Sequence` changes, and a multi-signed one fails with
+  its signers out of account order.
 - **Payment channel claims.** They match `rippled`'s `channel_authorize`
   byte for byte, and a claim made by the SDK was accepted on Testnet.
-- **Batch signatures.** All 6 Testnet batches with `BatchSigners` in the
+- **Batch signatures.** All 6 Devnet batches with `BatchSigners` in the
   recorded set, which `rippled` accepted, verify against the SDK's batch
   signing data (`rippled` 3.4.1's layout, which includes the outer account
   and sequence). A single changed byte makes all of them fail.

@@ -3,13 +3,29 @@ use xrpl_core::codec::encode_transaction_json;
 use xrpl_core::crypto::hd::DerivationPath;
 use xrpl_core::crypto::mnemonic::Mnemonic;
 use xrpl_core::crypto::{sign_transaction, verify_signing_data, Keypair, Seed};
+use xrpl_core::transaction::ToTxJson;
 use xrpl_core::types::AccountId;
+use xrpl_core::types::Hash256;
 use xrpl_core::CoreError;
 use zeroize::Zeroizing;
 
 /// The most signers a multi-signed transaction may carry (`rippled`'s
 /// `STTx::maxMultiSigners`).
 pub const MAX_MULTISIGNERS: usize = 32;
+
+/// A signed transaction: what [`Wallet::sign`] returns.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct SignedTransaction {
+    /// The signed transaction as JSON (`SigningPubKey` and `TxnSignature`
+    /// set).
+    pub tx_json: serde_json::Value,
+    /// The blob to submit, in upper-case hex.
+    pub tx_blob: String,
+    /// The transaction's ID: the hash it has on the ledger, known before it
+    /// is submitted (look it up with `tx` to learn its outcome).
+    pub hash: Hash256,
+}
 
 /// High-level wallet for XRPL transactions: a key pair, its address and,
 /// when it was made from one, its seed. `Debug` shows the address and key
@@ -243,6 +259,44 @@ impl Wallet {
         amount_drops: u64,
     ) -> Result<String, CoreError> {
         xrpl_core::crypto::sign_payment_channel_claim(channel_id, amount_drops, &self.keypair)
+    }
+
+    /// Sign `tx` as it is: a typed transaction
+    /// ([`models`](xrpl_core::transaction::models)), a builder (checked
+    /// first) or JSON. Fill in `Fee`, `Sequence` and `LastLedgerSequence`
+    /// before (`Client::autofill`), or use [`crate::sign_and_submit`], which
+    /// does it all. Returns the signed JSON, the blob to submit and the
+    /// transaction's ID.
+    ///
+    /// ```
+    /// use xrpl_sdk::{models, Amount, Wallet};
+    ///
+    /// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// let mut payment = models::Payment::new(
+    ///     wallet.classic_address(),
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// payment.common.fee = Some("12".into());
+    /// payment.common.sequence = Some(1);
+    /// let signed = wallet.sign(&payment)?;
+    /// assert_eq!(signed.hash, xrpl_sdk::hash_signed_tx_blob(&signed.tx_blob)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// A [`CoreError`] when the transaction does not encode (an unknown
+    /// field, a value that does not fit) or is multi-signed (`Signers` set:
+    /// see [`Wallet::sign_for_multisigning`]).
+    pub fn sign(&self, tx: &impl ToTxJson) -> Result<SignedTransaction, CoreError> {
+        let tx_json = sign_transaction(&tx.to_tx_json()?, &self.keypair)?;
+        let blob = encode_transaction_json(&tx_json, false)?;
+        Ok(SignedTransaction {
+            hash: xrpl_core::hashes::transaction_id(&blob),
+            tx_blob: hex::encode_upper(&blob),
+            tx_json,
+        })
     }
 
     /// Sign a transaction (JSON). Returns the signed tx JSON with
@@ -637,5 +691,53 @@ mod tests {
         assert_ne!(ed.classic_address(), sec.classic_address());
         // Ed25519 public key starts with 0xED
         assert!(ed.public_key_hex().starts_with("ED"));
+    }
+    /// `sign` takes a typed model, a builder or JSON and signs the same
+    /// transaction from each; the hash is the blob's ID.
+    #[test]
+    fn sign_takes_every_form_of_a_transaction() {
+        use xrpl_core::transaction::{builders, models};
+        use xrpl_core::types::Amount;
+        let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r").unwrap();
+        let destination = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+        let json = serde_json::json!({
+            "TransactionType": "Payment",
+            "Account": wallet.classic_address(),
+            "Destination": destination,
+            "Amount": "1000000",
+            "Fee": "12",
+            "Sequence": 1,
+        });
+        let mut model = models::Payment::new(
+            wallet.classic_address(),
+            destination,
+            Amount::xrp(1_000_000).unwrap(),
+        );
+        model.common.fee = Some("12".into());
+        model.common.sequence = Some(1);
+        let builder = builders::Payment::builder(wallet.classic_address())
+            .destination(destination)
+            .amount(serde_json::json!("1000000"))
+            .fee("12")
+            .sequence(1)
+            .build()
+            .unwrap();
+        let from_json = wallet.sign(&json).unwrap();
+        assert_eq!(wallet.sign(&model).unwrap(), from_json);
+        assert_eq!(wallet.sign(&builder).unwrap(), from_json);
+        assert_eq!(wallet.sign(&models::Tx::Payment(model)).unwrap(), from_json);
+        assert_eq!(from_json.tx_blob, wallet.sign_and_encode(&json).unwrap());
+        assert_eq!(
+            from_json.hash,
+            xrpl_core::hashes::hash_signed_tx_blob(&from_json.tx_blob).unwrap()
+        );
+        assert_eq!(
+            from_json.tx_json["TxnSignature"],
+            wallet.sign_transaction(&json).unwrap()["TxnSignature"]
+        );
+        // A multi-signed transaction is refused, as sign_transaction refuses it.
+        let mut multi = json.clone();
+        multi["Signers"] = serde_json::json!([{"Signer": {}}]);
+        assert!(wallet.sign(&multi).is_err());
     }
 }

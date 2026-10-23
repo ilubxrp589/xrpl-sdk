@@ -173,6 +173,18 @@ impl<C: Client> BlockingClient<C> {
         self.call(|c| c.autofill_for_multisigning(tx, signers))
     }
 
+    /// [`Client::autofill_batch`]: the inner-transaction part of
+    /// [`BlockingClient::autofill`] for a `Batch`.
+    pub fn autofill_batch(
+        &self,
+        tx: &mut Value,
+        outer: &str,
+        open_ledger_fee: Option<u64>,
+        outer_signers: u32,
+    ) -> Result<(), ClientError> {
+        self.call(|c| c.autofill_batch(tx, outer, open_ledger_fee, outer_signers))
+    }
+
     /// [`Client::validated_ledger_index`].
     pub fn validated_ledger_index(&self) -> Result<u32, ClientError> {
         self.call(|c| c.validated_ledger_index())
@@ -196,6 +208,166 @@ impl<C: Client> BlockingClient<C> {
     /// [`Client::submit_and_wait`]: submit, then wait for the final outcome.
     pub fn submit_and_wait(&self, tx_blob: &str) -> Result<TxResult, ClientError> {
         self.call(|c| c.submit_and_wait(tx_blob))
+    }
+
+    /// [`Client::account_channels`] (one page).
+    pub fn account_channels(
+        &self,
+        account: &str,
+        destination_account: Option<&str>,
+        ledger: &LedgerIndex,
+    ) -> Result<AccountChannelsResult, ClientError> {
+        self.call(|c| c.account_channels(account, destination_account, ledger))
+    }
+
+    /// [`Client::account_currencies`].
+    pub fn account_currencies(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<AccountCurrenciesResult, ClientError> {
+        self.call(|c| c.account_currencies(account, ledger))
+    }
+
+    /// [`Client::account_lines_all`].
+    pub fn account_lines_all(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<Vec<TrustLine>, ClientError> {
+        self.call(|c| c.account_lines_all(account, ledger))
+    }
+
+    /// [`Client::account_nfts`] (one page).
+    pub fn account_nfts(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<AccountNftsResult, ClientError> {
+        self.call(|c| c.account_nfts(account, ledger))
+    }
+
+    /// [`Client::account_nfts_all`].
+    pub fn account_nfts_all(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<Vec<NFToken>, ClientError> {
+        self.call(|c| c.account_nfts_all(account, ledger))
+    }
+
+    /// [`Client::account_objects`] (one page).
+    pub fn account_objects(
+        &self,
+        account: &str,
+        object_type: Option<&str>,
+        ledger: &LedgerIndex,
+        limit: Option<u32>,
+        marker: Option<Value>,
+    ) -> Result<AccountObjectsResult, ClientError> {
+        self.call(|c| c.account_objects(account, object_type, ledger, limit, marker))
+    }
+
+    /// [`Client::account_objects_all`].
+    pub fn account_objects_all(
+        &self,
+        account: &str,
+        object_type: Option<&str>,
+        ledger: &LedgerIndex,
+    ) -> Result<Vec<LedgerObject>, ClientError> {
+        self.call(|c| c.account_objects_all(account, object_type, ledger))
+    }
+
+    /// [`Client::account_offers`] (one page).
+    pub fn account_offers(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<AccountOffersResult, ClientError> {
+        self.call(|c| c.account_offers(account, ledger))
+    }
+
+    /// [`Client::account_offers_all`].
+    pub fn account_offers_all(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<Vec<AccountOffer>, ClientError> {
+        self.call(|c| c.account_offers_all(account, ledger))
+    }
+
+    /// [`Client::account_tx`] (one page).
+    pub fn account_tx(
+        &self,
+        account: &str,
+        ledger_index_min: Option<i32>,
+        ledger_index_max: Option<i32>,
+        limit: Option<u32>,
+        marker: Option<Value>,
+        forward: Option<bool>,
+    ) -> Result<AccountTxResult, ClientError> {
+        self.call(|c| {
+            c.account_tx(
+                account,
+                ledger_index_min,
+                ledger_index_max,
+                limit,
+                marker,
+                forward,
+            )
+        })
+    }
+
+    /// [`Client::account_tx_all`].
+    pub fn account_tx_all(
+        &self,
+        account: &str,
+        ledger_index_min: Option<i32>,
+        ledger_index_max: Option<i32>,
+    ) -> Result<Vec<AccountTxEntry>, ClientError> {
+        self.call(|c| c.account_tx_all(account, ledger_index_min, ledger_index_max))
+    }
+
+    /// [`Client::amm_info`].
+    pub fn amm_info(&self, asset: &Value, asset2: &Value) -> Result<AmmInfoResult, ClientError> {
+        self.call(|c| c.amm_info(asset, asset2))
+    }
+
+    /// [`Client::balances`].
+    pub fn balances(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<Vec<xrpl_core::types::Amount>, ClientError> {
+        self.call(|c| c.balances(account, ledger))
+    }
+
+    /// [`Client::book_offers`] (one page).
+    pub fn book_offers(
+        &self,
+        taker_pays: &Value,
+        taker_gets: &Value,
+    ) -> Result<BookOffersResult, ClientError> {
+        self.call(|c| c.book_offers(taker_pays, taker_gets))
+    }
+
+    /// [`Client::gateway_balances`].
+    pub fn gateway_balances(
+        &self,
+        account: &str,
+        hotwallet: Option<Vec<&str>>,
+        ledger: &LedgerIndex,
+    ) -> Result<GatewayBalancesResult, ClientError> {
+        self.call(|c| c.gateway_balances(account, hotwallet, ledger))
+    }
+
+    /// [`Client::ledger_entry`].
+    pub fn ledger_entry(
+        &self,
+        index: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<LedgerEntryResult, ClientError> {
+        self.call(|c| c.ledger_entry(index, ledger))
     }
 }
 
@@ -246,5 +418,31 @@ mod tests {
         ));
         // The runtime cannot be dropped inside another one either.
         std::thread::spawn(move || drop(client)).join().unwrap();
+    }
+    /// The module's promise, "every `Client` method as a plain call", is
+    /// kept: each async method of the trait has a blocking one here.
+    #[test]
+    fn every_client_method_has_a_blocking_one() {
+        let client = include_str!("client.rs");
+        let start = client.find("pub trait Client {").unwrap();
+        let end = start + client[start..].find("\n}\n").unwrap();
+        let blocking = include_str!("blocking.rs");
+        let mut checked = 0;
+        for line in client[start..end].lines() {
+            let Some(rest) = line.strip_prefix("    async fn ") else {
+                continue;
+            };
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            assert!(
+                blocking.contains(&format!("pub fn {name}("))
+                    || blocking.contains(&format!("pub fn {name}<")),
+                "BlockingClient has no {name}"
+            );
+            checked += 1;
+        }
+        assert!(checked > 30, "{checked}");
     }
 }

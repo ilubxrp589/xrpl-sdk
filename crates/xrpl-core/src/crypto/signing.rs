@@ -375,7 +375,6 @@ pub fn sign_transaction(
     tx_json: &serde_json::Value,
     keypair: &Keypair,
 ) -> Result<serde_json::Value, CoreError> {
-    use crate::codec::encode_transaction_json;
     let mut tx = tx_json.clone();
     let obj = tx
         .as_object_mut()
@@ -402,14 +401,7 @@ pub fn sign_transaction(
     // Remove TxnSignature for signing
     obj.remove("TxnSignature");
 
-    // Serialize for signing
-    let encoded = encode_transaction_json(&tx, true)?;
-
-    // Prepend signing prefix "STX\0"
-    let mut payload = vec![0x53, 0x54, 0x58, 0x00];
-    payload.extend_from_slice(&encoded);
-
-    let signature = keypair.sign_signing_data(&payload)?;
+    let signature = keypair.sign_signing_data(&single_signing_data(&tx)?)?;
 
     // Set TxnSignature — tx was cloned from a known object, so this always succeeds
     let obj = tx
@@ -421,6 +413,109 @@ pub fn sign_transaction(
     );
 
     Ok(tx)
+}
+
+/// What a single signature covers: the prefix `"STX\0"` and the
+/// transaction's signing fields (`rippled`'s `HashPrefix::txSign`).
+#[cfg(feature = "std")]
+fn single_signing_data(tx: &serde_json::Value) -> Result<Vec<u8>, CoreError> {
+    let mut data = vec![0x53, 0x54, 0x58, 0x00];
+    data.extend_from_slice(&crate::codec::encode_transaction_json(tx, true)?);
+    Ok(data)
+}
+
+/// Whether a signed transaction's signatures verify, as `rippled` checks
+/// them (`STTx::checkSign`): the `TxnSignature` against the `SigningPubKey`
+/// over the transaction's signing data; or, for a multi-signed transaction
+/// (empty `SigningPubKey`, `Signers` set), each signer's signature over its
+/// multi-signing data, with the signers in strictly ascending account-ID
+/// order (a repeat or the wrong order is `false`, as `rippled` refuses it). A
+/// `Batch`'s `BatchSigners` are checked too
+/// ([`verify_batch_signers`](crate::transaction::batch::verify_batch_signers)).
+///
+/// This checks the cryptography only. Whether the key may sign for the
+/// account (its master key, its regular key, or its signer list with enough
+/// weight) is the ledger's to say.
+///
+/// ```
+/// use xrpl_core::crypto::{sign_transaction, verify_transaction, Keypair, Seed};
+/// use serde_json::json;
+///
+/// let keypair = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// let tx = json!({"TransactionType": "Payment", "Account": keypair.classic_address(),
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "1000000",
+///     "Fee": "12", "Sequence": 1});
+/// let mut signed = sign_transaction(&tx, &keypair)?;
+/// assert!(verify_transaction(&signed)?);
+/// signed["Amount"] = json!("2000000");
+/// assert!(!verify_transaction(&signed)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
+/// # Errors
+///
+/// [`CoreError::ValidationError`] for a transaction with no signature (no
+/// `TxnSignature` and no `Signers`) or with both, [`CoreError::InvalidHex`]
+/// for a key or signature that is not hex, and a codec error when the
+/// transaction does not encode.
+#[cfg(feature = "std")]
+pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
+    use crate::codec::encode_for_multisigning;
+    let invalid = |m: &str| CoreError::ValidationError(m.to_string());
+    fn text<'a>(v: Option<&'a serde_json::Value>, name: &str) -> Result<&'a str, CoreError> {
+        v.and_then(serde_json::Value::as_str)
+            .ok_or_else(|| CoreError::ValidationError(format!("{name} is missing or not a string")))
+    }
+    let hex = |s: &str| hex::decode(s).map_err(|e| CoreError::InvalidHex(e.to_string()));
+    let signers = tx
+        .get("Signers")
+        .and_then(serde_json::Value::as_array)
+        .filter(|s| !s.is_empty());
+    let single = tx.get("TxnSignature").is_some();
+    let signed = match (single, signers) {
+        (true, Some(_)) => {
+            return Err(invalid(
+                "the transaction has both a TxnSignature and Signers",
+            ))
+        }
+        (false, None) => return Err(invalid("the transaction is not signed")),
+        (true, None) => {
+            let key = hex(text(tx.get("SigningPubKey"), "SigningPubKey")?)?;
+            let signature = hex(text(tx.get("TxnSignature"), "TxnSignature")?)?;
+            if key.is_empty() {
+                return Ok(false);
+            }
+            verify_signing_data(&key, &single_signing_data(tx)?, &signature)?
+        }
+        (false, Some(signers)) => {
+            if !text(tx.get("SigningPubKey"), "SigningPubKey")?.is_empty() {
+                return Ok(false);
+            }
+            let mut previous: Option<[u8; 20]> = None;
+            let mut all = true;
+            for entry in signers {
+                let signer = entry.get("Signer").unwrap_or(entry);
+                let account = text(signer.get("Account"), "a signer's Account")?;
+                let id = crate::address::decode_account_id(account)?;
+                if previous.is_some_and(|p| p >= id) {
+                    return Ok(false);
+                }
+                previous = Some(id);
+                let key = hex(text(
+                    signer.get("SigningPubKey"),
+                    "a signer's SigningPubKey",
+                )?)?;
+                let signature = hex(text(signer.get("TxnSignature"), "a signer's TxnSignature")?)?;
+                let data = encode_for_multisigning(tx, account)?;
+                all &= verify_signing_data(&key, &data, &signature)?;
+            }
+            all
+        }
+    };
+    if signed && tx.get("BatchSigners").is_some() {
+        return crate::transaction::batch::verify_batch_signers(tx);
+    }
+    Ok(signed)
 }
 
 #[cfg(test)]

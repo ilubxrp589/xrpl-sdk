@@ -841,6 +841,66 @@ pub trait Client {
             .ok_or_else(|| ClientError::UnexpectedResponse("ledger has no ledger_index".into()))
     }
 
+    /// Everything `account` holds, as typed amounts read from one ledger:
+    /// its XRP, the balance of each trust line (with the peer as the issuer;
+    /// negative when the account owes it) and each MPT it holds. The first
+    /// answer fixes the ledger the others are read from, so the list is
+    /// consistent. Like xrpl.js's `getBalances`, plus MPTs.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::error::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// for amount in client.balances("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", &LedgerIndex::Validated).await? {
+    ///     println!("{amount}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
+    /// not exist, and a [`ClientError`] when a request fails or an answer
+    /// holds an amount that does not parse.
+    async fn balances(
+        &self,
+        account: &str,
+        ledger: &LedgerIndex,
+    ) -> Result<Vec<xrpl_core::types::Amount>, ClientError> {
+        use xrpl_core::types::Amount;
+        let info = self.account_info(account, ledger).await?;
+        let pinned = info
+            .ledger_index
+            .or(info.ledger_current_index)
+            .map_or(*ledger, LedgerIndex::Index);
+        let drops = info.account_data.balance.parse::<u64>().map_err(|_| {
+            ClientError::UnexpectedResponse(format!(
+                "Balance {:?} is not a whole number of drops",
+                info.account_data.balance
+            ))
+        })?;
+        let (lines, objects) = futures::future::try_join(
+            self.account_lines_all(account, &pinned),
+            self.account_objects_all(account, Some("mptoken"), &pinned),
+        )
+        .await?;
+        let mut amounts = vec![Amount::xrp(drops)?];
+        for line in lines {
+            amounts.push(Amount::token(&line.balance, &line.currency, &line.account)?);
+        }
+        for object in objects {
+            if let LedgerObject::MPToken(token) = object {
+                let raw = token.mpt_amount.as_deref().unwrap_or("0");
+                let value = raw.parse::<i64>().map_err(|_| {
+                    ClientError::UnexpectedResponse(format!("MPTAmount {raw:?} is not a number"))
+                })?;
+                amounts.push(Amount::mpt(value, &token.mp_token_issuance_id.to_string())?);
+            }
+        }
+        Ok(amounts)
+    }
+
     /// All trust lines of an account, following the marker.
     async fn account_lines_all(
         &self,
@@ -1597,6 +1657,36 @@ mod tests {
             Ok(())
         ));
         assert!(fee("lots").autofill(&mut t).await.is_err());
+    }
+
+    /// `balances` reads XRP, trust lines and MPTs from the one ledger the
+    /// first answer came from.
+    #[tokio::test]
+    async fn balances_are_read_from_one_ledger() {
+        let issuance = "000004C463C52827307480341125DA0577DEFC38405B0E3E";
+        let mock = Mock::default()
+            .reply("account_info", json!({"account_data": {"Account": "rA", "Balance": "25000000", "Flags": 0, "OwnerCount": 2, "Sequence": 5}, "ledger_index": 100, "validated": true}))
+            .reply("account_lines", json!({"account": "rA", "lines": [
+                {"account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "balance": "-12.5", "currency": "USD", "limit": "0", "limit_peer": "100"}]}))
+            .reply("account_objects", json!({"account": "rA", "account_objects": [
+                {"LedgerEntryType": "MPToken", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "MPTokenIssuanceID": issuance, "MPTAmount": "750", "Flags": 0, "OwnerNode": "0", "PreviousTxnID": "0000000000000000000000000000000000000000000000000000000000000000", "PreviousTxnLgrSeq": 1, "index": "0000000000000000000000000000000000000000000000000000000000000000"}]}));
+        let amounts = mock.balances("rA", &LedgerIndex::Validated).await.unwrap();
+        assert_eq!(
+            amounts,
+            vec![
+                xrpl_core::types::Amount::xrp(25_000_000).unwrap(),
+                xrpl_core::types::Amount::token(
+                    "-12.5",
+                    "USD",
+                    "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"
+                )
+                .unwrap(),
+                xrpl_core::types::Amount::mpt(750, issuance).unwrap(),
+            ]
+        );
+        for (method, params) in mock.calls().iter().skip(1) {
+            assert_eq!(params["ledger_index"], 100, "{method}");
+        }
     }
 
     /// The fee follows rippled 3.4.1's price for each type: one owner

@@ -530,7 +530,8 @@ pub use xrpl_core::address::KeyType;
 pub use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
 pub use xrpl_core::crypto::{hd::DerivationPath, mnemonic::Mnemonic};
 pub use xrpl_core::crypto::{
-    sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, Keypair, Seed,
+    sign_payment_channel_claim, sign_transaction, verify_payment_channel_claim, verify_transaction,
+    Keypair, Seed,
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::batch;
@@ -554,7 +555,8 @@ pub use xrpl_client::XrplWsClient;
 #[cfg(not(target_arch = "wasm32"))]
 pub use xrpl_client::ws::{LedgerEvent, Subscription, TransactionEvent, WsEvent};
 
-pub use wallet::Wallet;
+pub use wallet::{SignedTransaction, Wallet};
+pub use xrpl_core::transaction::ToTxJson;
 
 /// Generate a new wallet (Ed25519) and fund it with test XRP from `network`'s
 /// faucet; returns once a validated ledger shows the account. Only the
@@ -563,6 +565,45 @@ pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, Cl
     let wallet = Wallet::generate();
     faucet::fund_and_wait(network, wallet.classic_address()).await?;
     Ok(wallet)
+}
+
+/// Autofill a copy of `tx` (a typed transaction, a builder or JSON), sign it
+/// with `wallet`, submit it and wait for the final outcome: `Ok` only for a
+/// transaction validated with `tesSUCCESS`; every other ending is an error
+/// (see [`Client::submit_and_wait`]: on [`ClientError::OutcomeUnknown`] look
+/// the transaction up by its hash before sending it again).
+///
+/// ```no_run
+/// use xrpl_sdk::*;
+///
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
+/// let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
+/// let payment = models::Payment::new(
+///     wallet.classic_address(),
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_500_000)?,
+/// );
+/// let result = sign_and_submit(&client, &payment, &wallet).await?;
+/// println!("validated in ledger {:?}", result.ledger_index);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Errors
+///
+/// [`ClientError`]: the transaction could not be filled in, signed or
+/// encoded, the fee is above the client's cap, or it did not end validated
+/// with `tesSUCCESS`.
+pub async fn sign_and_submit(
+    client: &impl Client,
+    tx: &impl ToTxJson,
+    wallet: &Wallet,
+) -> Result<TxResult, ClientError> {
+    let mut json = tx.to_tx_json()?;
+    client.autofill(&mut json).await?;
+    let signed = wallet.sign(&json)?;
+    client.submit_and_wait(&signed.tx_blob).await
 }
 
 /// Autofill a transaction, sign it, and return the hex-encoded blob.

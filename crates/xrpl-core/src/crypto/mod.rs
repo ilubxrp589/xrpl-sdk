@@ -33,9 +33,9 @@ mod wordlists;
 pub use crate::address::KeyType;
 #[cfg(feature = "std")]
 pub use channel::{sign_payment_channel_claim, verify_payment_channel_claim};
-#[cfg(feature = "std")]
-pub use signing::sign_transaction;
 pub use signing::{sha512_half, verify_signing_data, Keypair, Seed};
+#[cfg(feature = "std")]
+pub use signing::{sign_transaction, verify_transaction};
 
 use sha2::{Digest, Sha512};
 use zeroize::{Zeroize, Zeroizing};

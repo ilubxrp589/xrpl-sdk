@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Fixed
+- docs/PARITY.md said the 6 recorded batches with `BatchSigners` were on
+  Testnet; they are on Devnet.
+- **`BlockingClient` has every `Client` method**, as its documentation
+  said: the 18 it lacked (`account_tx`, `account_objects`, `book_offers`,
+  `amm_info`, `ledger_entry`, the `_all` variants, …) are added, and a test
+  keeps the two in step.
 - **`autofill` prices each transaction type as `rippled` does.** It charged
   every type one base fee (the open-ledger fee), so an `AccountDelete` or
   `AMMCreate`, which cost one owner reserve (0.2 XRP on mainnet), was
@@ -24,6 +30,22 @@
   CI job runs the client's wasm tests in Node.js to keep it so.
 
 ### Added
+- **Sign typed transactions.** `Wallet::sign(&tx)` takes a typed model
+  (`models::Payment`, …), a `models::Tx`, a builder (its `validate` runs
+  first) or JSON, and returns a `SignedTransaction`: the signed JSON, the
+  blob and the transaction's ID (`hash`), as xrpl.js's `wallet.sign` does.
+  `sign_and_submit(&client, &tx, &wallet)` autofills a copy, signs, submits
+  and waits for the final outcome. The forms are one trait,
+  `transaction::ToTxJson`. The README's quick start and the
+  `testnet_quickstart` example now use a typed `Payment`.
+- `verify_transaction(&tx)`: whether a signed transaction's signatures
+  verify as `rippled` checks them: the single signature, or each
+  multi-signer's (in account order), and a `Batch`'s `BatchSigners`. Every
+  signed mainnet transaction in the test corpus (179 single, 2 multi-signed)
+  and every one `rippled` signed offline (79) verifies; none does with a
+  changed field.
+- `Client::balances(account, ledger)`: an account's XRP, trust-line
+  balances and MPTs as typed `Amount`s, all read from one ledger.
 - `transaction::cost::transaction_cost`: a transaction's base cost (base
   fees and owner reserves) as `rippled` 3.4.1's `calculateBaseFee` computes
   it, for pricing a transaction offline.
