@@ -36,9 +36,17 @@ pub struct XrplWsClient {
     /// Kept alive to signal reconnection loop (used by spawned tasks, not directly by self).
     #[allow(dead_code)]
     reconnect_notify: Arc<Notify>,
+    max_fee_drops: u64,
 }
 
 impl XrplWsClient {
+    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
+        self.max_fee_drops = drops;
+        self
+    }
+
     /// Connect to an XRPL WebSocket endpoint with automatic reconnection.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
         let (ws_stream, _) = tokio_tungstenite::connect_async(url)
@@ -97,6 +105,7 @@ impl XrplWsClient {
             active_subs: active_subs.clone(),
             connected: connected.clone(),
             reconnect_notify: reconnect_notify.clone(),
+            max_fee_drops: crate::client::DEFAULT_MAX_FEE_DROPS,
         };
 
         // Spawn reconnection loop
@@ -256,24 +265,7 @@ impl XrplWsClient {
                 }
                 let mut map = pending.lock().await;
                 if let Some(sender) = map.remove(&id) {
-                    let result = if let Some(result) = value.get("result") {
-                        Ok(result.clone())
-                    } else if value.get("error").is_some() {
-                        let code = value
-                            .get("error")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown")
-                            .to_string();
-                        let message = value
-                            .get("error_message")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        Err(ClientError::RpcError { code, message })
-                    } else {
-                        Ok(value.clone())
-                    };
-                    let _ = sender.send(result);
+                    let _ = sender.send(crate::client::ws_response(&value));
                 }
             } else if let Some(evt) = WsEvent::from_message(value) {
                 let _ = event_tx.send(evt);
@@ -414,6 +406,10 @@ impl XrplWsClient {
 }
 
 impl Client for XrplWsClient {
+    fn max_fee_drops(&self) -> u64 {
+        self.max_fee_drops
+    }
+
     async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
         let mut wait_iters = 0u32;
         while !self.connected.load(Ordering::Relaxed) {

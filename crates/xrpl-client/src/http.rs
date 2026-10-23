@@ -11,6 +11,7 @@ use std::time::Duration;
 pub struct XrplHttpClient {
     base_url: String,
     inner: reqwest::Client,
+    max_fee_drops: u64,
 }
 
 impl XrplHttpClient {
@@ -28,11 +29,23 @@ impl XrplHttpClient {
         Ok(Self {
             base_url: url.trim_end_matches('/').to_string(),
             inner,
+            max_fee_drops: crate::client::DEFAULT_MAX_FEE_DROPS,
         })
+    }
+
+    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
+        self.max_fee_drops = drops;
+        self
     }
 }
 
 impl Client for XrplHttpClient {
+    fn max_fee_drops(&self) -> u64 {
+        self.max_fee_drops
+    }
+
     async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
         tracing::debug!(method = method, url = %self.base_url, "sending RPC request");
 
@@ -60,24 +73,8 @@ impl Client for XrplHttpClient {
             .get("result")
             .ok_or_else(|| ClientError::UnexpectedResponse("missing 'result' field".into()))?;
 
-        // Check for RPC error
-        if let Some(status_str) = result.get("status").and_then(|s| s.as_str()) {
-            if status_str == "error" {
-                let error = result
-                    .get("error")
-                    .and_then(|e| e.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                let message = result
-                    .get("error_message")
-                    .and_then(|e| e.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                return Err(ClientError::RpcError {
-                    code: error,
-                    message,
-                });
-            }
+        if result.get("status").and_then(Value::as_str) == Some("error") {
+            return Err(crate::client::rpc_error(result));
         }
 
         tracing::debug!(method = method, "RPC request completed");

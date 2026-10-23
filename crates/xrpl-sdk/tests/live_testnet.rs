@@ -60,8 +60,7 @@ async fn submit(client: &XrplHttpClient, wallet: &Wallet, mut tx: Value) -> Opti
     client.autofill(&mut tx).await.unwrap();
     let blob = wallet.sign_and_encode(&tx).unwrap();
     let our_hash = hash_signed_tx_blob(&blob).unwrap().to_string();
-    let last = tx["LastLedgerSequence"].as_u64().unwrap() as u32;
-    let result = match client.submit_and_wait(&blob, last).await {
+    let result = match client.submit_and_wait(&blob).await {
         Ok(r) => r,
         Err(ClientError::TransactionFailed { engine_result, .. })
             if engine_result == "temDISABLED" =>
@@ -103,8 +102,7 @@ async fn submit_batch(
     }
     let ids = batch::inner_transaction_ids(batch_tx).unwrap();
     let blob = wallet.sign_and_encode(batch_tx).unwrap();
-    let last = batch_tx["LastLedgerSequence"].as_u64().unwrap() as u32;
-    match client.submit_and_wait(&blob, last).await {
+    match client.submit_and_wait(&blob).await {
         Ok(r) => assert_eq!(r.meta.unwrap()["TransactionResult"], "tesSUCCESS", "Batch"),
         Err(ClientError::TransactionFailed { engine_result, .. })
             if engine_result == "temDISABLED" =>

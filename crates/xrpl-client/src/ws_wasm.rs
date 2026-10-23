@@ -21,6 +21,7 @@ pub struct XrplWsClient {
     url: String,
     connected: Arc<AtomicBool>,
     active_subs: Arc<Mutex<Vec<Value>>>,
+    max_fee_drops: u64,
     // Event closures stored to prevent GC
     _on_message: Closure<dyn FnMut(MessageEvent)>,
     _on_error: Closure<dyn FnMut(ErrorEvent)>,
@@ -28,6 +29,13 @@ pub struct XrplWsClient {
 }
 
 impl XrplWsClient {
+    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
+        self.max_fee_drops = drops;
+        self
+    }
+
     /// Connect to an XRPL WebSocket endpoint.
     /// Uses the browser's native WebSocket API.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
@@ -96,18 +104,7 @@ impl XrplWsClient {
                     return;
                 };
                 if let Some(sender) = map.remove(&id) {
-                    let result = if let Some(result) = value.get("result") {
-                        Ok(result.clone())
-                    } else if value.get("error").is_some() {
-                        let text =
-                            |k: &str| value.get(k).and_then(Value::as_str).map(str::to_string);
-                        let code = text("error").unwrap_or_else(|| "unknown".to_string());
-                        let message = text("error_message").unwrap_or_default();
-                        Err(ClientError::RpcError { code, message })
-                    } else {
-                        Ok(value.clone())
-                    };
-                    let _ = sender.send(result);
+                    let _ = sender.send(crate::client::ws_response(&value));
                 }
             }
         }) as Box<dyn FnMut(MessageEvent)>);
@@ -137,6 +134,7 @@ impl XrplWsClient {
             url: url.to_string(),
             connected,
             active_subs,
+            max_fee_drops: crate::client::DEFAULT_MAX_FEE_DROPS,
             _on_message: on_message,
             _on_error: on_error,
             _on_close: on_close,
@@ -197,6 +195,10 @@ impl XrplWsClient {
 }
 
 impl Client for XrplWsClient {
+    fn max_fee_drops(&self) -> u64 {
+        self.max_fee_drops
+    }
+
     async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
         if !self.connected.load(Ordering::Relaxed) {
             return Err(ClientError::Disconnected);

@@ -142,6 +142,20 @@ impl<C: Client> BlockingClient<C> {
         self.run(|c| c.autofill(tx))
     }
 
+    /// [`Client::autofill_for_multisigning`].
+    pub fn autofill_for_multisigning(
+        &self,
+        tx: &mut Value,
+        signers: u32,
+    ) -> Result<(), ClientError> {
+        self.run(|c| c.autofill_for_multisigning(tx, signers))
+    }
+
+    /// [`Client::validated_ledger_index`].
+    pub fn validated_ledger_index(&self) -> Result<u32, ClientError> {
+        self.run(|c| c.validated_ledger_index())
+    }
+
     /// [`Client::simulate`].
     pub fn simulate(&self, tx: &Value) -> Result<SimulateResult, ClientError> {
         self.run(|c| c.simulate(tx))
@@ -157,13 +171,9 @@ impl<C: Client> BlockingClient<C> {
         self.run(|c| c.submit_multisigned(tx_json))
     }
 
-    /// [`Client::submit_and_wait`]: submit, then wait until validated.
-    pub fn submit_and_wait(
-        &self,
-        tx_blob: &str,
-        last_ledger_sequence: u32,
-    ) -> Result<TxResult, ClientError> {
-        self.run(|c| c.submit_and_wait(tx_blob, last_ledger_sequence))
+    /// [`Client::submit_and_wait`]: submit, then wait for the final outcome.
+    pub fn submit_and_wait(&self, tx_blob: &str) -> Result<TxResult, ClientError> {
+        self.run(|c| c.submit_and_wait(tx_blob))
     }
 }
 
@@ -178,6 +188,7 @@ mod tests {
         async fn raw_request(&self, method: &str, _: Value) -> Result<Value, ClientError> {
             Ok(match method {
                 "ledger_current" => json!({"ledger_current_index": 42}),
+                "server_info" => json!({"info": {"network_id": 1}}),
                 "fee" => {
                     json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "12"}})
                 }
@@ -196,7 +207,7 @@ mod tests {
         client.autofill(&mut tx).unwrap();
         assert_eq!(
             (tx["Fee"].clone(), tx["LastLedgerSequence"].clone()),
-            (json!("12"), json!(46))
+            (json!("12"), json!(62))
         );
         assert_eq!(client.block_on(async { 7 }), 7);
     }

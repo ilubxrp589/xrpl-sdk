@@ -87,15 +87,30 @@
 //!
 //! ## Submitting
 //!
-//! [`Client::autofill`] fills `Sequence`, `Fee` (the open-ledger fee) and
-//! `LastLedgerSequence` (current + 4) where they are missing, fetching them
-//! concurrently. [`Client::submit`] sorts the engine result: `tes` is `Ok`;
-//! `tec` is [`ClientError::TransactionClaimed`]; `tem`, `tef` and most `tel`
-//! are [`ClientError::TransactionFailed`]; `ter`, `telINSUF_FEE_P` and
-//! `telCAN_NOT_QUEUE…` are [`ClientError::TransactionRetry`].
-//! [`Client::submit_and_wait`] resubmits on a retry result and polls until
-//! the transaction is in a validated ledger or its `LastLedgerSequence` has
-//! passed ([`ClientError::TransactionExpired`]).
+//! [`Client::autofill`] fills `Sequence`, `Fee` (the open-ledger fee, refused
+//! with [`ClientError::FeeTooHigh`] above the client's cap: 2 XRP unless set
+//! with `with_max_fee_drops`), `LastLedgerSequence` (current +
+//! [`client::LAST_LEDGER_OFFSET`]) and, on a network whose ID is above 1024,
+//! `NetworkID`, where they are missing, fetching them concurrently.
+//! [`Client::autofill_for_multisigning`] does the same with the fee for a
+//! number of signers.
+//!
+//! [`Client::submit_and_wait`] submits a signed blob and answers only with
+//! the final outcome: `Ok` for `tesSUCCESS` in a validated ledger;
+//! [`ClientError::TransactionClaimed`] (holding the validated transaction)
+//! for a validated `tec`; [`ClientError::TransactionFailed`] for a `tem`, or
+//! a `tef`/`tel` no ledger holds; [`ClientError::TransactionExpired`] once
+//! the transaction's `LastLedgerSequence` is validated and the server shows
+//! it is in no ledger; [`ClientError::OutcomeUnknown`] when it was sent but
+//! the outcome could not be learned. It looks the transaction up by the ID
+//! it computes itself, and resubmits the same blob when the server dropped
+//! it.
+//!
+//! [`Client::submit`] submits once and sorts the server's *preliminary*
+//! result: `tes` is `Ok`; `tec` is [`ClientError::TransactionClaimed`];
+//! `tem`, `tef` and most `tel` are [`ClientError::TransactionFailed`];
+//! `ter`, `telINSUF_FEE_P` and `telCAN_NOT_QUEUE…` are
+//! [`ClientError::TransactionRetry`]. Only a `tem` is final there.
 //!
 //! ## WebSocket subscriptions
 //!

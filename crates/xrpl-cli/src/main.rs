@@ -437,12 +437,7 @@ async fn run(cli: Cli) -> Res {
                 mainnet_needs_yes(cli.network, yes)?;
                 let c = client()?;
                 if wait {
-                    let tx = decode_transaction_binary(&hex::decode(blob.trim())?)?;
-                    let last = tx
-                        .get("LastLedgerSequence")
-                        .and_then(Value::as_u64)
-                        .ok_or("--wait needs a LastLedgerSequence")?;
-                    print(&c.submit_and_wait(blob.trim(), last as u32).await?)?;
+                    print(&c.submit_and_wait(blob.trim()).await?)?;
                 } else {
                     print(&c.submit(blob.trim()).await?)?;
                 }

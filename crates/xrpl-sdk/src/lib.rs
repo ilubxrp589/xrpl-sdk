@@ -192,8 +192,7 @@
 //! let approval = bob.sign_batch(&tx)?;                       // Bob approves
 //! batch::add_batch_signers(&mut tx, vec![approval])?;
 //! let blob = alice.sign_and_encode(&tx)?;                   // Alice signs the batch
-//! let last = tx["LastLedgerSequence"].as_u64().unwrap() as u32;
-//! client.submit_and_wait(&blob, last).await?;
+//! client.submit_and_wait(&blob).await?;
 //! for id in batch::inner_transaction_ids(&tx)? {
 //!     println!("inner transaction {id}");                  // each is on the ledger under this ID
 //! }
@@ -204,23 +203,31 @@
 //!
 //! | Function | What it does |
 //! |---|---|
-//! | [`submit_transaction`] | autofill, sign, submit, wait for validation |
+//! | [`submit_transaction`] | autofill, sign, submit, wait for the final outcome |
 //! | [`autofill_and_sign`] | autofill and sign; returns the blob |
-//! | [`Client::autofill`] | fill `Sequence`, `Fee`, `LastLedgerSequence` where missing |
-//! | [`Client::submit`] | submit a signed blob once |
-//! | [`Client::submit_and_wait`] | submit, resubmit on a retry result, wait until validated or expired |
+//! | [`Client::autofill`] | fill `Sequence`, `Fee` (capped), `LastLedgerSequence` and `NetworkID` where missing |
+//! | [`Client::autofill_for_multisigning`] | the same, with the fee for a number of signers |
+//! | [`Client::submit`] | submit a signed blob once; the answer is preliminary |
+//! | [`Client::submit_and_wait`] | submit, then wait until it is validated or provably in no ledger |
 //!
-//! [`Client::submit`] sorts the engine result into a [`ClientError`]:
+//! [`Client::submit_and_wait`], and so [`submit_transaction`], answers only
+//! with a final outcome:
 //!
-//! | Result | Error | Meaning |
+//! | Outcome | Meaning | Sign a replacement? |
 //! |---|---|---|
-//! | `tes…` | none | applied (still check the validated result) |
-//! | `tec…` | [`ClientError::TransactionClaimed`] | failed, but the fee was charged |
-//! | `tem…`, `tef…`, most `tel…` | [`ClientError::TransactionFailed`] | refused; never reaches a ledger |
-//! | `ter…`, `telINSUF_FEE_P`, `telCAN_NOT_QUEUE…` | [`ClientError::TransactionRetry`] | may succeed if submitted again |
+//! | `Ok(result)` | validated with `tesSUCCESS` | no need |
+//! | [`ClientError::TransactionClaimed`] | validated with a `tec`: failed, fee charged (`result` holds the transaction) | yes |
+//! | [`ClientError::TransactionFailed`] | malformed (`tem`), or refused (`tef`, `tel`) and in no ledger | yes |
+//! | [`ClientError::TransactionExpired`] | its `LastLedgerSequence` is validated and no ledger holds it | yes |
+//! | [`ClientError::OutcomeUnknown`] | sent, but the outcome could not be learned | **not yet**: look it up by `hash` first |
+//! | [`ClientError::FeeTooHigh`] (from autofill) | the fee would pass the client's cap (2 XRP unless set with `with_max_fee_drops`) | nothing was sent |
 //!
-//! [`Client::submit_and_wait`] returns [`ClientError::TransactionExpired`] if
-//! `LastLedgerSequence` passes without the transaction being validated.
+//! [`Client::submit`] sorts the server's *preliminary* result into a
+//! [`ClientError`] (`tec` → [`ClientError::TransactionClaimed`], `tem`/`tef`/most
+//! `tel` → [`ClientError::TransactionFailed`], `ter`/`telINSUF_FEE_P`/`telCAN_NOT_QUEUE…`
+//! → [`ClientError::TransactionRetry`]). Only a `tem` is final there: a
+//! transaction that got `tec` or `terQUEUED` can still succeed, so never sign
+//! a replacement on a preliminary result alone.
 //!
 //! ## Querying the ledger
 //!
@@ -555,16 +562,16 @@ pub async fn autofill_and_sign(
     Ok(blob)
 }
 
-/// Autofill, sign, submit, and wait for validation. All-in-one transaction submission.
+/// Autofill, sign, submit, and wait for the final outcome: `Ok` only for a
+/// transaction validated with `tesSUCCESS`. Every other ending is an error;
+/// see [`Client::submit_and_wait`] for which ones are final and which
+/// ([`ClientError::OutcomeUnknown`]) mean "look it up before replacing it".
 pub async fn submit_transaction(
     client: &impl Client,
     tx: &mut serde_json::Value,
     wallet: &Wallet,
 ) -> Result<TxResult, ClientError> {
     client.autofill(tx).await?;
-    let last_ledger_sequence = tx["LastLedgerSequence"].as_u64().ok_or_else(|| {
-        ClientError::UnexpectedResponse("autofill did not set LastLedgerSequence".into())
-    })? as u32;
     let blob = wallet.sign_and_encode(tx).map_err(ClientError::Core)?;
-    client.submit_and_wait(&blob, last_ledger_sequence).await
+    client.submit_and_wait(&blob).await
 }

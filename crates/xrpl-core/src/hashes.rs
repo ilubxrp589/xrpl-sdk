@@ -47,10 +47,14 @@ pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
 }
 
 /// The ID of a signed transaction blob (hex, as `submit` takes it).
+///
+/// `rippled` hashes the transaction as it re-serializes it (canonical field
+/// order and forms), not the bytes it was sent, so this does the same: a
+/// blob whose fields someone reordered on the way still has the ID the
+/// ledger will show.
 pub fn hash_signed_tx_blob(tx_blob: &str) -> Result<Hash256, CoreError> {
     let blob = hex::decode(tx_blob).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-    require_signed(&decode_transaction_binary(&blob)?)?;
-    Ok(transaction_id(&blob))
+    hash_signed_tx(&decode_transaction_binary(&blob)?)
 }
 
 fn require_signed(tx: &Value) -> Result<(), CoreError> {
@@ -532,5 +536,23 @@ mod tests {
             )
             .unwrap()
         );
+    }
+
+    /// rippled's ID is the hash of its own re-serialization: a signed blob
+    /// with two fields swapped (which rippled still reads) has the ID of the
+    /// canonical one, not the hash of the bytes as sent.
+    #[test]
+    fn a_reordered_blob_has_the_canonical_id() {
+        let canonical = "120000220000000024000000016140000000000F424068400000000000000C7321030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D43574473045022100BC95504DC72DDBDAA0F5EAA973EC07E057FD9A3E7500AC3CF07454C68219985E02200B0992C47857A867F5664BB6F74E62F086A59A0C31848E0FB3819127E8EC0A1281148049717CC948789F32F267ADC2582484E3DFA6988314B5F762798A53D543A014CAF8B297CFF8F2F937E8";
+        let reordered = canonical.replacen(
+            "1200002200000000240000000161",
+            "1200002400000001220000000061",
+            1,
+        );
+        assert_ne!(reordered, canonical);
+        let id = hash_signed_tx_blob(canonical).unwrap();
+        assert_eq!(id, transaction_id(&hex::decode(canonical).unwrap()));
+        assert_eq!(hash_signed_tx_blob(&reordered).unwrap(), id);
+        assert_ne!(transaction_id(&hex::decode(&reordered).unwrap()), id);
     }
 }
