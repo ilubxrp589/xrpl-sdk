@@ -178,30 +178,40 @@ impl FieldId {
     }
 }
 
-/// Encode variable-length prefix.
-/// Returns 1, 2, or 3 bytes depending on the length.
+/// The longest length a VL prefix can carry (`Serializer::addEncoded`).
+pub const MAX_VL_LENGTH: usize = 918_744;
+
+/// The variable-length prefix for `len` bytes: 1, 2 or 3 bytes, as
+/// `rippled`'s `Serializer::addEncoded` writes it.
 ///
 /// # Errors
-/// Returns `CoreError::CodecError` if `len` exceeds the maximum VL-encodable size (918744).
-pub fn encode_vl(len: usize) -> Vec<u8> {
-    // Note: This function cannot return Result without a large API change.
-    // VL lengths > 918744 are invalid per the XRPL spec and never occur in practice.
-    // We saturate to the maximum 3-byte encoding rather than panicking.
+///
+/// [`CoreError::CodecError`] when `len` is over [`MAX_VL_LENGTH`]: no prefix
+/// can say it, and writing a shorter one would let the bytes after it be
+/// read as other fields.
+pub fn encode_vl(len: usize) -> Result<Vec<u8>, CoreError> {
+    let byte = |n: usize| u8::try_from(n).map_err(|_| too_long(len));
     if len <= 192 {
-        vec![len as u8]
-    } else if len <= 12480 {
+        Ok(vec![byte(len)?])
+    } else if len <= 12_480 {
         let adjusted = len - 193;
-        vec![(adjusted / 256 + 193) as u8, (adjusted % 256) as u8]
+        Ok(vec![byte(adjusted / 256 + 193)?, byte(adjusted % 256)?])
+    } else if len <= MAX_VL_LENGTH {
+        let adjusted = len - 12_481;
+        Ok(vec![
+            byte(241 + (adjusted >> 16))?,
+            byte((adjusted >> 8) & 0xFF)?,
+            byte(adjusted & 0xFF)?,
+        ])
     } else {
-        // Clamp to 918744 max to avoid panic
-        let clamped = len.min(918744);
-        let adjusted = clamped - 12481;
-        vec![
-            (241 + (adjusted >> 16)) as u8,
-            ((adjusted >> 8) & 0xFF) as u8,
-            (adjusted & 0xFF) as u8,
-        ]
+        Err(too_long(len))
     }
+}
+
+fn too_long(len: usize) -> CoreError {
+    CoreError::CodecError(format!(
+        "a variable-length field holds at most {MAX_VL_LENGTH} bytes, got {len}"
+    ))
 }
 
 /// Decode variable-length prefix. Returns (length, bytes_consumed).
@@ -280,14 +290,14 @@ mod tests {
 
     #[test]
     fn vl_encode_short() {
-        assert_eq!(encode_vl(0), vec![0]);
-        assert_eq!(encode_vl(10), vec![10]);
-        assert_eq!(encode_vl(192), vec![192]);
+        assert_eq!(encode_vl(0).unwrap(), vec![0]);
+        assert_eq!(encode_vl(10).unwrap(), vec![10]);
+        assert_eq!(encode_vl(192).unwrap(), vec![192]);
     }
 
     #[test]
     fn vl_encode_medium() {
-        let encoded = encode_vl(193);
+        let encoded = encode_vl(193).unwrap();
         let (decoded, consumed) = decode_vl(&encoded).unwrap();
         assert_eq!(decoded, 193);
         assert_eq!(consumed, 2);
@@ -295,10 +305,28 @@ mod tests {
 
     #[test]
     fn vl_roundtrip() {
-        for len in [0, 1, 100, 192, 193, 500, 1000, 12480, 12481, 50000] {
-            let encoded = encode_vl(len);
+        for len in [
+            0,
+            1,
+            100,
+            192,
+            193,
+            500,
+            1000,
+            12480,
+            12481,
+            50000,
+            MAX_VL_LENGTH,
+        ] {
+            let encoded = encode_vl(len).unwrap();
             let (decoded, _) = decode_vl(&encoded).unwrap();
             assert_eq!(decoded, len, "roundtrip failed for len={len}");
         }
+    }
+
+    #[test]
+    fn vl_refuses_a_length_no_prefix_can_say() {
+        assert!(encode_vl(MAX_VL_LENGTH + 1).is_err());
+        assert!(encode_vl(usize::MAX).is_err());
     }
 }

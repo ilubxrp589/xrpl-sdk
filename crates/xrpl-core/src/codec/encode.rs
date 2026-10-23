@@ -9,13 +9,17 @@ use crate::CoreError;
 use serde_json::Value;
 use std::borrow::Cow;
 
-/// Non-serialized field names that appear in JSON but shouldn't be encoded.
-const SKIP_FIELDS: &[&str] = &[
+/// Keys `rippled` writes beside a transaction or ledger entry in its
+/// responses (`tx`, `account_tx`, `ledger`) that are not fields of the object
+/// itself. They are skipped at the top level, so a response can be encoded as
+/// it comes; every other name the definitions do not hold is an error.
+const RESPONSE_ONLY_KEYS: &[&str] = &[
     "hash",
     "ctid",
     "date",
     "inLedger",
     "ledger_index",
+    "ledger_hash",
     "validated",
     "meta",
     "metaData",
@@ -68,29 +72,59 @@ fn with_classic_addresses(
     Ok(Cow::Owned(out))
 }
 
-/// Encode a transaction from JSON to canonical binary format.
-pub fn encode_transaction_json(json: &Value, for_signing: bool) -> Result<Vec<u8>, CoreError> {
-    let obj = json
-        .as_object()
-        .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-    let obj = with_classic_addresses(obj)?;
+/// A Payment's `DeliverMax`, as `rippled`'s `sign` and `submit` take it: API
+/// version 2 writes a Payment's `Amount` only under that name. Alone it
+/// becomes `Amount`; beside an equal `Amount` it is dropped; beside a
+/// different one, or on any other transaction type, it is an error.
+fn with_deliver_max(
+    obj: &serde_json::Map<String, Value>,
+) -> Result<Cow<'_, serde_json::Map<String, Value>>, CoreError> {
+    let Some(deliver_max) = obj.get("DeliverMax") else {
+        return Ok(Cow::Borrowed(obj));
+    };
+    if obj.get("TransactionType").and_then(Value::as_str) != Some("Payment") {
+        return Err(CoreError::UnknownField(
+            "DeliverMax (only a Payment has it, as another name for Amount)".to_string(),
+        ));
+    }
+    if obj
+        .get("Amount")
+        .is_some_and(|amount| amount != deliver_max)
+    {
+        return Err(CoreError::CodecError(
+            "Amount and DeliverMax differ; a Payment's DeliverMax is its Amount".to_string(),
+        ));
+    }
+    let mut out = obj.clone();
+    if let Some(amount) = out.remove("DeliverMax") {
+        out.insert("Amount".to_string(), amount);
+    }
+    Ok(Cow::Owned(out))
+}
 
-    let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::new();
+/// The fields of one object in canonical order, without an end marker.
+///
+/// A name the definitions do not hold is an error, as in `rippled`'s JSON
+/// parser: a misspelt `DestinationTag` must not vanish from what is signed.
+/// At the top level, `rippled`'s response-only keys ([`RESPONSE_ONLY_KEYS`])
+/// are skipped and `for_signing` leaves out the fields that are not signed.
+/// Inner objects are always written whole, as `rippled`'s `STObject::add`
+/// writes them.
+fn encode_fields(
+    obj: &serde_json::Map<String, Value>,
+    top_level: bool,
+    for_signing: bool,
+) -> Result<Vec<u8>, CoreError> {
+    let obj = with_classic_addresses(obj)?;
+    let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::with_capacity(obj.len());
 
     for (name, value) in obj.iter() {
-        if SKIP_FIELDS.contains(&name.as_str()) {
+        if top_level && RESPONSE_ONLY_KEYS.contains(&name.as_str()) {
             continue;
         }
-
-        let field_def = match lookup_field_def(name) {
-            Some(f) => f,
-            None => continue,
-        };
-
-        if !field_def.is_serialized {
-            continue;
-        }
-        if for_signing && !field_def.is_signing {
+        let field_def =
+            lookup_field_def(name).ok_or_else(|| CoreError::UnknownField(name.clone()))?;
+        if !field_def.is_serialized || (for_signing && !field_def.is_signing) {
             continue;
         }
 
@@ -100,22 +134,31 @@ pub fn encode_transaction_json(json: &Value, for_signing: bool) -> Result<Vec<u8
         let resolved_value = resolve_type_field(name, value)?;
         let value_ref = resolved_value.as_ref().unwrap_or(value);
 
-        let encoded_data = encode_field_value(field_def.type_code, name, value_ref, for_signing)?;
-
         let mut field_bytes = field_id.encode();
-        field_bytes.extend_from_slice(&encoded_data);
+        field_bytes.extend_from_slice(&encode_field_value(field_def.type_code, name, value_ref)?);
         fields.push((field_id, field_bytes));
     }
 
     // Sort by canonical field order: (type_code, field_code)
     fields.sort_by_key(|(fid, _)| fid.sort_key());
+    Ok(fields.into_iter().flat_map(|(_, bytes)| bytes).collect())
+}
 
-    let mut result = Vec::new();
-    for (_, bytes) in fields {
-        result.extend_from_slice(&bytes);
-    }
-
-    Ok(result)
+/// Encode a transaction (or a ledger entry) from `rippled`'s JSON to its
+/// canonical binary form; with `for_signing`, without the fields that are
+/// not signed (`TxnSignature`, `Signers`, …).
+///
+/// # Errors
+///
+/// [`CoreError::UnknownField`] for a name `rippled` 3.4.1 does not define
+/// (keys `rippled` adds to its responses, such as `hash` or `meta`, are
+/// skipped), and a codec error for any value `rippled` would refuse: an
+/// integer out of its field's range, a malformed amount, and so on.
+pub fn encode_transaction_json(json: &Value, for_signing: bool) -> Result<Vec<u8>, CoreError> {
+    let obj = json
+        .as_object()
+        .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
+    encode_fields(&*with_deliver_max(obj)?, true, for_signing)
 }
 
 /// If the field is TransactionType or LedgerEntryType and value is a string,
@@ -145,13 +188,12 @@ fn encode_field_value(
     type_code: u16,
     field_name: &str,
     value: &Value,
-    for_signing: bool,
 ) -> Result<Vec<u8>, CoreError> {
     let tc = TypeCode::from_u16(type_code);
 
     match tc {
-        Some(TypeCode::UInt8) => encode_uint8(value),
-        Some(TypeCode::UInt16) => encode_uint16(value),
+        Some(TypeCode::UInt8) => encode_uint8(value, field_name),
+        Some(TypeCode::UInt16) => encode_uint16(value, field_name),
         Some(TypeCode::UInt32) => encode_uint32(value, field_name),
         Some(TypeCode::UInt64) => encode_uint64(value, field_name),
         Some(TypeCode::Int32) => encode_int32(value, field_name),
@@ -162,8 +204,8 @@ fn encode_field_value(
         Some(TypeCode::Blob) => encode_blob(value),
         Some(TypeCode::AccountId) => encode_account_id_field(value),
         Some(TypeCode::Number) => encode_number(value),
-        Some(TypeCode::StObject) => encode_st_object(value, for_signing),
-        Some(TypeCode::StArray) => encode_st_array(value, for_signing),
+        Some(TypeCode::StObject) => encode_st_object(value),
+        Some(TypeCode::StArray) => encode_st_array(value),
         Some(TypeCode::PathSet) => encode_pathset(value),
         Some(TypeCode::Vector256) => encode_vector256(value),
         Some(TypeCode::Issue) => encode_issue(value),
@@ -173,59 +215,59 @@ fn encode_field_value(
         Some(TypeCode::Hash192) => encode_raw_hex(value, 24, "Hash192"),
         Some(TypeCode::UInt384) => encode_raw_hex(value, 48, "UInt384"),
         Some(TypeCode::UInt512) => encode_raw_hex(value, 64, "UInt512"),
-        _ => {
-            if value.is_object() {
-                encode_st_object(value, for_signing)
-            } else {
-                Err(CoreError::CodecError(format!(
-                    "unsupported type code {type_code} for field '{field_name}'"
-                )))
-            }
-        }
+        _ => Err(CoreError::CodecError(format!(
+            "unsupported type code {type_code} for field '{field_name}'"
+        ))),
     }
 }
 
-fn encode_uint8(value: &Value) -> Result<Vec<u8>, CoreError> {
-    let n = value
-        .as_u64()
-        .ok_or_else(|| CoreError::CodecError("UInt8 must be a number".to_string()))?;
-    Ok(vec![n as u8])
+/// An unsigned integer as `rippled`'s JSON parser (`STParsedJSON`) takes one
+/// for a UInt8, UInt16 or UInt32 field: a JSON integer or a string of decimal
+/// digits. Whether it fits the field is the caller's check.
+fn unsigned_json(value: &Value) -> Option<u64> {
+    match value {
+        Value::Number(n) => n.as_u64(),
+        Value::String(s) if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) => {
+            s.parse().ok()
+        }
+        _ => None,
+    }
 }
 
-fn encode_uint16(value: &Value) -> Result<Vec<u8>, CoreError> {
-    let n = value
-        .as_u64()
-        .ok_or_else(|| CoreError::CodecError("UInt16 must be a number".to_string()))?;
-    Ok((n as u16).to_be_bytes().to_vec())
+fn out_of_range(field_name: &str, type_name: &str, value: &Value) -> CoreError {
+    CoreError::CodecError(format!(
+        "{type_name} field '{field_name}' must be an integer that fits {type_name}, got: {value}"
+    ))
 }
 
+fn encode_uint8(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
+    unsigned_json(value)
+        .and_then(|n| u8::try_from(n).ok())
+        .map(|n| vec![n])
+        .ok_or_else(|| out_of_range(field_name, "UInt8", value))
+}
+
+fn encode_uint16(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
+    unsigned_json(value)
+        .and_then(|n| u16::try_from(n).ok())
+        .map(|n| n.to_be_bytes().to_vec())
+        .ok_or_else(|| out_of_range(field_name, "UInt16", value))
+}
+
+/// A UInt32: an integer or decimal string that fits 32 bits, or for
+/// `PermissionValue` a permission's name, as `rippled` writes it.
 fn encode_uint32(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
-    // If value is a number, encode directly
-    if let Some(n) = value.as_u64() {
-        return Ok((n as u32).to_be_bytes().to_vec());
+    if let Some(n) = unsigned_json(value) {
+        return u32::try_from(n)
+            .map(|n| n.to_be_bytes().to_vec())
+            .map_err(|_| out_of_range(field_name, "UInt32", value));
     }
-    // Some UInt32 fields accept string values that need special resolution
-    // (e.g., PermissionValue uses transaction type names or composite codes)
-    if let Some(s) = value.as_str() {
-        // Try parsing as decimal number first
-        if let Ok(n) = s.parse::<u32>() {
-            return Ok(n.to_be_bytes().to_vec());
+    match value.as_str() {
+        Some(name) if field_name == "PermissionValue" => {
+            Ok(permission_value_code(name)?.to_be_bytes().to_vec())
         }
-        // Try parsing as hex (0x prefix)
-        if let Some(hex_str) = s.strip_prefix("0x") {
-            if let Ok(n) = u32::from_str_radix(hex_str, 16) {
-                return Ok(n.to_be_bytes().to_vec());
-            }
-        }
-        // For PermissionValue, resolve via granular permissions + transaction types
-        if field_name == "PermissionValue" {
-            let code = permission_value_code(s)?;
-            return Ok(code.to_be_bytes().to_vec());
-        }
+        _ => Err(out_of_range(field_name, "UInt32", value)),
     }
-    Err(CoreError::CodecError(format!(
-        "UInt32 field '{field_name}' must be a number, got: {value}"
-    )))
 }
 
 /// Int32: big-endian two's complement. rippled (STParsedJSON) takes a JSON
@@ -302,6 +344,15 @@ fn encode_xrp_string(s: &str) -> Result<Vec<u8>, CoreError> {
     Ok(amount::encode_xrp_signed(negative, drops)?.to_vec())
 }
 
+/// XRP's currency code in either 20-byte form: all zero (`xrpCurrency`), or
+/// "XRP" in the ISO position (`badCurrency`, which `rippled` refuses with
+/// `temBAD_CURRENCY`). Neither can name a token.
+fn is_xrp_currency_code(bytes: &[u8; 20]) -> bool {
+    let mut bad = [0u8; 20];
+    bad[12..15].copy_from_slice(b"XRP");
+    *bytes == [0u8; 20] || *bytes == bad
+}
+
 fn encode_amount_field(value: &Value) -> Result<Vec<u8>, CoreError> {
     match value {
         Value::String(s) => encode_xrp_string(s),
@@ -344,6 +395,12 @@ fn encode_amount_field(value: &Value) -> Result<Vec<u8>, CoreError> {
                     "invalid currency: {currency_str}"
                 )));
             };
+            if is_xrp_currency_code(&currency.to_bytes()) {
+                return Err(CoreError::InvalidCurrency(format!(
+                    "a token amount cannot use XRP's currency code ({currency_str}); \
+                     write XRP as a string of drops"
+                )));
+            }
             let issuer = AccountId::from_address(issuer_str)?;
 
             Ok(amount::encode_amount_iou(&iou, &currency, &issuer).to_vec())
@@ -413,7 +470,7 @@ fn encode_blob(value: &Value) -> Result<Vec<u8>, CoreError> {
         .as_str()
         .ok_or_else(|| CoreError::CodecError("Blob must be a hex string".to_string()))?;
     let bytes = hex::decode(s).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-    let mut result = encode_vl(bytes.len());
+    let mut result = encode_vl(bytes.len())?;
     result.extend_from_slice(&bytes);
     Ok(result)
 }
@@ -425,90 +482,55 @@ fn encode_account_id_field(value: &Value) -> Result<Vec<u8>, CoreError> {
     // "" is an account never set: an empty VL (rippled's default STAccount, e.g. a UNLModify
     // pseudo-transaction's Account). The zero account, set, is rrrrrrrrrrrrrrrrrrrrrhoLvTp.
     if s.is_empty() {
-        return Ok(encode_vl(0));
+        return encode_vl(0);
     }
     let account = AccountId::from_address(s)?;
-    let mut result = encode_vl(20);
+    let mut result = encode_vl(20)?;
     result.extend_from_slice(account.as_bytes());
     Ok(result)
 }
 
-fn encode_st_object(value: &Value, for_signing: bool) -> Result<Vec<u8>, CoreError> {
+/// An inner object: its fields, all of them, then the end marker.
+fn encode_st_object(value: &Value) -> Result<Vec<u8>, CoreError> {
     let obj = value
         .as_object()
         .ok_or_else(|| CoreError::CodecError("STObject must be a JSON object".to_string()))?;
-    let obj = with_classic_addresses(obj)?;
-
-    let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::new();
-
-    for (name, val) in obj.iter() {
-        if SKIP_FIELDS.contains(&name.as_str()) {
-            continue;
-        }
-
-        let field_def = match lookup_field_def(name) {
-            Some(f) => f,
-            None => continue,
-        };
-        if !field_def.is_serialized {
-            continue;
-        }
-        if for_signing && !field_def.is_signing {
-            continue;
-        }
-
-        let field_id = FieldId::new(field_def.type_code, field_def.field_code);
-
-        let resolved_value = resolve_type_field(name, val)?;
-        let val_ref = resolved_value.as_ref().unwrap_or(val);
-
-        let encoded_data = encode_field_value(field_def.type_code, name, val_ref, for_signing)?;
-        let mut field_bytes = field_id.encode();
-        field_bytes.extend_from_slice(&encoded_data);
-        fields.push((field_id, field_bytes));
-    }
-
-    fields.sort_by_key(|(fid, _)| fid.sort_key());
-
-    let mut result = Vec::new();
-    for (_, bytes) in fields {
-        result.extend_from_slice(&bytes);
-    }
-    // Object end marker
-    result.push(0xE1);
+    let mut result = encode_fields(obj, false, false)?;
+    result.push(0xE1); // object end marker
     Ok(result)
 }
 
-fn encode_st_array(value: &Value, for_signing: bool) -> Result<Vec<u8>, CoreError> {
+/// An array: each element an object with exactly one key, the name of an
+/// inner object field (`{"Memo": {…}}`), as `rippled`'s JSON parser requires.
+fn encode_st_array(value: &Value) -> Result<Vec<u8>, CoreError> {
     let arr = value
         .as_array()
         .ok_or_else(|| CoreError::CodecError("STArray must be a JSON array".to_string()))?;
 
     let mut result = Vec::new();
-
     for element in arr {
-        let obj = element.as_object().ok_or_else(|| {
-            CoreError::CodecError("STArray element must be a JSON object".to_string())
-        })?;
-
-        // Each array element is wrapped: { "Memo": { ... } }
-        for (wrapper_name, inner_value) in obj {
-            let field_def = match lookup_field_def(wrapper_name) {
-                Some(f) => f,
-                None => continue,
-            };
-
-            let field_id = FieldId::new(field_def.type_code, field_def.field_code);
-            let encoded_data = encode_st_object(inner_value, for_signing)?;
-
-            let header = field_id.encode();
-            result.extend_from_slice(&header);
-            result.extend_from_slice(&encoded_data);
+        let (wrapper_name, inner_value) = element
+            .as_object()
+            .filter(|obj| obj.len() == 1)
+            .and_then(|obj| obj.iter().next())
+            .ok_or_else(|| {
+                CoreError::CodecError(format!(
+                    "an STArray element must be an object with exactly one key, \
+                     the inner object's name (like {{\"Memo\": {{…}}}}), got: {element}"
+                ))
+            })?;
+        let field_def = lookup_field_def(wrapper_name)
+            .ok_or_else(|| CoreError::UnknownField(wrapper_name.clone()))?;
+        if field_def.type_code != TypeCode::StObject as u16 {
+            return Err(CoreError::CodecError(format!(
+                "STArray element {wrapper_name} is not an inner object field"
+            )));
         }
+        result.extend_from_slice(&FieldId::new(field_def.type_code, field_def.field_code).encode());
+        result.extend_from_slice(&encode_st_object(inner_value)?);
     }
 
-    // Array end marker
-    result.push(0xF1);
+    result.push(0xF1); // array end marker
     Ok(result)
 }
 
@@ -635,7 +657,7 @@ fn encode_vector256(value: &Value) -> Result<Vec<u8>, CoreError> {
         data.extend_from_slice(&bytes);
     }
 
-    let mut result = encode_vl(data.len());
+    let mut result = encode_vl(data.len())?;
     result.extend_from_slice(&data);
     Ok(result)
 }
@@ -648,10 +670,26 @@ fn encode_issue(value: &Value) -> Result<Vec<u8>, CoreError> {
     let obj = value
         .as_object()
         .ok_or_else(|| CoreError::CodecError("Issue must be a JSON object".to_string()))?;
+    // rippled's issueFromJson: an MPT issue is its ID alone; XRP has no
+    // issuer; a token has both; nothing else.
+    let allowed: &[&str] = if obj.contains_key("mpt_issuance_id") {
+        &["mpt_issuance_id"]
+    } else {
+        &["currency", "issuer"]
+    };
+    if let Some(key) = obj.keys().find(|k| !allowed.contains(&k.as_str())) {
+        return Err(CoreError::CodecError(format!(
+            "an Issue with {} cannot have {key}",
+            allowed.join(" and ")
+        )));
+    }
 
     // MPT Issue format: { "mpt_issuance_id": "hex..." }
     // Wire: issuer (20B) + NO_ACCOUNT (20B) + sequence_LE (4B) = 44 bytes
-    if let Some(mpt_id) = obj.get("mpt_issuance_id").and_then(|v| v.as_str()) {
+    if let Some(mpt_id) = obj.get("mpt_issuance_id") {
+        let mpt_id = mpt_id.as_str().ok_or_else(|| {
+            CoreError::CodecError("mpt_issuance_id must be a hex string".to_string())
+        })?;
         let id_bytes = hex::decode(mpt_id).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
         if id_bytes.len() != 24 {
             return Err(CoreError::CodecError(format!(
@@ -697,17 +735,23 @@ fn encode_issue(value: &Value) -> Result<Vec<u8>, CoreError> {
             CoreError::CodecError("Issue missing 'currency' or 'mpt_issuance_id'".to_string())
         })?;
 
-    if currency_str == "XRP" {
+    // Non-XRP: 20 bytes currency + 20 bytes issuer
+    let currency = if currency_str == "XRP" {
+        [0u8; 20]
+    } else if currency_str.len() == 3 {
+        crate::types::Currency::from_ascii(currency_str)?.to_bytes()
+    } else {
+        crate::types::Currency::from_hex(currency_str)?.to_bytes()
+    };
+    if currency == [0u8; 20] {
         // XRP issue: 20 zero bytes (no issuer)
+        if obj.contains_key("issuer") {
+            return Err(CoreError::CodecError(
+                "an XRP Issue has no issuer".to_string(),
+            ));
+        }
         return Ok(vec![0u8; 20]);
     }
-
-    // Non-XRP: 20 bytes currency + 20 bytes issuer
-    let currency = if currency_str.len() == 3 {
-        crate::types::Currency::from_ascii(currency_str)?
-    } else {
-        crate::types::Currency::from_hex(currency_str)?
-    };
 
     let issuer_str = obj
         .get("issuer")
@@ -716,7 +760,7 @@ fn encode_issue(value: &Value) -> Result<Vec<u8>, CoreError> {
     let issuer = AccountId::from_address(issuer_str)?;
 
     let mut result = Vec::with_capacity(40);
-    result.extend_from_slice(&currency.to_bytes());
+    result.extend_from_slice(&currency);
     result.extend_from_slice(issuer.as_bytes());
     Ok(result)
 }
@@ -727,6 +771,15 @@ fn encode_xchain_bridge(value: &Value) -> Result<Vec<u8>, CoreError> {
     let obj = value
         .as_object()
         .ok_or_else(|| CoreError::CodecError("XChainBridge must be a JSON object".to_string()))?;
+    const BRIDGE_KEYS: [&str; 4] = [
+        "LockingChainDoor",
+        "LockingChainIssue",
+        "IssuingChainDoor",
+        "IssuingChainIssue",
+    ];
+    if let Some(key) = obj.keys().find(|k| !BRIDGE_KEYS.contains(&k.as_str())) {
+        return Err(CoreError::UnknownField(format!("XChainBridge.{key}")));
+    }
 
     let mut result = Vec::new();
 
@@ -736,7 +789,7 @@ fn encode_xchain_bridge(value: &Value) -> Result<Vec<u8>, CoreError> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| CoreError::CodecError("missing LockingChainDoor".to_string()))?;
     let door1_id = AccountId::from_address(door1)?;
-    result.extend_from_slice(&encode_vl(20));
+    result.extend_from_slice(&encode_vl(20)?);
     result.extend_from_slice(door1_id.as_bytes());
 
     // LockingChainIssue (Issue type, raw bytes)
@@ -751,7 +804,7 @@ fn encode_xchain_bridge(value: &Value) -> Result<Vec<u8>, CoreError> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| CoreError::CodecError("missing IssuingChainDoor".to_string()))?;
     let door2_id = AccountId::from_address(door2)?;
-    result.extend_from_slice(&encode_vl(20));
+    result.extend_from_slice(&encode_vl(20)?);
     result.extend_from_slice(door2_id.as_bytes());
 
     // IssuingChainIssue (Issue type, raw bytes)
@@ -820,62 +873,35 @@ fn encode_raw_hex(
     Ok(bytes)
 }
 
-/// Encode a transaction for multi-signing by a specific account.
-/// Byte layout: SMT\0 prefix + encoded_tx_bytes (excluding TxnSignature and Signers) + signing_account 20 bytes.
+/// What one signer of a multi-signed transaction signs, as `rippled`'s
+/// `sign_for` builds it: "SMT\0", the transaction's signed fields, then the
+/// signer's 20-byte AccountID.
+///
+/// A multi-signed transaction's `SigningPubKey` is empty, and the signers
+/// sign it that way: a missing `SigningPubKey` is signed as empty, as
+/// `sign_for` does, and a non-empty one is an error (the signatures would not
+/// match the transaction once its `Signers` are added).
 pub fn encode_for_multisigning(tx: &Value, signing_account: &str) -> Result<Vec<u8>, CoreError> {
     let obj = tx
         .as_object()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-    let obj = with_classic_addresses(obj)?;
-
-    // Encode fields, excluding non-signing fields AND Signers array
-    let mut fields: Vec<(FieldId, Vec<u8>)> = Vec::new();
-
-    for (name, value) in obj.iter() {
-        if SKIP_FIELDS.contains(&name.as_str()) {
-            continue;
+    let mut obj = with_deliver_max(obj)?;
+    match obj.get("SigningPubKey") {
+        None => {
+            obj.to_mut()
+                .insert("SigningPubKey".to_string(), Value::String(String::new()));
         }
-        // Skip Signers array during multisign encoding
-        if name == "Signers" {
-            continue;
+        Some(Value::String(key)) if key.is_empty() => {}
+        Some(_) => {
+            return Err(CoreError::ValidationError(
+                "a multi-signed transaction's SigningPubKey must be empty".to_string(),
+            ))
         }
-
-        let field_def = match lookup_field_def(name) {
-            Some(f) => f,
-            None => continue,
-        };
-
-        if !field_def.is_serialized {
-            continue;
-        }
-        // Use for_signing=true to exclude TxnSignature
-        if !field_def.is_signing {
-            continue;
-        }
-
-        let field_id = FieldId::new(field_def.type_code, field_def.field_code);
-        let resolved_value = resolve_type_field(name, value)?;
-        let value_ref = resolved_value.as_ref().unwrap_or(value);
-        let encoded_data = encode_field_value(field_def.type_code, name, value_ref, true)?;
-
-        let mut field_bytes = field_id.encode();
-        field_bytes.extend_from_slice(&encoded_data);
-        fields.push((field_id, field_bytes));
     }
 
-    fields.sort_by_key(|(fid, _)| fid.sort_key());
-
-    // SMT\0 prefix
-    let mut result = vec![0x53, 0x4D, 0x54, 0x00];
-
-    for (_, bytes) in fields {
-        result.extend_from_slice(&bytes);
-    }
-
-    // Append signing account's 20-byte AccountID
-    let account_id = AccountId::from_address(signing_account)?;
-    result.extend_from_slice(account_id.as_bytes());
-
+    let mut result = b"SMT\0".to_vec();
+    result.extend_from_slice(&encode_fields(&obj, true, true)?);
+    result.extend_from_slice(AccountId::from_address(signing_account)?.as_bytes());
     Ok(result)
 }
 
@@ -1098,5 +1124,218 @@ mod tests {
         let with_sig = encode_transaction_json(&tx, false).unwrap();
         let without_sig = encode_transaction_json(&tx, true).unwrap();
         assert!(without_sig.len() < with_sig.len());
+    }
+
+    fn payment() -> Value {
+        json!({
+            "TransactionType": "Payment",
+            "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+            "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "Amount": "1000000",
+            "Fee": "12",
+            "Sequence": 1,
+            "Flags": 0
+        })
+    }
+
+    fn with(mut tx: Value, key: &str, value: Value) -> Value {
+        tx[key] = value;
+        tx
+    }
+
+    /// A misspelt field must not vanish from what is signed: sent to an
+    /// exchange without its DestinationTag, a payment is lost.
+    #[test]
+    fn an_unknown_field_is_an_error_not_dropped() {
+        for name in ["DestinationTAg", "destination_tag", "Destinationtag"] {
+            let tx = with(payment(), name, json!(12345));
+            for for_signing in [false, true] {
+                assert!(
+                    matches!(
+                        encode_transaction_json(&tx, for_signing),
+                        Err(CoreError::UnknownField(ref f)) if f == name
+                    ),
+                    "{name} was not refused"
+                );
+            }
+            assert!(encode_for_multisigning(&tx, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").is_err());
+        }
+        // A defined name with no wire type is refused too.
+        assert!(encode_transaction_json(&with(payment(), "Generic", json!({})), false).is_err());
+        // Inside an inner object, and as an array element's name.
+        let memo = |m: Value| with(payment(), "Memos", json!([m]));
+        assert!(matches!(
+            encode_transaction_json(&memo(json!({"Memo": {"memodata": "AA"}})), false),
+            Err(CoreError::UnknownField(_))
+        ));
+        assert!(matches!(
+            encode_transaction_json(&memo(json!({"memo": {"MemoData": "AA"}})), false),
+            Err(CoreError::UnknownField(_))
+        ));
+        // rippled's response-only keys are still skipped at the top level.
+        let mut response = payment();
+        for key in RESPONSE_ONLY_KEYS {
+            response[*key] = json!("x");
+        }
+        assert_eq!(
+            encode_transaction_json(&response, false).unwrap(),
+            encode_transaction_json(&payment(), false).unwrap()
+        );
+    }
+
+    /// API version 2's name for a Payment's Amount, taken as rippled takes it.
+    #[test]
+    fn deliver_max_is_a_payments_amount() {
+        let plain = encode_transaction_json(&payment(), false).unwrap();
+        let mut v2 = payment();
+        let amount = v2.as_object_mut().unwrap().remove("Amount").unwrap();
+        v2["DeliverMax"] = amount.clone();
+        assert_eq!(encode_transaction_json(&v2, false).unwrap(), plain);
+        assert_eq!(
+            encode_transaction_json(&with(payment(), "DeliverMax", amount), false).unwrap(),
+            plain
+        );
+        assert!(
+            encode_transaction_json(&with(payment(), "DeliverMax", json!("5")), false).is_err()
+        );
+        let offer = json!({"TransactionType": "OfferCreate", "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+            "TakerGets": "1", "TakerPays": "1", "DeliverMax": "1"});
+        assert!(matches!(
+            encode_transaction_json(&offer, false),
+            Err(CoreError::UnknownField(_))
+        ));
+    }
+
+    /// rippled refuses an integer that does not fit its field; wrapping it
+    /// would turn DestinationTag 2^32 + 12345 into 12345.
+    #[test]
+    fn integers_that_do_not_fit_are_refused() {
+        let tag = |v: Value| encode_transaction_json(&with(payment(), "DestinationTag", v), false);
+        assert!(tag(json!(4_294_967_296_u64 + 12_345)).is_err());
+        assert!(tag(json!("4294979641")).is_err());
+        assert!(tag(json!(-1)).is_err());
+        assert!(tag(json!("0x10")).is_err());
+        assert!(tag(json!(1.5)).is_err());
+        assert_eq!(
+            tag(json!(u32::MAX)).unwrap(),
+            tag(json!("4294967295")).unwrap()
+        );
+        let nft = |fee: Value| {
+            encode_transaction_json(
+                &json!({"TransactionType": "NFTokenMint",
+                "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "NFTokenTaxon": 0,
+                "TransferFee": fee}),
+                false,
+            )
+        };
+        assert!(nft(json!(65_536)).is_err());
+        assert_eq!(nft(json!(50_000)).unwrap(), nft(json!("50000")).unwrap());
+        let tick = |t: Value| {
+            encode_transaction_json(
+                &json!({"TransactionType": "AccountSet",
+                "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "TickSize": t}),
+                false,
+            )
+        };
+        assert!(tick(json!(256)).is_err());
+        assert!(tick(json!(15)).is_ok());
+        assert!(
+            encode_transaction_json(&with(payment(), "TransactionType", json!(65_536)), false)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn an_array_element_has_exactly_one_inner_object() {
+        let memos = |m: Value| encode_transaction_json(&with(payment(), "Memos", m), false);
+        assert!(memos(json!([{"Memo": {"MemoData": "AA"}}])).is_ok());
+        assert!(memos(json!([{"Memo": {"MemoData": "AA"}, "Signer": {}}])).is_err());
+        assert!(memos(json!([{}])).is_err());
+        assert!(memos(json!(["Memo"])).is_err());
+        // A field that is not an inner object cannot name an element.
+        assert!(memos(json!([{"Account": {}}])).is_err());
+    }
+
+    #[test]
+    fn a_token_cannot_use_xrps_currency_code() {
+        let amount = |currency: &str| {
+            encode_transaction_json(
+                &with(
+                    payment(),
+                    "Amount",
+                    json!({"currency": currency,
+                    "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "1"}),
+                ),
+                false,
+            )
+        };
+        assert!(amount("XRP").is_err());
+        assert!(amount("0000000000000000000000000000000000000000").is_err());
+        assert!(amount("0000000000000000000000005852500000000000").is_err());
+        assert!(amount("USD").is_ok());
+    }
+
+    #[test]
+    fn an_issue_holds_only_what_its_kind_has() {
+        let issue = |i: Value| {
+            encode_transaction_json(
+                &json!({"TransactionType": "AMMDelete",
+                "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+                "Asset": i, "Asset2": {"currency": "XRP"}}),
+                false,
+            )
+        };
+        assert!(
+            issue(json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"}))
+                .is_ok()
+        );
+        assert!(
+            issue(json!({"currency": "XRP", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"}))
+                .is_err()
+        );
+        assert!(issue(
+            json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "1"})
+        )
+        .is_err());
+        assert!(issue(json!({"mpt_issuance_id": "00000001B5F762798A53D543A014CAF8B297CFF8F2F937E8", "currency": "USD"})).is_err());
+    }
+
+    /// Multi-signers sign an empty SigningPubKey, whether or not the
+    /// transaction they were handed spelled it out.
+    #[test]
+    fn multisigning_signs_an_empty_signing_pub_key() {
+        let signer = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+        let spelled =
+            encode_for_multisigning(&with(payment(), "SigningPubKey", json!("")), signer).unwrap();
+        assert_eq!(
+            encode_for_multisigning(&payment(), signer).unwrap(),
+            spelled
+        );
+        assert!(encode_for_multisigning(
+            &with(
+                payment(),
+                "SigningPubKey",
+                json!("ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63")
+            ),
+            signer
+        )
+        .is_err());
+        // SMT\0 ‖ fields (SigningPubKey written as an empty VL: 73 00) ‖ signer.
+        assert!(spelled.starts_with(b"SMT\0"));
+        assert!(spelled.windows(2).any(|w| w == [0x73, 0x00]));
+    }
+
+    /// rippled writes inner objects whole (`STObject::add` → `withAllFields`);
+    /// only the top level leaves out the fields that are not signed.
+    #[test]
+    fn inner_objects_are_signed_whole() {
+        let inner = json!({"TransactionType": "Payment", "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+            "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Amount": "1", "Fee": "0",
+            "Sequence": 2, "Flags": 1_073_741_824, "SigningPubKey": "", "TxnSignature": "AA"});
+        let batch = json!({"TransactionType": "Batch", "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+            "Flags": 65_536, "RawTransactions": [{"RawTransaction": inner}]});
+        let signing = encode_transaction_json(&batch, true).unwrap();
+        // TxnSignature (74 01 AA) stays inside the inner transaction.
+        assert!(signing.windows(3).any(|w| w == [0x74, 0x01, 0xAA]));
     }
 }
