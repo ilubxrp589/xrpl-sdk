@@ -150,7 +150,7 @@ async fn keylets_and_helpers_match_testnet() {
         generate_faucet_wallet(net).await.unwrap(),
         generate_faucet_wallet(net).await.unwrap(),
     );
-    let (a, b) = (alice.address.as_str(), bob.address.as_str());
+    let (a, b) = (alice.classic_address(), bob.classic_address());
     let client = XrplHttpClient::new(net.rpc_url()).unwrap();
     let now = utils::time::system_time_to_ripple_time(std::time::SystemTime::now()).unwrap();
     let mut checked = Vec::new();

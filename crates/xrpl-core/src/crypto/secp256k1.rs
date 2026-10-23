@@ -1,101 +1,94 @@
 use crate::CoreError;
 use k256::ecdsa::hazmat::{bits2field, SignPrimitive};
 use k256::ecdsa::{Signature, VerifyingKey};
-use k256::elliptic_curve::ops::Reduce;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::{Scalar, Secp256k1, SecretKey, U256};
-use sha2::{Digest, Sha256, Sha512};
-use zeroize::Zeroize;
+use k256::{Secp256k1, SecretKey};
+use sha2::Sha256;
+use zeroize::{Zeroize, Zeroizing};
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::ToString, vec::Vec};
+use alloc::{format, string::ToString, vec::Vec};
 
-/// Derive an XRPL secp256k1 keypair from a 16-byte seed.
-/// Uses the XRPL custom root keypair derivation (NOT BIP32).
-pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Vec<u8>, Vec<u8>), CoreError> {
-    // Step 1: Root private key
-    let mut root_private_bytes = {
-        let mut result = None;
-        for seq in 0u32.. {
-            let mut payload = Vec::with_capacity(20);
-            payload.extend_from_slice(seed);
-            payload.extend_from_slice(&seq.to_be_bytes());
-            let hash = Sha512::digest(&payload);
-            // SHA512 always produces 64 bytes; first 32 always exist
-            let bytes = hash.get(..32).ok_or(CoreError::KeyDerivationFailed)?;
-            // SecretKey::from_slice validates: non-zero and < curve order
-            if SecretKey::from_slice(bytes).is_ok() {
-                result = Some(bytes.to_vec());
-                break;
-            }
-        }
-        result.ok_or(CoreError::KeyDerivationFailed)?
-    };
-
-    // Step 2: Root public key (33-byte compressed)
-    let root_secret =
-        SecretKey::from_slice(&root_private_bytes).map_err(|_| CoreError::KeyDerivationFailed)?;
-    let root_public_point = root_secret.public_key();
-    let root_public_compressed = root_public_point.to_encoded_point(true).as_bytes().to_vec();
-
-    // Step 3: Account keypair derivation (sequence=0)
-    let mut intermediate_bytes = {
-        let seq = 0u32;
-        let mut result = None;
-        for sub_seq in 0u32.. {
-            let mut payload = Vec::with_capacity(root_public_compressed.len() + 8);
-            payload.extend_from_slice(&root_public_compressed);
-            payload.extend_from_slice(&seq.to_be_bytes());
-            payload.extend_from_slice(&sub_seq.to_be_bytes());
-            let hash = Sha512::digest(&payload);
-            // SHA512 always produces 64 bytes; first 32 always exist
-            let bytes = hash.get(..32).ok_or(CoreError::KeyDerivationFailed)?;
-            if SecretKey::from_slice(bytes).is_ok() {
-                result = Some(bytes.to_vec());
-                break;
-            }
-        }
-        result.ok_or(CoreError::KeyDerivationFailed)?
-    };
-
-    // account_private = (root_private + intermediate) mod order
-    let root_scalar = <Scalar as Reduce<U256>>::reduce(U256::from_be_slice(&root_private_bytes));
-    let inter_scalar = <Scalar as Reduce<U256>>::reduce(U256::from_be_slice(&intermediate_bytes));
-    let account_scalar = root_scalar + inter_scalar;
-
-    let mut account_private_bytes = account_scalar.to_bytes();
-    let account_secret = SecretKey::from_slice(&account_private_bytes)
-        .map_err(|_| CoreError::KeyDerivationFailed)?;
-    let account_public = account_secret.public_key();
-    let account_public_compressed = account_public.to_encoded_point(true).as_bytes().to_vec();
-
-    let result_private = account_private_bytes.to_vec();
-
-    // Zeroize intermediate key material before drop
-    root_private_bytes.zeroize();
-    intermediate_bytes.zeroize();
-    account_private_bytes.zeroize();
-
-    Ok((result_private, account_public_compressed))
+/// The first valid secret key (non-zero, below the curve order) among
+/// `candidate(0)`, `candidate(1)`, … — `rippled`'s retry loop.
+fn first_valid(candidate: impl Fn(u32) -> Zeroizing<[u8; 32]>) -> Result<SecretKey, CoreError> {
+    (0..=u32::MAX)
+        .find_map(|n| SecretKey::from_slice(candidate(n).as_slice()).ok())
+        .ok_or(CoreError::KeyDerivationFailed)
 }
 
-/// Sign a 32-byte prehash with a secp256k1 private key.
-/// Returns DER-encoded signature with low-S normalization.
-///
-/// The nonce is RFC 6979's (HMAC-SHA256), as in `rippled`, so the same key
-/// and prehash always give the same signature. Signing works from the secret
-/// scalar alone: unlike `k256`'s `SigningKey`, it does not first derive the
-/// public key, which would double the cost of every signature.
-pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
+/// Derive an XRPL secp256k1 key pair from a 16-byte seed, as `rippled` does
+/// (its own scheme, not BIP32): root secret = SHA-512Half(seed ‖ seq), the
+/// first valid; account secret = root + SHA-512Half(root public ‖ 0 ‖ sub),
+/// the first valid. Returns the 32-byte account secret key, in a buffer
+/// wiped on drop, and the 33-byte compressed public key. Every
+/// intermediate secret is wiped too.
+pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), CoreError> {
+    let root = first_valid(|seq| super::secret_sha512_half(&[seed, &seq.to_be_bytes()]))?;
+    let root_public = root.public_key().to_encoded_point(true);
+    let intermediate = first_valid(|sub| {
+        super::secret_sha512_half(&[
+            root_public.as_bytes(),
+            &0u32.to_be_bytes(),
+            &sub.to_be_bytes(),
+        ])
+    })?;
+    // SecretKey and NonZeroScalar wipe themselves on drop; the sum is wiped below.
+    let mut scalar = *root.to_nonzero_scalar() + *intermediate.to_nonzero_scalar();
+    let account = SecretKey::from_bytes(&scalar.to_bytes());
+    scalar.zeroize();
+    let account = account.map_err(|_| CoreError::KeyDerivationFailed)?;
+    let public_key = account
+        .public_key()
+        .to_encoded_point(true)
+        .as_bytes()
+        .to_vec();
+    Ok((Zeroizing::new(account.to_bytes().to_vec()), public_key))
+}
+
+/// The 33-byte compressed public key of a 32-byte secp256k1 secret key.
+pub fn public_key(private_key: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let secret = secret_key(private_key)?;
+    Ok(secret
+        .public_key()
+        .to_encoded_point(true)
+        .as_bytes()
+        .to_vec())
+}
+
+fn secret_key(private_key: &[u8]) -> Result<SecretKey, CoreError> {
     if private_key.len() != 32 {
         return Err(CoreError::InvalidKeyLength {
             expected: 32,
             got: private_key.len(),
         });
     }
+    SecretKey::from_slice(private_key).map_err(|e| CoreError::SigningFailed(e.to_string()))
+}
 
-    let secret =
-        SecretKey::from_slice(private_key).map_err(|e| CoreError::SigningFailed(e.to_string()))?;
+/// The 32-byte hash secp256k1 signs; anything else is an error. (The ECDSA
+/// primitive would silently use only the first 32 bytes of a longer input,
+/// so a signature over one long message would verify for every message that
+/// starts the same way.)
+fn prehash32(prehash: &[u8]) -> Result<&[u8; 32], CoreError> {
+    prehash.try_into().map_err(|_| {
+        CoreError::SigningFailed(format!(
+            "secp256k1 signs a 32-byte hash, got {} bytes: hash the message first \
+             (Keypair::sign_message does, as rippled verifies)",
+            prehash.len()
+        ))
+    })
+}
+
+/// Sign a 32-byte hash (for XRPL data: SHA-512Half of it) with a secp256k1
+/// secret key. Returns the DER signature, low-S. The nonce is RFC 6979's
+/// (HMAC-SHA256), as in `rippled`, so the same key and hash always give the
+/// same signature. A hash that is not exactly 32 bytes is an error.
+pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let prehash = prehash32(prehash)?;
+    let secret = secret_key(private_key)?;
+    // From the secret scalar alone: unlike k256's SigningKey, this does not
+    // first derive the public key, which would double the cost.
     let mut scalar = secret.to_nonzero_scalar();
     let signed = bits2field::<Secp256k1>(prehash)
         .and_then(|z| scalar.try_sign_prehashed_rfc6979::<Sha256>(&z, &[]));
@@ -106,16 +99,24 @@ pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
     Ok(normalized.to_der().as_bytes().to_vec())
 }
 
-/// Verify a DER-encoded secp256k1 signature.
+/// Verify a DER secp256k1 signature over a 32-byte hash. The public key must
+/// be 33 bytes, compressed (0x02/0x03), the only form `rippled` takes; the
+/// signature must be low-S. A hash that is not 32 bytes, or a malformed key
+/// or signature, is an error; a signature that does not match is `Ok(false)`.
 pub fn verify(public_key: &[u8], prehash: &[u8], signature_der: &[u8]) -> Result<bool, CoreError> {
     use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
+    let prehash = prehash32(prehash)?;
+    if !matches!(public_key, [0x02 | 0x03, ..]) || public_key.len() != 33 {
+        return Err(CoreError::InvalidKeyLength {
+            expected: 33,
+            got: public_key.len(),
+        });
+    }
     let verifying_key = VerifyingKey::from_sec1_bytes(public_key)
         .map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-
     let signature =
         Signature::from_der(signature_der).map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-
     Ok(verifying_key.verify_prehash(prehash, &signature).is_ok())
 }
 
@@ -156,7 +157,7 @@ mod tests {
         // Generate a random secp256k1 seed and verify full round-trip
         let seed =
             crate::crypto::signing::Seed::generate_with_type(crate::address::KeyType::Secp256k1);
-        let (privkey, pubkey) = derive_keypair(&seed.bytes).unwrap();
+        let (privkey, pubkey) = derive_keypair(seed.as_bytes()).unwrap();
 
         assert_eq!(
             pubkey.len(),
@@ -184,7 +185,7 @@ mod tests {
         );
 
         // Deterministic: same seed bytes produce same keypair
-        let (privkey2, pubkey2) = derive_keypair(&seed.bytes).unwrap();
+        let (privkey2, pubkey2) = derive_keypair(seed.as_bytes()).unwrap();
         assert_eq!(privkey, privkey2);
         assert_eq!(pubkey, pubkey2);
     }

@@ -54,7 +54,7 @@
 //!     for account in utils::get_balance_changes(meta)? {
 //!         println!("{}: {:?}", account.account, account.balances);
 //!     }
-//!     println!("keep this seed to reuse the wallet: {}", wallet.seed().unwrap());
+//!     println!("keep this seed to reuse the wallet: {}", wallet.seed().unwrap().as_str());
 //!     Ok(())
 //! }
 //! ```
@@ -547,7 +547,7 @@ pub use wallet::Wallet;
 /// address leaves this machine; keep the seed with [`Wallet::seed`].
 pub async fn generate_faucet_wallet(network: FaucetNetwork) -> Result<Wallet, ClientError> {
     let wallet = Wallet::generate();
-    faucet::fund_and_wait(network, &wallet.address).await?;
+    faucet::fund_and_wait(network, wallet.classic_address()).await?;
     Ok(wallet)
 }
 

@@ -1,19 +1,22 @@
 use xrpl_core::address::KeyType;
 use xrpl_core::codec::encode_transaction_json;
-use xrpl_core::crypto::{sign_transaction, Keypair, Seed};
+use xrpl_core::crypto::{sign_transaction, verify_signing_data, Keypair, Seed};
 use xrpl_core::types::AccountId;
 use xrpl_core::CoreError;
+use zeroize::Zeroizing;
 
-/// High-level wallet for XRPL transactions.
-/// Wraps a keypair with convenient methods for signing and address derivation.
+/// The most signers a multi-signed transaction may carry (`rippled`'s
+/// `STTx::maxMultiSigners`).
+pub const MAX_MULTISIGNERS: usize = 32;
+
+/// High-level wallet for XRPL transactions: a key pair, its address and,
+/// when it was made from one, its seed. `Debug` shows the address and key
+/// type only; the secrets are wiped on drop.
+#[derive(Clone)]
 pub struct Wallet {
-    /// The key pair (the private key is wiped on drop).
-    pub keypair: Keypair,
-    /// The classic address.
-    pub address: String,
-    /// The 20-byte account ID.
-    pub account_id: AccountId,
-    /// The seed the keypair came from, when the wallet was made from one.
+    keypair: Keypair,
+    address: String,
+    account_id: AccountId,
     seed: Option<Seed>,
 }
 
@@ -27,10 +30,7 @@ impl Wallet {
         reason = "a random 16-byte seed always derives a keypair"
     )]
     pub fn generate() -> Self {
-        let seed = Seed::generate();
-        let keypair =
-            Keypair::from_seed(&seed).expect("freshly generated seed must produce valid keypair");
-        Self::from_keypair(keypair).with_seed(seed)
+        Self::generate_with_type(KeyType::Ed25519)
     }
 
     /// Generate a new random wallet with a specific key type.
@@ -75,9 +75,25 @@ impl Wallet {
     }
 
     /// The seed (`s…`), to store and restore this wallet with
-    /// [`Wallet::from_seed`]. `None` for a wallet made from a bare keypair.
-    pub fn seed(&self) -> Option<String> {
+    /// [`Wallet::from_seed`], in a string wiped on drop. `None` for a wallet
+    /// made from a bare keypair.
+    pub fn seed(&self) -> Option<Zeroizing<String>> {
         self.seed.as_ref().map(Seed::to_base58)
+    }
+
+    /// The key pair.
+    pub fn keypair(&self) -> &Keypair {
+        &self.keypair
+    }
+
+    /// The key type.
+    pub fn key_type(&self) -> KeyType {
+        self.keypair.key_type()
+    }
+
+    /// The 20-byte account ID.
+    pub fn account_id(&self) -> AccountId {
+        self.account_id
     }
 
     /// Sign a `Batch` as one of its participants (an account with an inner
@@ -130,11 +146,13 @@ impl Wallet {
 
     /// Get the public key as hex string.
     pub fn public_key_hex(&self) -> String {
-        hex::encode_upper(&self.keypair.public_key)
+        hex::encode_upper(self.keypair.public_key())
     }
 
-    /// Sign a transaction for multi-signing.
-    /// Returns a Signer entry ready to be added to the Signers array.
+    /// Sign a transaction as one of its multi-signers: the `Signer` entry for
+    /// [`collect_signers`]. The transaction is signed with an empty
+    /// `SigningPubKey` (a missing one counts as empty; a non-empty one is an
+    /// error), as `rippled`'s `sign_for` does.
     pub fn sign_for_multisigning(
         &self,
         tx: &serde_json::Value,
@@ -152,27 +170,64 @@ impl Wallet {
     }
 }
 
-/// Combine multiple Signer entries into the Signers array on a transaction.
-/// Sorts signers by 20-byte AccountID, the order rippled requires. Base58
-/// text order is not the same order, so every Account is decoded first.
+/// Put the `Signer` entries from [`Wallet::sign_for_multisigning`] on a
+/// transaction as its `Signers`, ready to encode and submit.
+///
+/// Every signature is checked against the transaction first, so one signed
+/// for a different transaction, or a changed one, is an error here rather
+/// than a refusal from the network. The signers are sorted by 20-byte
+/// AccountID, the order rippled requires (base58 text order is not the same
+/// order); an account may sign once; at most [`MAX_MULTISIGNERS`] may sign.
+/// `SigningPubKey` is set empty; a `TxnSignature` (a single signature) is an
+/// error.
 pub fn collect_signers(
     tx: &mut serde_json::Value,
     signers: Vec<serde_json::Value>,
 ) -> Result<(), CoreError> {
+    let invalid = |m: String| CoreError::ValidationError(m);
+    if signers.is_empty() || signers.len() > MAX_MULTISIGNERS {
+        return Err(invalid(format!(
+            "a multi-signed transaction has 1 to {MAX_MULTISIGNERS} signers, got {}",
+            signers.len()
+        )));
+    }
+    if tx.get("TxnSignature").is_some() {
+        return Err(invalid(
+            "the transaction has a TxnSignature; a multi-signed one has none".to_string(),
+        ));
+    }
+    let mut unsigned = tx.clone();
+    if let Some(obj) = unsigned.as_object_mut() {
+        obj.remove("Signers");
+    }
     let mut keyed = signers
         .into_iter()
         .map(|signer| {
-            let account = signer
-                .get("Signer")
-                .and_then(|s| s.get("Account"))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    CoreError::InvalidAddress("Signer entry has no Account".to_string())
-                })?;
+            let field = |name: &str| {
+                signer
+                    .get("Signer")
+                    .and_then(|s| s.get(name))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| invalid(format!("a Signer entry has no {name}")))
+            };
+            let account = field("Account")?;
+            let public_key = hex::decode(field("SigningPubKey")?)
+                .map_err(|e| CoreError::InvalidHex(e.to_string()))?;
+            let signature = hex::decode(field("TxnSignature")?)
+                .map_err(|e| CoreError::InvalidHex(e.to_string()))?;
+            let data = xrpl_core::codec::encode_for_multisigning(&unsigned, account)?;
+            if !verify_signing_data(&public_key, &data, &signature)? {
+                return Err(invalid(format!(
+                    "{account}'s signature is not for this transaction"
+                )));
+            }
             Ok((xrpl_core::address::decode_account_id(account)?, signer))
         })
         .collect::<Result<Vec<_>, CoreError>>()?;
     keyed.sort_by_key(|a| a.0);
+    if keyed.windows(2).any(|w| matches!(w, [a, b] if a.0 == b.0)) {
+        return Err(invalid("an account signs a transaction once".to_string()));
+    }
 
     let obj = tx
         .as_object_mut()
@@ -192,7 +247,7 @@ impl std::fmt::Debug for Wallet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Wallet")
             .field("address", &self.address)
-            .field("key_type", &self.keypair.key_type)
+            .field("key_type", &self.keypair.key_type())
             .finish()
     }
 }
@@ -215,12 +270,12 @@ mod tests {
         let seed_str = seed.to_base58();
         let wallet = Wallet::from_seed(&seed_str).unwrap();
         assert!(wallet.address.starts_with('r'));
-        assert_eq!(wallet.keypair.key_type, KeyType::Secp256k1);
+        assert_eq!(wallet.key_type(), KeyType::Secp256k1);
         // Round-trip: recreate from same seed and verify identical address
         let wallet2 = Wallet::from_seed(&seed_str).unwrap();
         assert_eq!(wallet.address, wallet2.address);
         assert_eq!(wallet.public_key_hex(), wallet2.public_key_hex());
-        assert_eq!(wallet.seed().as_deref(), Some(seed_str.as_str()));
+        assert_eq!(wallet.seed().as_deref(), Some(&*seed_str));
     }
 
     #[test]
@@ -231,9 +286,9 @@ mod tests {
         ] {
             let restored = Wallet::from_seed(&wallet.seed().unwrap()).unwrap();
             assert_eq!(restored.address, wallet.address);
-            assert_eq!(restored.keypair.key_type, wallet.keypair.key_type);
+            assert_eq!(restored.key_type(), wallet.key_type());
         }
-        let bare = Wallet::from_keypair(Wallet::generate().keypair.clone());
+        let bare = Wallet::from_keypair(Wallet::generate().keypair().clone());
         assert!(bare.seed().is_none());
     }
 
@@ -327,36 +382,87 @@ mod tests {
         assert!(tx.get("Signers").is_none());
     }
 
-    #[test]
-    fn collect_signers_orders_by_account_id_bytes_not_base58() {
-        use xrpl_core::address::decode_account_id;
-        // rippled (STTx.cpp) rejects "Unsorted Signers array" unless the
-        // signers ascend by 20-byte AccountID. The base58 alphabet is not in
-        // ASCII order: 'P' < 'w' as text, but 'w' is the lower base58 digit.
-        let low = "rw2ciyaNshpHe7bCHo4bRWq6pqqynnWKQg";
-        let high = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
-        assert!(high < low, "precondition: text order puts `high` first");
-        assert!(
-            decode_account_id(low).unwrap() < decode_account_id(high).unwrap(),
-            "precondition: AccountID order puts `low` first"
-        );
-        let mut tx = serde_json::json!({
+    fn multisigned_payment() -> serde_json::Value {
+        serde_json::json!({
             "TransactionType": "Payment",
             "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
             "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
             "Amount": "1000000",
-            "Fee": "12",
+            "Fee": "36",
             "Sequence": 1
-        });
+        })
+    }
+
+    /// Two wallets from fixed seeds whose addresses sort one way as text and
+    /// the other way as 20-byte AccountIDs.
+    fn text_and_byte_order_disagree() -> (Wallet, Wallet) {
+        let wallets: Vec<Wallet> = (0u8..=255)
+            .map(|i| {
+                Wallet::from_keypair(
+                    Seed::from_bytes([i; 16], KeyType::Ed25519)
+                        .derive_keypair()
+                        .unwrap(),
+                )
+            })
+            .collect();
+        for a in &wallets {
+            for b in &wallets {
+                if a.classic_address() < b.classic_address()
+                    && a.account_id().as_bytes() > b.account_id().as_bytes()
+                {
+                    return (a.clone(), b.clone());
+                }
+            }
+        }
+        panic!("no such pair");
+    }
+
+    #[test]
+    fn collect_signers_orders_by_account_id_bytes_not_base58() {
+        // rippled (STTx.cpp) rejects "Unsorted Signers array" unless the
+        // signers ascend by 20-byte AccountID; the base58 alphabet is not in
+        // ASCII order.
+        let (text_first, bytes_first) = text_and_byte_order_disagree();
+        let mut tx = multisigned_payment();
         let signers = vec![
-            serde_json::json!({"Signer": {"Account": high, "SigningPubKey": "AA", "TxnSignature": "BB"}}),
-            serde_json::json!({"Signer": {"Account": low, "SigningPubKey": "CC", "TxnSignature": "DD"}}),
+            text_first.sign_for_multisigning(&tx).unwrap(),
+            bytes_first.sign_for_multisigning(&tx).unwrap(),
         ];
         super::collect_signers(&mut tx, signers).unwrap();
         assert_eq!(tx["SigningPubKey"], "");
         let arr = tx["Signers"].as_array().unwrap();
-        assert_eq!(arr[0]["Signer"]["Account"], low);
-        assert_eq!(arr[1]["Signer"]["Account"], high);
+        assert_eq!(arr[0]["Signer"]["Account"], bytes_first.classic_address());
+        assert_eq!(arr[1]["Signer"]["Account"], text_first.classic_address());
+    }
+
+    /// A signature over a different transaction, a repeated signer, too many
+    /// signers or a single signature are refused before anything is sent.
+    #[test]
+    fn collect_signers_checks_what_it_collects() {
+        let (a, b) = text_and_byte_order_disagree();
+        let tx = multisigned_payment();
+        let sign = |w: &Wallet, tx: &serde_json::Value| w.sign_for_multisigning(tx).unwrap();
+        let mut other = tx.clone();
+        other["Amount"] = serde_json::json!("2000000");
+        assert!(
+            super::collect_signers(&mut tx.clone(), vec![sign(&a, &tx), sign(&b, &other)]).is_err()
+        );
+        assert!(
+            super::collect_signers(&mut tx.clone(), vec![sign(&a, &tx), sign(&a, &tx)]).is_err()
+        );
+        assert!(super::collect_signers(&mut tx.clone(), vec![]).is_err());
+        let many = vec![sign(&a, &tx); MAX_MULTISIGNERS + 1];
+        assert!(super::collect_signers(&mut tx.clone(), many).is_err());
+        let mut single = tx.clone();
+        single["TxnSignature"] = serde_json::json!("AA");
+        assert!(super::collect_signers(&mut single, vec![sign(&a, &tx)]).is_err());
+        // A signer handed the transaction without its empty SigningPubKey
+        // signs the same data.
+        let mut spelled = tx.clone();
+        spelled["SigningPubKey"] = serde_json::json!("");
+        assert_eq!(sign(&a, &spelled), sign(&a, &tx));
+        let mut ok = tx.clone();
+        super::collect_signers(&mut ok, vec![sign(&a, &spelled), sign(&b, &tx)]).unwrap();
     }
 
     #[test]
@@ -409,7 +515,7 @@ mod tests {
     fn wallet_ed25519_vs_secp256k1() {
         let ed = Wallet::generate_with_type(KeyType::Ed25519);
         let sec = Wallet::generate_with_type(KeyType::Secp256k1);
-        assert_ne!(ed.address, sec.address);
+        assert_ne!(ed.classic_address(), sec.classic_address());
         // Ed25519 public key starts with 0xED
         assert!(ed.public_key_hex().starts_with("ED"));
     }

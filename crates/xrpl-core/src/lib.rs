@@ -59,7 +59,7 @@
 //!
 //! // A public test seed (never fund it on mainnet).
 //! let seed = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
-//! assert_eq!(seed.key_type, KeyType::Secp256k1);
+//! assert_eq!(seed.key_type(), KeyType::Secp256k1);
 //! let keys = Keypair::from_seed(&seed)?;
 //! assert_eq!(keys.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
 //!

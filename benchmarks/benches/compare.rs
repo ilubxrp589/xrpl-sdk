@@ -112,7 +112,7 @@ fn keys(c: &mut Criterion) {
             ));
         eprintln!(
             "{name}: same public key: {}; same signature: {same_sig}",
-            their_pub.eq_ignore_ascii_case(&hex::encode(&ours.public_key))
+            their_pub.eq_ignore_ascii_case(&hex::encode(ours.public_key()))
         );
 
         let mut g = c.benchmark_group(format!("derive_keypair/{name}"));

@@ -6,3 +6,9 @@ sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r
 # docs/TESTING.md's old (wrong) vectors, named in the commit that replaced them.
 sn3nxiW7v8KXzPzAqzyHXbSSKNuN9
 sEdTM1uX8pu2do5XvTnutH6HsouMaM2
+# Deliberately broken copies of the public test seed above (a typo'd last
+# character, a character outside the alphabet, cut short): address.rs checks
+# that seed errors carry no part of the seed.
+sp5fghtJtpUorTwvof1NpDXAzNwf6
+sp5fghtJtpUorTwvof1NpDXAzNwf0
+sp5fghtJtpUorTwvof1NpDXAz

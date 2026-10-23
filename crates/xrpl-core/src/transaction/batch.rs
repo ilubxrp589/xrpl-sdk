@@ -150,7 +150,7 @@ pub fn sign_batch(batch: &Value, keypair: &Keypair) -> Result<BatchSigner, CoreE
     data.extend_from_slice(&keypair.account_id().0);
     Ok(BatchSigner {
         account: keypair.classic_address(),
-        signing_pub_key: hex::encode_upper(&keypair.public_key),
+        signing_pub_key: hex::encode_upper(keypair.public_key()),
         txn_signature: Some(hex::encode_upper(keypair.sign_signing_data(&data)?)),
         signers: None,
     })
@@ -169,7 +169,7 @@ pub fn sign_batch_for(
     data.extend_from_slice(&keypair.account_id().0);
     Ok(Signer {
         account: keypair.classic_address(),
-        signing_pub_key: hex::encode_upper(&keypair.public_key),
+        signing_pub_key: hex::encode_upper(keypair.public_key()),
         txn_signature: hex::encode_upper(keypair.sign_signing_data(&data)?),
     })
 }

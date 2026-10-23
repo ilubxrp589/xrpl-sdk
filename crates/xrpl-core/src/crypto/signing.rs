@@ -1,40 +1,45 @@
 use crate::address::{self, KeyType};
 use crate::types::AccountId;
 use crate::CoreError;
+use core::fmt;
 use ripemd::Ripemd160;
 use sha2::{Digest, Sha256, Sha512};
+use zeroize::Zeroizing;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-/// XRPL seed: 16 random bytes + key type.
-/// Seed bytes are zeroed on drop via `ZeroizeOnDrop`.
-#[derive(Debug, Clone, zeroize::ZeroizeOnDrop)]
+/// An XRPL seed: 16 secret bytes and the key type they derive (`s…` in
+/// base58, `sEd…` for Ed25519). The bytes are wiped on drop, and `Debug`
+/// shows only the key type, so a seed cannot reach a log by `{:?}`.
+#[derive(Clone, zeroize::ZeroizeOnDrop)]
 pub struct Seed {
-    /// The bytes.
-    pub bytes: [u8; 16],
-    /// The key type.
+    bytes: [u8; 16],
     #[zeroize(skip)]
-    pub key_type: KeyType,
+    key_type: KeyType,
 }
 
 impl Seed {
-    /// Generate a random seed (default: Ed25519).
+    /// Generate a random seed (default: Ed25519) from the operating system's
+    /// random source.
     #[cfg(feature = "std")]
     pub fn generate() -> Self {
-        let bytes = generate_random_bytes_16();
-        Self {
-            bytes,
-            key_type: KeyType::Ed25519,
-        }
+        Self::generate_with_type(KeyType::Ed25519)
     }
 
     /// Generate a random seed with a specific key type.
     #[cfg(feature = "std")]
     pub fn generate_with_type(key_type: KeyType) -> Self {
-        let bytes = generate_random_bytes_16();
+        Self {
+            bytes: generate_random_bytes_16(),
+            key_type,
+        }
+    }
+
+    /// A seed from its 16 bytes and key type.
+    pub fn from_bytes(bytes: [u8; 16], key_type: KeyType) -> Self {
         Self { bytes, key_type }
     }
 
@@ -44,9 +49,19 @@ impl Seed {
         Ok(Self { bytes, key_type })
     }
 
-    /// Encode to base58check string.
-    pub fn to_base58(&self) -> String {
-        address::encode_seed(&self.bytes, self.key_type)
+    /// Encode to base58check (`s…`), in a string wiped on drop.
+    pub fn to_base58(&self) -> Zeroizing<String> {
+        Zeroizing::new(address::encode_seed(&self.bytes, self.key_type))
+    }
+
+    /// The 16 secret bytes.
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        &self.bytes
+    }
+
+    /// The key type the seed derives.
+    pub fn key_type(&self) -> KeyType {
+        self.key_type
     }
 
     /// Derive a keypair from this seed.
@@ -55,42 +70,75 @@ impl Seed {
     }
 }
 
-/// An XRPL keypair (private + public key).
-/// Private key bytes are zeroed on drop via `ZeroizeOnDrop`.
-#[derive(Debug, Clone, zeroize::ZeroizeOnDrop)]
+impl fmt::Debug for Seed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Seed")
+            .field("key_type", &self.key_type)
+            .field("bytes", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// An XRPL key pair. The secret key is wiped on drop and never shown by
+/// `Debug`; the public key always belongs to the secret key (every
+/// constructor derives it).
+#[derive(Clone, zeroize::ZeroizeOnDrop)]
 pub struct Keypair {
-    /// The private key (wiped on drop).
-    pub private_key: Vec<u8>,
-    /// A public key, hex (`PublicKey`).
-    pub public_key: Vec<u8>,
-    /// The key type.
+    private_key: Vec<u8>,
     #[zeroize(skip)]
-    pub key_type: KeyType,
+    public_key: Vec<u8>,
+    #[zeroize(skip)]
+    key_type: KeyType,
 }
 
 impl Keypair {
     /// Derive a keypair from a seed.
     pub fn from_seed(seed: &Seed) -> Result<Self, CoreError> {
-        let (private_key, public_key) = match seed.key_type {
+        let (mut private_key, public_key) = match seed.key_type {
             KeyType::Ed25519 => super::ed25519::derive_keypair(&seed.bytes)?,
             KeyType::Secp256k1 => super::secp256k1::derive_keypair(&seed.bytes)?,
         };
-
         Ok(Self {
-            private_key,
+            // Moved out of the wiped buffer, not copied.
+            private_key: core::mem::take(&mut *private_key),
             public_key,
             key_type: seed.key_type,
         })
     }
 
+    /// A keypair from a 32-byte secret key; the public key is derived from it.
+    pub fn from_private_key(key_type: KeyType, private_key: &[u8]) -> Result<Self, CoreError> {
+        let public_key = match key_type {
+            KeyType::Ed25519 => super::ed25519::public_key(private_key)?,
+            KeyType::Secp256k1 => super::secp256k1::public_key(private_key)?,
+        };
+        Ok(Self {
+            private_key: private_key.to_vec(),
+            public_key,
+            key_type,
+        })
+    }
+
+    /// The public key as it appears on the ledger: 33 bytes (0xED + point
+    /// for Ed25519, compressed for secp256k1).
+    pub fn public_key(&self) -> &[u8] {
+        &self.public_key
+    }
+
+    /// The 32-byte secret key. Treat it as you treat the seed.
+    pub fn private_key(&self) -> &[u8] {
+        &self.private_key
+    }
+
+    /// The key type.
+    pub fn key_type(&self) -> KeyType {
+        self.key_type
+    }
+
     /// Derive the 20-byte account ID from the public key.
     /// account_id = RIPEMD160(SHA256(public_key))
     pub fn account_id(&self) -> AccountId {
-        let sha = Sha256::digest(&self.public_key);
-        let ripemd = Ripemd160::digest(sha);
-        let mut id = [0u8; 20];
-        id.copy_from_slice(&ripemd);
-        AccountId::from_bytes(id)
+        AccountId::from_bytes(public_key_to_account_id(&self.public_key))
     }
 
     /// Get the classic address (base58check encoded account ID).
@@ -98,7 +146,37 @@ impl Keypair {
         self.account_id().to_address()
     }
 
-    /// Sign a raw message/hash.
+    /// Sign `message` the way `rippled` verifies a signature from this key
+    /// (`PublicKey.cpp` `verify`): Ed25519 signs the message itself;
+    /// secp256k1 signs SHA-512Half(message). Use this for any message,
+    /// including XRPL signing data (a hash prefix plus serialized fields).
+    pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, CoreError> {
+        match self.key_type {
+            KeyType::Ed25519 => super::ed25519::sign(&self.private_key, message),
+            KeyType::Secp256k1 => super::secp256k1::sign(&self.private_key, &sha512_half(message)),
+        }
+    }
+
+    /// Whether `signature` is this key's [`Keypair::sign_message`] signature
+    /// over `message`.
+    pub fn verify_message(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
+        verify_signing_data(&self.public_key, message, signature)
+    }
+
+    /// Sign XRPL signing data (a hash prefix plus serialized fields) the way
+    /// rippled verifies it: the same as [`Keypair::sign_message`].
+    pub fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
+        self.sign_message(data)
+    }
+
+    /// The raw primitive: Ed25519 signs `message`; secp256k1 signs
+    /// `message` as an already-computed 32-byte hash (any other length is an
+    /// error). The two key types mean different things by the same call, so
+    /// prefer [`Keypair::sign_message`].
+    #[deprecated(
+        since = "0.6.0",
+        note = "use sign_message (hashes for secp256k1 as rippled verifies); sign signs a 32-byte hash for secp256k1"
+    )]
     pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, CoreError> {
         match self.key_type {
             KeyType::Ed25519 => super::ed25519::sign(&self.private_key, message),
@@ -106,17 +184,8 @@ impl Keypair {
         }
     }
 
-    /// Sign XRPL signing data (a hash prefix plus serialized fields) the way
-    /// rippled verifies it (PublicKey.cpp `verify`): secp256k1 signs
-    /// SHA512Half(data), Ed25519 signs the data itself.
-    pub fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
-        match self.key_type {
-            KeyType::Ed25519 => self.sign(data),
-            KeyType::Secp256k1 => self.sign(&sha512_half(data)),
-        }
-    }
-
-    /// Verify a signature.
+    /// Verify a [`Keypair::sign`] signature (secp256k1: over a 32-byte hash).
+    #[deprecated(since = "0.6.0", note = "use verify_message")]
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
         match self.key_type {
             KeyType::Ed25519 => super::ed25519::verify(&self.public_key, message, signature),
@@ -125,12 +194,45 @@ impl Keypair {
     }
 }
 
-/// Generate 16 random bytes using the platform's CSPRNG.
+impl fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keypair")
+            .field("key_type", &self.key_type)
+            .field("public_key", &hex::encode_upper(&self.public_key))
+            .field("private_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Whether `signature` is `public_key`'s signature over XRPL signing data
+/// (or any message), as `rippled` checks it: the key type is the key's
+/// first byte (0xED for Ed25519), Ed25519 over the data itself, secp256k1
+/// over SHA-512Half of it.
+pub fn verify_signing_data(
+    public_key: &[u8],
+    data: &[u8],
+    signature: &[u8],
+) -> Result<bool, CoreError> {
+    if public_key.first() == Some(&0xED) {
+        super::ed25519::verify(public_key, data, signature)
+    } else {
+        super::secp256k1::verify(public_key, &sha512_half(data), signature)
+    }
+}
+
+/// 16 random bytes from the operating system (`getrandom`), never a
+/// user-space generator: a forked process must not repeat its parent's seeds.
 #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
+#[allow(
+    clippy::expect_used,
+    reason = "no OS random source means no safe key; there is nothing to fall back to"
+)]
 fn generate_random_bytes_16() -> [u8; 16] {
-    use rand::RngCore;
+    use rand::TryRngCore;
     let mut bytes = [0u8; 16];
-    rand::rng().fill_bytes(&mut bytes);
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut bytes)
+        .expect("the operating system's random source failed");
     bytes
 }
 
@@ -138,7 +240,7 @@ fn generate_random_bytes_16() -> [u8; 16] {
 #[cfg(all(feature = "std", target_arch = "wasm32"))]
 #[allow(
     clippy::expect_used,
-    reason = "no CSPRNG means no safe key; the native rand::rng() path panics the same way"
+    reason = "no CSPRNG means no safe key; there is nothing to fall back to"
 )]
 fn generate_random_bytes_16() -> [u8; 16] {
     let mut bytes = [0u8; 16];
@@ -185,6 +287,18 @@ pub fn sign_transaction(
         .as_object_mut()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
 
+    // A multi-signed transaction is signed by each signer, not by one key.
+    if obj
+        .get("Signers")
+        .is_some_and(|s| !s.as_array().is_some_and(Vec::is_empty))
+    {
+        return Err(CoreError::ValidationError(
+            "the transaction has Signers, so it is multi-signed: each signer signs it \
+             for multi-signing instead"
+                .to_string(),
+        ));
+    }
+
     // Set SigningPubKey
     obj.insert(
         "SigningPubKey".to_string(),
@@ -225,8 +339,8 @@ mod tests {
         let seed = Seed::generate_with_type(KeyType::Secp256k1);
         let encoded = seed.to_base58();
         let decoded = Seed::from_base58(&encoded).unwrap();
-        assert_eq!(decoded.key_type, KeyType::Secp256k1);
-        assert_eq!(decoded.bytes, seed.bytes);
+        assert_eq!(decoded.key_type(), KeyType::Secp256k1);
+        assert_eq!(decoded.as_bytes(), seed.as_bytes());
         assert_eq!(decoded.to_base58(), encoded);
     }
 
@@ -235,8 +349,8 @@ mod tests {
         let seed = Seed::generate();
         let encoded = seed.to_base58();
         let decoded = Seed::from_base58(&encoded).unwrap();
-        assert_eq!(decoded.key_type, KeyType::Ed25519);
-        assert_eq!(decoded.bytes, seed.bytes);
+        assert_eq!(decoded.key_type(), KeyType::Ed25519);
+        assert_eq!(decoded.as_bytes(), seed.as_bytes());
         assert_eq!(decoded.to_base58(), encoded);
     }
 
@@ -271,9 +385,9 @@ mod tests {
         let seed = Seed::generate();
         let keypair = Keypair::from_seed(&seed).unwrap();
 
-        let message = sha512_half(b"test transaction data");
-        let sig = keypair.sign(&message).unwrap();
-        assert!(keypair.verify(&message, &sig).unwrap());
+        let message = b"test transaction data";
+        let sig = keypair.sign_message(message).unwrap();
+        assert!(keypair.verify_message(message, &sig).unwrap());
     }
 
     #[test]
@@ -281,9 +395,10 @@ mod tests {
         let seed = Seed::generate_with_type(KeyType::Secp256k1);
         let keypair = Keypair::from_seed(&seed).unwrap();
 
-        let message = sha512_half(b"test transaction data");
-        let sig = keypair.sign(&message).unwrap();
-        assert!(keypair.verify(&message, &sig).unwrap());
+        let message = b"test transaction data";
+        let sig = keypair.sign_message(message).unwrap();
+        assert!(keypair.verify_message(message, &sig).unwrap());
+        assert!(!keypair.verify_message(b"other data", &sig).unwrap());
     }
 
     // Known answers. Keys, addresses and the "test message" signatures are
@@ -303,10 +418,13 @@ mod tests {
         address: &str,
     ) -> Keypair {
         let seed = Seed::from_base58(seed).unwrap();
-        assert_eq!(seed.key_type, key_type);
+        assert_eq!(seed.key_type(), key_type);
         let keypair = Keypair::from_seed(&seed).unwrap();
-        assert_eq!(hex::encode_upper(&keypair.private_key), private_key[2..]);
-        assert_eq!(hex::encode_upper(&keypair.public_key), public_key);
+        assert_eq!(hex::encode_upper(keypair.private_key()), private_key[2..]);
+        assert_eq!(hex::encode_upper(keypair.public_key()), public_key);
+        // The secret key alone gives the same pair.
+        let again = Keypair::from_private_key(key_type, keypair.private_key()).unwrap();
+        assert_eq!(again.public_key(), keypair.public_key());
         assert_eq!(keypair.classic_address(), address);
         keypair
     }
@@ -321,10 +439,20 @@ mod tests {
             SECP_ADDRESS,
         );
         // secp256k1 signs SHA512Half(message) (RFC 6979, low S).
-        let hash = sha512_half(b"test message");
         let sig = "30440220583A91C95E54E6A651C47BEC22744E0B101E2C4060E7B08F6341657DAD9BC3EE02207D1489C7395DB0188D3A56A977ECBA54B36FA9371B40319655B1B4429E33EF2D";
-        assert_eq!(hex::encode_upper(keypair.sign(&hash).unwrap()), sig);
-        assert!(keypair.verify(&hash, &hex::decode(sig).unwrap()).unwrap());
+        assert_eq!(
+            hex::encode_upper(keypair.sign_message(b"test message").unwrap()),
+            sig
+        );
+        assert!(keypair
+            .verify_message(b"test message", &hex::decode(sig).unwrap())
+            .unwrap());
+        // The raw primitive over the hash is the same signature.
+        let hash = sha512_half(b"test message");
+        assert_eq!(
+            hex::encode_upper(super::super::secp256k1::sign(keypair.private_key(), &hash).unwrap()),
+            sig
+        );
     }
 
     #[test]
@@ -339,11 +467,11 @@ mod tests {
         // Ed25519 signs the message itself, with no hash first.
         let sig = "CB199E1BFD4E3DAA105E4832EEDFA36413E1F44205E4EFB9E27E826044C21E3E2E848BBC8195E8959BADF887599B7310AD1B7047EF11B682E0D068F73749750E";
         assert_eq!(
-            hex::encode_upper(keypair.sign(b"test message").unwrap()),
+            hex::encode_upper(keypair.sign_message(b"test message").unwrap()),
             sig
         );
         assert!(keypair
-            .verify(b"test message", &hex::decode(sig).unwrap())
+            .verify_message(b"test message", &hex::decode(sig).unwrap())
             .unwrap());
     }
 
@@ -411,5 +539,67 @@ mod tests {
         let sig_hex = signed["TxnSignature"].as_str().unwrap();
         assert!(!sig_hex.is_empty());
         assert!(hex::decode(sig_hex).is_ok());
+    }
+
+    /// `{:?}` on a seed or key pair never shows a secret.
+    #[test]
+    fn debug_shows_no_secret() {
+        let seed = Seed::from_base58(SECP_SEED).unwrap();
+        let keypair = Keypair::from_seed(&seed).unwrap();
+        let (s, k) = (format!("{seed:?}"), format!("{keypair:?}"));
+        assert!(s.contains("REDACTED") && !s.contains("1, 2, 3"), "{s}");
+        let secret = hex::encode_upper(keypair.private_key());
+        assert!(k.contains("REDACTED") && !k.contains(&secret), "{k}");
+        assert!(!k.contains("215, 139"), "{k}");
+    }
+
+    /// secp256k1 signs exactly a 32-byte hash. The ECDSA primitive would
+    /// use only the first 32 bytes of a longer input, so a signature over
+    /// one message would verify for any message sharing those bytes.
+    #[test]
+    fn secp256k1_refuses_anything_but_a_32_byte_hash() {
+        use super::super::secp256k1;
+        let keypair = Keypair::from_seed(&Seed::from_base58(SECP_SEED).unwrap()).unwrap();
+        let mut m1 = vec![0xAAu8; 32];
+        m1.extend_from_slice(b"pay 1 XRP");
+        let mut m2 = vec![0xAAu8; 32];
+        m2.extend_from_slice(b"pay 1000000 XRP to mallory");
+        assert!(secp256k1::sign(keypair.private_key(), &m1).is_err());
+        assert!(secp256k1::sign(keypair.private_key(), &m1[..20]).is_err());
+        let sig = keypair.sign_message(&m1).unwrap();
+        assert!(keypair.verify_message(&m1, &sig).unwrap());
+        assert!(!keypair.verify_message(&m2, &sig).unwrap());
+        assert!(secp256k1::verify(keypair.public_key(), &m2, &sig).is_err());
+        // Only rippled's 33-byte compressed public keys.
+        let uncompressed = {
+            use k256::elliptic_curve::sec1::ToEncodedPoint;
+            k256::PublicKey::from_sec1_bytes(keypair.public_key())
+                .unwrap()
+                .to_encoded_point(false)
+                .as_bytes()
+                .to_vec()
+        };
+        assert!(secp256k1::verify(&uncompressed, &sha512_half(&m1), &sig).is_err());
+    }
+
+    #[test]
+    fn a_keypair_from_a_secret_key_has_its_public_key() {
+        for key_type in [KeyType::Ed25519, KeyType::Secp256k1] {
+            let keypair = Keypair::from_seed(&Seed::generate_with_type(key_type)).unwrap();
+            let again = Keypair::from_private_key(key_type, keypair.private_key()).unwrap();
+            assert_eq!(again.public_key(), keypair.public_key());
+            assert_eq!(again.classic_address(), keypair.classic_address());
+        }
+        assert!(Keypair::from_private_key(KeyType::Secp256k1, &[0u8; 32]).is_err());
+        assert!(Keypair::from_private_key(KeyType::Ed25519, &[1u8; 31]).is_err());
+    }
+
+    #[test]
+    fn a_multi_signed_transaction_is_not_single_signed() {
+        let keypair = Keypair::from_seed(&Seed::from_base58(SECP_SEED).unwrap()).unwrap();
+        let tx = serde_json::json!({"TransactionType": "AccountSet", "Account": SECP_ADDRESS,
+            "Fee": "12", "Sequence": 1, "SigningPubKey": "",
+            "Signers": [{"Signer": {"Account": ED_ADDRESS, "SigningPubKey": "ED01", "TxnSignature": "AA"}}]});
+        assert!(sign_transaction(&tx, &keypair).is_err());
     }
 }

@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for change in utils::get_balance_changes(result.meta.as_ref().unwrap())? {
         println!("{}: {:?}", change.account, change.balances);
     }
-    println!("seed to keep: {}", wallet.seed().unwrap());
+    println!("seed to keep: {}", wallet.seed().unwrap().as_str());
     Ok(())
 }
 ```

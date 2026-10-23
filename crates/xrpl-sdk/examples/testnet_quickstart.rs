@@ -15,7 +15,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Address: {}", wallet.classic_address());
     println!(
         "Seed:    {} (test network only)",
-        wallet.seed().unwrap_or_default()
+        wallet
+            .seed()
+            .as_deref()
+            .map(String::as_str)
+            .unwrap_or_default()
     );
 
     let client = XrplHttpClient::new(network.rpc_url())?;

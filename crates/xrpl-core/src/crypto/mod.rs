@@ -18,4 +18,24 @@ pub use crate::address::KeyType;
 pub use channel::{sign_payment_channel_claim, verify_payment_channel_claim};
 #[cfg(feature = "std")]
 pub use signing::sign_transaction;
-pub use signing::{sha512_half, Keypair, Seed};
+pub use signing::{sha512_half, verify_signing_data, Keypair, Seed};
+
+use sha2::{Digest, Sha512};
+use zeroize::{Zeroize, Zeroizing};
+
+/// SHA-512Half of `parts` (concatenated), for secret inputs: the half is
+/// returned in a buffer wiped on drop, and the full digest is wiped here.
+pub(crate) fn secret_sha512_half(parts: &[&[u8]]) -> Zeroizing<[u8; 32]> {
+    let mut hasher = Sha512::new();
+    for part in parts {
+        hasher.update(part);
+    }
+    let mut full = hasher.finalize();
+    let digest: &mut [u8] = full.as_mut();
+    let mut half = Zeroizing::new([0u8; 32]);
+    for (out, byte) in half.iter_mut().zip(digest.iter()) {
+        *out = *byte;
+    }
+    digest.zeroize();
+    half
+}

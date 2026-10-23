@@ -356,14 +356,14 @@ async fn run(cli: Cli) -> Res {
                     Wallet::generate()
                 };
                 print(
-                    &json!({"address": w.classic_address(), "public_key": w.public_key_hex(), "seed": w.seed()}),
+                    &json!({"address": w.classic_address(), "public_key": w.public_key_hex(), "seed": w.seed().as_deref().map(String::as_str)}),
                 )?;
                 eprintln!("Keep the seed private: it controls the account.");
             }
             WalletCmd::Show(seed) => {
                 let w = wallet_from(&seed)?;
                 print(
-                    &json!({"address": w.classic_address(), "public_key": w.public_key_hex(), "key_type": format!("{:?}", w.keypair.key_type)}),
+                    &json!({"address": w.classic_address(), "public_key": w.public_key_hex(), "key_type": format!("{:?}", w.key_type())}),
                 )?;
             }
             WalletCmd::Faucet => {
@@ -374,7 +374,7 @@ async fn run(cli: Cli) -> Res {
                 eprintln!("Funding a new wallet from the {net:?} faucet…");
                 let w = generate_faucet_wallet(net).await?;
                 print(
-                    &json!({"address": w.classic_address(), "seed": w.seed(), "network": format!("{net:?}")}),
+                    &json!({"address": w.classic_address(), "seed": w.seed().as_deref().map(String::as_str), "network": format!("{net:?}")}),
                 )?;
             }
         },

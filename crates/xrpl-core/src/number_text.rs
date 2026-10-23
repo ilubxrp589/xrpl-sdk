@@ -70,6 +70,7 @@ pub(crate) fn split(s: &str) -> Result<Parts<'_>, CoreError> {
 
 /// `rippled`'s `partsFromString`: sign, mantissa and exponent of a decimal
 /// string ([`split`]'s form), with the digits fitting a `u64`.
+#[cfg(feature = "std")]
 pub(crate) fn parse(s: &str) -> Result<(bool, u64, i64), CoreError> {
     let parts = split(s)?;
     let mut mantissa: u64 = 0;

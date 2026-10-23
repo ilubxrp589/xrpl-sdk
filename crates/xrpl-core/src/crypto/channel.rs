@@ -2,8 +2,7 @@
 //! redeem XRP from it later (rippled's `channel_authorize`), and how anyone
 //! checks one (`channel_verify`, or PaymentChannelClaim's `Signature`).
 
-use super::signing::{sha512_half, Keypair};
-use super::{ed25519, secp256k1};
+use super::signing::{verify_signing_data, Keypair};
 use crate::types::Hash256;
 use crate::CoreError;
 
@@ -43,11 +42,7 @@ pub fn verify_payment_channel_claim(
     let data = claim_data(channel_id, amount_drops)?;
     let signature = hex::decode(signature).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
     let public_key = hex::decode(public_key).map_err(|e| CoreError::InvalidHex(e.to_string()))?;
-    if public_key.first() == Some(&0xED) {
-        ed25519::verify(&public_key, &data, &signature)
-    } else {
-        secp256k1::verify(&public_key, &sha512_half(&data), &signature)
-    }
+    verify_signing_data(&public_key, &data, &signature)
 }
 
 #[cfg(test)]
@@ -76,7 +71,7 @@ mod tests {
             ),
         ] {
             let keypair = Keypair::from_seed(&Seed::from_base58(seed).unwrap()).unwrap();
-            assert_eq!(hex::encode_upper(&keypair.public_key), public_key);
+            assert_eq!(hex::encode_upper(keypair.public_key()), public_key);
             assert_eq!(sign_payment_channel_claim(CHANNEL, 1_000_000, &keypair).unwrap(), rippled_signature);
             assert!(verify_payment_channel_claim(CHANNEL, 1_000_000, rippled_signature, public_key).unwrap());
             assert!(!verify_payment_channel_claim(CHANNEL, 1_000_001, rippled_signature, public_key).unwrap());
@@ -89,17 +84,16 @@ mod tests {
     fn matches_xrpl_js() {
         let channel = "3E18C05AD40319B809520F1A136370C4075321B285217323396D6FD9EE1E9037";
         let expected = "3045022100B5C54654221F154347679B97AE7791CBEF5E6772A3F894F9C781B8F1B400F89F022021E466D29DC5AEB5DFAFC76E8A88D2E388EBD25A84143B6AC3B647F479CB89B7";
-        let keypair = Keypair {
-            private_key: hex::decode(
-                "ACCD3309DB14D1A4FC9B1DAE608031F4408C85C73EE05E035B7DC8B25840107A",
-            )
-            .unwrap(),
-            public_key: hex::decode(
-                "02F89EAEC7667B30F33D0687BBA86C3FE2A08CCA40A9186C5BDE2DAA6FA97A37D8",
-            )
-            .unwrap(),
-            key_type: KeyType::Secp256k1,
-        };
+        let keypair = Keypair::from_private_key(
+            KeyType::Secp256k1,
+            &hex::decode("ACCD3309DB14D1A4FC9B1DAE608031F4408C85C73EE05E035B7DC8B25840107A")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            hex::encode_upper(keypair.public_key()),
+            "02F89EAEC7667B30F33D0687BBA86C3FE2A08CCA40A9186C5BDE2DAA6FA97A37D8"
+        );
         assert_eq!(
             sign_payment_channel_claim(channel, 10, &keypair).unwrap(),
             expected
