@@ -7,7 +7,7 @@
 //! backoff) when the connection drops or goes silent. Dropping the client
 //! stops it and closes the socket.
 
-use crate::client::Client;
+use crate::client::Transport;
 use crate::error::ClientError;
 use crate::host_of;
 use futures::{SinkExt, StreamExt};
@@ -109,7 +109,7 @@ impl WsClientBuilder {
         self
     }
 
-    /// The most [`Client::autofill`] sets as a `Fee` (default
+    /// The most [`Client::autofill`](crate::Client::autofill) sets as a `Fee` (default
     /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     #[must_use]
     pub fn max_fee_drops(mut self, drops: u64) -> Self {
@@ -220,7 +220,7 @@ impl Shared {
 
         let id = self.ids.fetch_add(1, Ordering::Relaxed);
         tracing::debug!(command, id, host = %self.host, "sending WS request");
-        let mut msg = match params {
+        let mut msg = match crate::client::with_api_version(params) {
             Value::Object(obj) => obj,
             _ => serde_json::Map::new(),
         };
@@ -274,10 +274,10 @@ impl Shared {
 async fn open(url: &str, timeout: Duration) -> Result<WsStream, ClientError> {
     match tokio::time::timeout(timeout, tokio_tungstenite::connect_async(url)).await {
         Ok(Ok((stream, _))) => Ok(stream),
-        Ok(Err(e)) => Err(ClientError::UnexpectedResponse(format!(
-            "WebSocket connection to {} failed: {e}",
-            host_of(url)
-        ))),
+        Ok(Err(e)) => Err(ClientError::transport(
+            crate::error::TransportErrorKind::Connect,
+            format!("WebSocket to {}: {e}", host_of(url)),
+        )),
         Err(_) => Err(ClientError::Timeout(timeout)),
     }
 }
@@ -425,7 +425,7 @@ impl Drop for XrplWsClient {
 }
 
 impl XrplWsClient {
-    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// The same client with `drops` as the most [`Client::autofill`](crate::Client::autofill) sets as
     /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
         self.max_fee_drops = drops;
@@ -607,8 +607,8 @@ impl XrplWsClient {
     /// as an [`OrderBookSnapshot`].
     pub async fn subscribe_order_book(
         &self,
-        taker_gets: Value,
-        taker_pays: Value,
+        taker_gets: &xrpl_core::types::Asset,
+        taker_pays: &xrpl_core::types::Asset,
         snapshot: bool,
         both: bool,
     ) -> Result<(OrderBookSnapshot, Subscription), ClientError> {
@@ -675,6 +675,69 @@ impl XrplWsClient {
     /// The same as [`XrplWsClient::unsubscribe`].
     pub async fn unsubscribe_ledger(&self) -> Result<(), ClientError> {
         self.unsubscribe(json!({"streams": ["ledger"]})).await
+    }
+
+    /// Search for payment paths and keep the answer up to date: the first
+    /// answer, and a [`Subscription`] to the updates ([`WsEvent::PathFind`],
+    /// one per ledger while the paths change). One search per connection: a
+    /// new one replaces the last; [`XrplWsClient::path_find_close`] ends it.
+    /// A reconnect ends it too (search again after
+    /// [`WsEvent::Reconnected`]).
+    ///
+    /// ```no_run
+    /// # async fn run(ws: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::requests::PathFindRequest;
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let usd = serde_json::json!({"currency": "USD", "issuer": "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq", "value": "10"});
+    /// let (first, mut updates) = ws
+    ///     .path_find(&PathFindRequest::new("rSender…", "rReceiver…", usd))
+    ///     .await?;
+    /// println!("{} ways to pay", first.alternatives.len());
+    /// while let Some(WsEvent::PathFind(update)) = updates.recv().await {
+    ///     if update.full_reply {
+    ///         println!("best: {:?}", update.alternatives.first().map(|a| &a.source_amount));
+    ///         break;
+    ///     }
+    /// }
+    /// ws.path_find_close().await?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the search (an
+    /// account it does not know, an amount it cannot read), the errors of
+    /// [`XrplWsClient::subscribe`] for the connection, and
+    /// [`ClientError::Json`] when the answer does not decode.
+    pub async fn path_find(
+        &self,
+        request: &crate::requests::PathFindRequest,
+    ) -> Result<(crate::types::PathFindResult, Subscription), ClientError> {
+        // Listen before asking, so no update between the reply and the
+        // receiver is lost.
+        let updates = self.subscription(|e| matches!(e, WsEvent::PathFind(_)));
+        let reply = self
+            .shared
+            .request("path_find", serde_json::to_value(request)?)
+            .await?;
+        Ok((serde_json::from_value(reply)?, updates))
+    }
+
+    /// End the connection's [`XrplWsClient::path_find`] search.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] (`noPathRequest`) when no search is open,
+    /// and the errors of [`XrplWsClient::subscribe`] for the connection.
+    pub async fn path_find_close(&self) -> Result<(), ClientError> {
+        self.shared
+            .request(
+                "path_find",
+                serde_json::to_value(crate::requests::PathFindRequest::close())?,
+            )
+            .await?;
+        Ok(())
     }
 
     /// Every event the connection carries, from now on.
@@ -744,13 +807,17 @@ impl std::fmt::Debug for Subscription {
     }
 }
 
-impl Client for XrplWsClient {
+impl Transport for XrplWsClient {
     fn max_fee_drops(&self) -> u64 {
         self.max_fee_drops
     }
 
-    async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
-        self.shared.request(command, params).await
+    fn send_raw<'a>(
+        &'a self,
+        command: &'a str,
+        params: Value,
+    ) -> crate::client::TransportFuture<'a> {
+        Box::pin(async move { self.shared.request(command, params).await })
     }
 }
 
@@ -758,6 +825,7 @@ impl Client for XrplWsClient {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::client::Client;
     use tokio::net::TcpListener;
     use tokio_tungstenite::tungstenite::Message;
 
@@ -825,8 +893,8 @@ mod tests {
     fn payment(from: &str, to: &str) -> Value {
         json!({"type": "transaction", "validated": true, "engine_result": "tesSUCCESS",
             "engine_result_code": 0, "engine_result_message": "ok", "ledger_index": 5,
-            "transaction": {"TransactionType": "Payment", "Account": from, "Destination": to,
-                "Amount": "1", "Fee": "12", "Sequence": 1, "SigningPubKey": "", "Flags": 0},
+            "tx_json": {"TransactionType": "Payment", "Account": from, "Destination": to,
+                "DeliverMax": "1", "Fee": "12", "Sequence": 1, "SigningPubKey": "", "Flags": 0},
             "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": []}})
     }
 
@@ -986,10 +1054,11 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "live-tests"))]
+#[cfg(all(test, xrpl_live_tests))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;
+    use crate::client::Client;
 
     const TESTNET_WS: &str = "wss://s.altnet.rippletest.net:51233";
 

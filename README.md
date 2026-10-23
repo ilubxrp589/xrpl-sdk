@@ -17,7 +17,7 @@ Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and Web
 
 | Crate | Description | `no_std` |
 |-------|-------------|----------|
-| `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), transaction builders | Yes (types + crypto) |
+| `halcyon-xrpl-core` | Types, binary codec, crypto (Ed25519 + Secp256k1), typed transactions | Yes (types + crypto) |
 | `halcyon-xrpl-client` | HTTP JSON-RPC + WebSocket with subscriptions & auto-reconnect | No |
 | `halcyon-xrpl-sdk` | Facade: wallet, autofill, re-exports from core + client | No |
 | `halcyon-xrpl-cli` | `hxrpl`, the command line: wallets, faucet, queries, signing, sending, live streams | — |
@@ -30,12 +30,12 @@ and `xrpl_sdk`.
 ```toml
 # Full SDK (recommended)
 [dependencies]
-halcyon-xrpl-sdk = "0.7"
+halcyon-xrpl-sdk = "0.8"
 
 # Or individual crates
 [dependencies]
-halcyon-xrpl-core = "0.7"      # types + codec + crypto only
-halcyon-xrpl-client = "0.7"    # HTTP + WebSocket clients
+halcyon-xrpl-core = "0.8"      # types + codec + crypto only
+halcyon-xrpl-client = "0.8"    # HTTP + WebSocket clients
 ```
 
 ### Minimum supported Rust version
@@ -106,6 +106,7 @@ below was run against Testnet (and `watch_streams` against mainnet) before relea
 | `checks` | write a check and cash part of it |
 | `payment_channel` | open a channel, pay with off-ledger signed claims, redeem one |
 | `multisign` | a signer list of two, a transaction signed by both, `submit_multisigned` |
+| `remote_signer` | sign and submit with a key held elsewhere (a stand-in for a KMS), through `AsyncSigningKey` |
 | `batch` | two accounts' payments in one all-or-nothing Batch, co-signed |
 | `mpt` | create a Multi-Purpose Token, opt in, send it |
 | `blocking` | the same, with no async: `BlockingClient` |
@@ -159,7 +160,7 @@ use xrpl_sdk::*;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
-    let lines = client.account_lines_all("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", &LedgerIndex::Validated).await?;
+    let lines = client.account_lines_all("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", LedgerIndex::Validated).await?;
     println!("{} trust lines", lines.len());
     for line in &lines {
         println!("  {} {} (issuer: {})", line.balance, line.currency, line.account);
@@ -168,22 +169,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Typed Transaction Builders
+### Typed Transactions
+
+Every transaction type, with `new` for the required fields and `with_…` for the rest.
+`validate` runs `rippled`'s checks that need no ledger, and signing runs it for you.
 
 ```rust
-use xrpl_core::transaction::builders::{Payment, Transaction};
-use serde_json::json;
+use xrpl_core::transaction::models::{Memo, Payment, TxModel};
+use xrpl_core::types::Amount;
 
-let tx = Payment::builder("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
-    .amount(json!("1000000"))
-    .destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
-    .fee("12")
-    .sequence(1)
-    .build()
-    .unwrap();
+fn main() -> Result<(), xrpl_core::CoreError> {
+    let tx = Payment::new(
+        "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        Amount::xrp(1_000_000)?,
+    )
+    .with_destination_tag(7u32)
+    .with_memo(Memo::text("invoice 17"));
 
-let json = tx.to_json();
-assert_eq!(json["TransactionType"], "Payment");
+    tx.validate()?;
+    let json = tx.to_json()?;
+    assert_eq!(json["TransactionType"], "Payment");
+    Ok(())
+}
 ```
 
 ## Features
@@ -205,8 +213,8 @@ assert_eq!(json["TransactionType"], "Payment");
   `new` with the required ones, and every flag as a constant (`Payment::TF_PARTIAL_PAYMENT`)
 - **Batch (XLS-56)**: inner transactions, `BatchSigners` from other accounts (single or multi-signed),
   the batch fee, and `autofill` that numbers and prices a batch
-- Fluent builders for 28 common transaction types; `build()` checks the rules rippled checks before
-  applying (AMM mode flags, signer lists, TickSize, TransferRate, …)
+- `validate` on every transaction: the rules rippled checks before applying that need no ledger (AMM
+  mode flags, signer lists, TickSize, TransferRate, clawback holders, …), run before signing
 - Transaction hashes (`hash_signed_tx`, `hash_signed_tx_blob`) and ledger entry IDs for every entry
   type (`keylet::account`, `trust_line`, `offer`, `amm`, `mptoken`, `credential`, `vault`, `bridge`,
   `book_directory`, …), each matching the index rippled computes
@@ -232,6 +240,9 @@ assert_eq!(json["TransactionType"], "Payment");
 - A typed request and response for every public `rippled` method and the Clio-only ones (43),
   each response checked against one recorded from a real server; `request_all` follows markers
 - `simulate` (dry-run a transaction) and `submit_multisigned`
+- `order_book`: both sides of a book from one ledger, with best bid, best ask and spread; typed
+  `path_find` searches over WebSocket, updated with every ledger
+- `rippled`'s API version 2 for every request, with typed transaction metadata
 - WebSocket client: each subscription hears only its own stream; automatic reconnection that
   resubscribes and reports it (`Disconnected`, `Reconnected`, `ResubscribeFailed`), silent
   connections replaced, the connection closed on drop; typed events for every rippled stream
@@ -249,14 +260,16 @@ assert_eq!(json["TransactionType"], "Payment");
 
 ### `halcyon-xrpl-sdk`
 
-- `Wallet` — generate, from_seed, seed, `sign` (a typed transaction, a builder or JSON → signed
-  JSON, blob and hash), sign_and_encode, sign_payment_channel_claim
+- `Wallet` — generate, from_seed, seed, `sign` (a typed transaction or JSON → signed
+  JSON, blob and hash), sign_payment_channel_claim
 - `sign_and_submit` — autofill, sign, submit and wait, for a typed transaction or JSON
+- Keys that never leave an HSM, a cloud KMS or a hardware wallet: implement `SigningKey` (or
+  `AsyncSigningKey` for a remote one) and pass it wherever a `Wallet` goes; high-S signatures
+  are made low-S, and a remote key's signature is checked before anything is submitted
 - Open an existing wallet from its backup: `Wallet::from_mnemonic` (BIP-39 phrase),
   `from_secret_numbers` (Xaman), `from_rfc1751` (`rippled`'s `master_key`)
 - `generate_faucet_wallet` — a funded Testnet / Devnet wallet in one call
 - Multi-signing support (`sign_for_multisigning`, `collect_signers`)
-- `autofill_and_sign` / `submit_transaction` convenience functions
 - Full re-exports from core + client
 
 ## How it is checked
@@ -273,9 +286,9 @@ itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and h
 | Transaction models | 186 real transactions (51 types) round-trip to the same JSON, bytes and ID; an example of every other type, signed by rippled 3.4.1, encodes to its exact `tx_blob`: all 82 types |
 | Edge cases of the format: `Number`, amounts, token values, paths, issues, object structure | 94 binary forms, 80 JSON values and 42 token values put to rippled 3.4.1's `simulate`: the SDK writes and shows each as rippled does, and refuses what rippled refuses instead of rounding or guessing |
 | Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
-| Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet: each must parse, and serializing it back must keep all 2,521 field paths |
-| End to end | `cargo test -p halcyon-xrpl-sdk --features live-tests`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
-| Robustness | 8 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |
+| Typed responses | 44 responses recorded from rippled 3.4.1, Clio and Testnet in API version 2 (`scripts/record_fixtures.py` re-records them): each must parse, and serializing it back must keep all 2,587 field paths |
+| End to end | `RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
+| Robustness | 9 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |
 
 ## Performance
 

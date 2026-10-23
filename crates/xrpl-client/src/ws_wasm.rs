@@ -5,7 +5,7 @@
 //! browser client does not reconnect: connect again). Dropping the client
 //! closes the socket.
 
-use crate::client::Client;
+use crate::client::{Client, Transport};
 use crate::error::ClientError;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -133,8 +133,13 @@ impl XrplWsClient {
     /// WebSocket (a malformed URL, for one) or the connection fails before
     /// it opens.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
-        let ws = WebSocket::new(url).map_err(|e| {
-            ClientError::UnexpectedResponse(format!("WebSocket creation failed: {:?}", e))
+        // The browser's error may name the URL, which may carry a token: only
+        // the host is reported.
+        let ws = WebSocket::new(url).map_err(|_| {
+            ClientError::transport(
+                crate::error::TransportErrorKind::Connect,
+                format!("the browser refused a WebSocket to {}", crate::host_of(url)),
+            )
         })?;
 
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -162,8 +167,9 @@ impl XrplWsClient {
         let on_open_error = Closure::once(move |_e: ErrorEvent| {
             if let Ok(mut guard) = open_tx_clone2.lock() {
                 if let Some(tx) = guard.take() {
-                    let _ = tx.send(Err(ClientError::UnexpectedResponse(
-                        "WebSocket open error".into(),
+                    let _ = tx.send(Err(ClientError::transport(
+                        crate::error::TransportErrorKind::Connect,
+                        "the WebSocket did not open",
                     )));
                 }
             }
@@ -355,59 +361,66 @@ impl Drop for XrplWsClient {
     }
 }
 
-impl Client for XrplWsClient {
+impl Transport for XrplWsClient {
     fn max_fee_drops(&self) -> u64 {
         self.max_fee_drops
     }
 
-    async fn raw_request(&self, command: &str, params: Value) -> Result<Value, ClientError> {
-        if !self.connected.load(Ordering::Relaxed) {
-            return Err(ClientError::Disconnected);
-        }
-
-        let id = self.id_counter.fetch_add(1, Ordering::Relaxed);
-        let (tx, rx) = futures::channel::oneshot::channel();
-
-        {
-            let mut map = self
-                .pending
-                .lock()
-                .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
-            map.insert(id, tx);
-        }
-
-        let msg = if let Some(obj) = params.as_object() {
-            let mut m = serde_json::Map::new();
-            m.insert("command".into(), Value::String(command.into()));
-            m.insert("id".into(), Value::Number(id.into()));
-            for (k, v) in obj {
-                m.insert(k.clone(), v.clone());
+    fn send_raw<'a>(
+        &'a self,
+        command: &'a str,
+        params: Value,
+    ) -> crate::client::TransportFuture<'a> {
+        Box::pin(async move {
+            if !self.connected.load(Ordering::Relaxed) {
+                return Err(ClientError::Disconnected);
             }
-            Value::Object(m)
-        } else {
-            json!({"command": command, "id": id})
-        };
 
-        if self.ws.send_with_str(&msg.to_string()).is_err() {
-            if let Ok(mut map) = self.pending.lock() {
-                map.remove(&id);
-            }
-            return Err(ClientError::Disconnected);
-        }
+            let id = self.id_counter.fetch_add(1, Ordering::Relaxed);
+            let (tx, rx) = futures::channel::oneshot::channel();
 
-        let timeout = Box::pin(crate::client::sleep_secs(REQUEST_TIMEOUT_SECS));
-        match futures::future::select(rx, timeout).await {
-            futures::future::Either::Left((reply, _)) => {
-                reply.map_err(|_| ClientError::Disconnected)?
+            {
+                let mut map = self
+                    .pending
+                    .lock()
+                    .map_err(|_| ClientError::UnexpectedResponse("mutex lock poisoned".into()))?;
+                map.insert(id, tx);
             }
-            futures::future::Either::Right(_) => {
+
+            let params = crate::client::with_api_version(params);
+            let msg = if let Some(obj) = params.as_object() {
+                let mut m = serde_json::Map::new();
+                m.insert("command".into(), Value::String(command.into()));
+                m.insert("id".into(), Value::Number(id.into()));
+                for (k, v) in obj {
+                    m.insert(k.clone(), v.clone());
+                }
+                Value::Object(m)
+            } else {
+                json!({"command": command, "id": id})
+            };
+
+            if self.ws.send_with_str(&msg.to_string()).is_err() {
                 if let Ok(mut map) = self.pending.lock() {
                     map.remove(&id);
                 }
-                Err(ClientError::Timeout(std::time::Duration::from_secs(
-                    REQUEST_TIMEOUT_SECS,
-                )))
+                return Err(ClientError::Disconnected);
             }
-        }
+
+            let timeout = Box::pin(crate::client::sleep_secs(REQUEST_TIMEOUT_SECS));
+            match futures::future::select(rx, timeout).await {
+                futures::future::Either::Left((reply, _)) => {
+                    reply.map_err(|_| ClientError::Disconnected)?
+                }
+                futures::future::Either::Right(_) => {
+                    if let Ok(mut map) = self.pending.lock() {
+                        map.remove(&id);
+                    }
+                    Err(ClientError::Timeout(std::time::Duration::from_secs(
+                        REQUEST_TIMEOUT_SECS,
+                    )))
+                }
+            }
+        })
     }
 }

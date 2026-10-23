@@ -3,133 +3,161 @@
   "engine_result": "tesSUCCESS",
   "engine_result_code": 0,
   "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
-  "ledger_current_index": 107832394,
+  "hash": "91040A21AD1CD6839F6EB6E1600D44ECFB6F227088542D4AA8F8E0523EAA2723",
+  "ledger_current_index": 107856091,
   "status": "proposed",
-  "transaction": {
-   "Account": "rwFWydmbWFxeseg152Qz326M74LoyR7tCp",
-   "Amount": {
-    "currency": "4A55474753000000000000000000000000000000",
-    "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-    "value": "22221.14042589"
-   },
-   "DeliverMax": {
-    "currency": "4A55474753000000000000000000000000000000",
-    "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-    "value": "22221.14042589"
-   },
-   "DeliverMin": {
-    "currency": "4A55474753000000000000000000000000000000",
-    "issuer": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-    "value": "111.6640222406"
-   },
-   "Destination": "rDMSZSCypDd85xNhUtkVVMo98xjE6kTJCV",
-   "Fee": "40",
-   "Flags": 131072,
-   "Memos": [
+  "tx_json": {
+   "Account": "rJ6mzxnRNJYMUZ4nq8HxM2udKXrxDTVr9h",
+   "Fee": "150",
+   "Flags": 2147483648,
+   "LastLedgerSequence": 107856091,
+   "OfferSequence": 64963067,
+   "Sequence": 64963074,
+   "SigningPubKey": "02FD795555F60CC81BDE3A6864EABB7C6FB6B6F142CBC603A644E066067838213F",
+   "TransactionType": "OfferCancel",
+   "TxnSignature": "3045022100E3E9C43C2BB77D07B091BAD65621C53B14DD4E5F7CFCB5F323B4C2F5707373C302205647EA75277E514307629EA9492858FEABA37D3F34A6E451DF042884792D8F06"
+  },
+  "type": "transaction",
+  "validated": false
+ },
+ {
+  "engine_result": "tesSUCCESS",
+  "engine_result_code": 0,
+  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
+  "hash": "3E65F2B0AB4917DD7A45DE3B85394B83611884A0E3FD14193A4F64510827CC23",
+  "ledger_current_index": 107856091,
+  "status": "proposed",
+  "tx_json": {
+   "Account": "rUtPbUE6AWGebgYsnpLixqy6Wp4xGrK7KZ",
+   "Fee": "50",
+   "Flags": 65536,
+   "LastLedgerSequence": 107856091,
+   "RawTransactions": [
     {
-     "Memo": {
-      "MemoData": "4275726E6261636B202D2D20486F72697A6F6E2E"
+     "RawTransaction": {
+      "Account": "rUtPbUE6AWGebgYsnpLixqy6Wp4xGrK7KZ",
+      "Amount": {
+       "currency": "4849594F00000000000000000000000000000000",
+       "issuer": "rU5wZyCbZ2WhT51SLDV12vUHtcsqJn9631",
+       "value": "4891.85182295827"
+      },
+      "Destination": "rUtPbUE6AWGebgYsnpLixqy6Wp4xGrK7KZ",
+      "Fee": "0",
+      "Flags": 1073807360,
+      "Paths": [
+       [
+        {
+         "currency": "50484E4958000000000000000000000000000000",
+         "issuer": "rDFXbW2ZZCG5WgPtqwNiA2xZokLMm9ivmN",
+         "type": 48
+        },
+        {
+         "currency": "41524D5900000000000000000000000000000000",
+         "issuer": "rGG3wQ4kUzd7Jnmk1n5NWPZjjut62kCBfC",
+         "type": 48
+        },
+        {
+         "currency": "4849594F00000000000000000000000000000000",
+         "issuer": "rU5wZyCbZ2WhT51SLDV12vUHtcsqJn9631",
+         "type": 48
+        }
+       ]
+      ],
+      "SendMax": "413607",
+      "Sequence": 0,
+      "SigningPubKey": "",
+      "TicketSequence": 107814666,
+      "TransactionType": "Payment"
+     }
+    },
+    {
+     "RawTransaction": {
+      "Account": "rUtPbUE6AWGebgYsnpLixqy6Wp4xGrK7KZ",
+      "Amount": "999999999999999",
+      "DeliverMin": "413677",
+      "Destination": "rUtPbUE6AWGebgYsnpLixqy6Wp4xGrK7KZ",
+      "Fee": "0",
+      "Flags": 1073872896,
+      "SendMax": {
+       "currency": "4849594F00000000000000000000000000000000",
+       "issuer": "rU5wZyCbZ2WhT51SLDV12vUHtcsqJn9631",
+       "value": "4891.85182295827"
+      },
+      "Sequence": 0,
+      "SigningPubKey": "",
+      "TicketSequence": 107814669,
+      "TransactionType": "Payment"
      }
     }
    ],
-   "SendMax": "2000",
-   "Sequence": 105215347,
-   "SigningPubKey": "033AB5C11EFCE725FFCEE5C43E9F3AFE68CE6696DFC10664730C36B18A75958694",
-   "SourceTag": 111,
-   "TransactionType": "Payment",
-   "TxnSignature": "304402205BE7064C9918EBF367B779E24140096CBA8C3B2D57F66627D649D608F5302E450220336E4E69E36710EDFFD06AC48062399A560B4F3D5E64438A407E96C264B7FC04",
-   "hash": "881BDE0510C4624E11D69BAA430784E62BFB7C3EB7C36E84F035E8D7602E0618"
+   "Sequence": 0,
+   "SigningPubKey": "ED220709D90E10F0A1FCF7152802D34F2A6532B1278B0F7C3F4A7C8DE9C5A5A2D9",
+   "TicketSequence": 107814673,
+   "TransactionType": "Batch",
+   "TxnSignature": "283533CF460B65042D7A4570E98B7C43ADEFD9DF68EAA604D6534323D532C9964F872F727CEA3E0A8572F340C7085A7025C71A0530939CA779879A6204723807"
   },
   "type": "transaction",
   "validated": false
  },
  {
-  "engine_result": "tesSUCCESS",
-  "engine_result_code": 0,
-  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
-  "ledger_current_index": 107832394,
+  "engine_result": "tecPATH_DRY",
+  "engine_result_code": 128,
+  "engine_result_message": "Path could not send partial amount.",
+  "hash": "85BA4B0DA58FA6C8657D1BE4928988DB82DC2866F10F50D31D9D9E5E9292AF87",
+  "ledger_current_index": 107856091,
   "status": "proposed",
-  "transaction": {
-   "Account": "rdGzD9oHEUJkiWxiuVA4UnB9f4kF7giQn",
-   "Fee": "12",
-   "LastLedgerSequence": 107832397,
-   "Sequence": 105200017,
-   "SigningPubKey": "ED28B574C80166269F06BD223ACA6F0825825C670EE905056A3FBE2228AD40EBC6",
-   "TransactionType": "AccountSet",
-   "TxnSignature": "8042DEBFE9DAF41DF6D2FF6F682333FFDF24F78048725907C81C3E280B0EE5E6B1842BA2E3A9072EC54A285DBB116B7E7E0F3C186B6D0D59ED7F6B35A710E70B",
-   "hash": "103248002AB5EA8545594FFACA17F9ED8E47FCCFC6E613725539BCDD1DDB42A6"
-  },
-  "type": "transaction",
-  "validated": false
- },
- {
-  "engine_result": "tesSUCCESS",
-  "engine_result_code": 0,
-  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
-  "ledger_current_index": 107832394,
-  "status": "proposed",
-  "transaction": {
-   "Account": "rwFWydmbWFxeseg152Qz326M74LoyR7tCp",
-   "Amount": {
-    "currency": "486F72697A6F6E00000000000000000000000000",
-    "issuer": "rDKJWtrPqKiMBzK9FTVvebMVec7FJtJLx6",
-    "value": "0.02565610309119"
-   },
-   "DeliverMax": {
-    "currency": "486F72697A6F6E00000000000000000000000000",
-    "issuer": "rDKJWtrPqKiMBzK9FTVvebMVec7FJtJLx6",
-    "value": "0.02565610309119"
-   },
-   "DeliverMin": {
-    "currency": "486F72697A6F6E00000000000000000000000000",
-    "issuer": "rDKJWtrPqKiMBzK9FTVvebMVec7FJtJLx6",
-    "value": "0.0001289251411617"
-   },
-   "Destination": "rHorizonVoYewL8GjL9rqfrj9QgHWyEm1H",
-   "Fee": "40",
+  "tx_json": {
+   "Account": "rsiTX1Z59Nm7nbCRy86w1L5FKvz23dRVVo",
+   "DeliverMax": "100000000000000",
+   "Destination": "rsiTX1Z59Nm7nbCRy86w1L5FKvz23dRVVo",
+   "Fee": "20",
    "Flags": 131072,
+   "SendMax": {
+    "currency": "4249547800000000000000000000000000000000",
+    "issuer": "rBitcoiNXev8VoVxV7pwoQx1sSfonVP9i3",
+    "value": "1000000000000000e-1"
+   },
+   "Sequence": 100300156,
+   "SigningPubKey": "ED98748E95CBD65CA96ECCD8D472F27294345AEF5F5B95F48BE621E15392C7F37F",
+   "TransactionType": "Payment",
+   "TxnSignature": "4FC5E4C21C6F7C55B3E3018CB4D09387B61A70C9BBE9E4866B75C4648A53E1838BB35DD817640A7A82119E5D5C4D06B529249552417C9248A3E475054B2DC007"
+  },
+  "type": "transaction",
+  "validated": false
+ },
+ {
+  "engine_result": "tesSUCCESS",
+  "engine_result_code": 0,
+  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
+  "hash": "4DD04897D40570D01F2C6078A66F350C994132AEC3609FBE15923F1B52465110",
+  "ledger_current_index": 107856091,
+  "status": "proposed",
+  "tx_json": {
+   "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+   "DomainID": "D94C864FE55B649E33907370D68D4F4776387BBB62814AEE646672F1265B177A",
+   "Fee": "15",
+   "Flags": 524288,
+   "LastLedgerSequence": 107856093,
    "Memos": [
     {
      "Memo": {
-      "MemoData": "4275726E6261636B202D2D20486F72697A6F6E2E"
+      "MemoData": "464F537A7768476E412D4F4C3253626D4E625A4E75",
+      "MemoType": "696E7465726E616C6F726465726964"
      }
     }
    ],
-   "SendMax": "16000",
-   "Sequence": 105215348,
-   "SigningPubKey": "033AB5C11EFCE725FFCEE5C43E9F3AFE68CE6696DFC10664730C36B18A75958694",
-   "SourceTag": 111,
-   "TransactionType": "Payment",
-   "TxnSignature": "3044022007B2895C0607D04E7FCB3BB79B8BE6B51D0A2FE9FEC9225630E0A9472434F102022060EEBF53F5E92E6FA0B1B80B5C83020C60411978FB29808CC24EF26BF85F06CC",
-   "hash": "F3794ECF9C150FC04A8F4AA4562872AB2C9C2754044C8020AD1B79B79A935B12"
-  },
-  "type": "transaction",
-  "validated": false
- },
- {
-  "engine_result": "tesSUCCESS",
-  "engine_result_code": 0,
-  "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
-  "ledger_current_index": 107832394,
-  "status": "proposed",
-  "transaction": {
-   "Account": "rBTwLga3i2gz3doX6Gva3MgEV8ZCD8jjah",
-   "Fee": "10",
-   "Flags": 0,
-   "LastLedgerSequence": 107832397,
-   "OfferSequence": 288130418,
-   "Sequence": 288130443,
-   "SigningPubKey": "0253C1DFDCF898FE85F16B71CCE80A5739F7223D54CC9EBA4749616593470298C5",
-   "TakerGets": {
-    "currency": "524C555344000000000000000000000000000000",
-    "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
-    "value": "1241050"
+   "OfferSequence": 109343945,
+   "Sequence": 109343951,
+   "SigningPubKey": "031D07E868FC9E815396F5EC3B93B2208D50726B0D2CCACE40DD20E764D902A7D5",
+   "TakerGets": "7684996170",
+   "TakerPays": {
+    "currency": "4555524F50000000000000000000000000000000",
+    "issuer": "rMkEuRii9w9uBMQDnWV5AA43gvYZR9JxVK",
+    "value": "8941.4161938333"
    },
-   "TakerPays": "1000000000000",
    "TransactionType": "OfferCreate",
-   "TxnSignature": "304502210083E944E7B63ECF16AA52EF216993D0BC6EB51242C6D67E194DB6196C415E1BEA02202CFF0BFD34F8E27A2D545B1B5DDC09A9BF0ADCAE79F85F3E10EF404DCCB55B2B",
-   "hash": "BE047DEE22BB434645784EAC9D78F31699537483C9F36954CF7BAE09BA6CC264",
-   "owner_funds": "67485.27807460995"
+   "TxnSignature": "3045022100EB0F116233EEFF446D884AF77B96A4E72ADF459F6FE5B7B44EE9ECBAE9C303E80220575E919419398FFC481DA1F0975E42BF815EA85BD26FD4233083F39A34DBF2E0",
+   "owner_funds": "201944842435"
   },
   "type": "transaction",
   "validated": false

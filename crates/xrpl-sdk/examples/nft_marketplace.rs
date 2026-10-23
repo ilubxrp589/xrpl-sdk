@@ -10,7 +10,9 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use xrpl_sdk::models::{NFTokenAcceptOffer, NFTokenCreateOffer, NFTokenMint};
+use xrpl_sdk::models::{
+    NFTokenAcceptOffer, NFTokenCreateOffer, NFTokenCreateOfferFlags, NFTokenMint, NFTokenMintFlags,
+};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -24,12 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. Mint: transferable, 5% (5000 / 100,000) on every resale.
     let mut mint = NFTokenMint::new(artist.classic_address(), 1);
-    mint.common.flags = Some(NFTokenMint::TF_TRANSFERABLE);
+    mint.common.flags = Some(u32::from(NFTokenMintFlags::TRANSFERABLE));
     mint.transfer_fee = Some(5000);
     mint.uri = Some(utils::str_to_hex("ipfs://bafy.../artwork.json"));
     let minted = send(&client, &artist, mint.to_json()?).await?;
-    let nft_id = utils::get_nftoken_id(minted.meta.as_ref().ok_or("no metadata")?)?
-        .ok_or("no NFT minted")?;
+    let nft_id =
+        utils::get_nftoken_id(minted.meta.as_ref().ok_or("no metadata")?).ok_or("no NFT minted")?;
     let parts = utils::parse_nftoken_id(&nft_id)?;
     println!(
         "  NFT {nft_id}\n    issuer {}, taxon {}, transfer fee {}%, serial {}",
@@ -53,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let owned = client
-        .account_nfts_all(collector.classic_address(), &LedgerIndex::Validated)
+        .account_nfts_all(collector.classic_address(), LedgerIndex::Validated)
         .await?;
     println!(
         "  The collector now holds {} NFT(s): {}",
@@ -76,7 +78,7 @@ async fn sell_and_buy(
         Hash256::from_hex(nft_id)?,
         Amount::Xrp(drops),
     );
-    offer.common.flags = Some(NFTokenCreateOffer::TF_SELL_NFTOKEN);
+    offer.common.flags = Some(u32::from(NFTokenCreateOfferFlags::SELL_NFTOKEN));
     send(client, seller, offer.to_json()?).await?;
     // The offer's ID, from the NFT's sell offers.
     let offers = client
@@ -91,9 +93,9 @@ async fn sell_and_buy(
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

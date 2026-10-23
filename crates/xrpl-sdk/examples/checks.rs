@@ -28,17 +28,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let written = send(&client, &alice, check.to_json()?).await?;
     let sequence = written
-        .tx_fields
-        .get("Sequence")
-        .and_then(|s| s.as_u64())
-        .and_then(|s| u32::try_from(s).ok())
+        .transaction()?
+        .common()
+        .and_then(|c| c.sequence)
         .ok_or("no Sequence")?;
     let check_id = keylet::check(alice.classic_address(), sequence)?;
     println!("  check {check_id}");
 
     // The check is a ledger entry anyone can look up.
     let entry = client
-        .ledger_entry(&check_id.to_string(), &LedgerIndex::Validated)
+        .ledger_entry(&check_id.to_string(), LedgerIndex::Validated)
         .await?;
     println!(
         "  on the ledger: {}",
@@ -62,9 +61,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

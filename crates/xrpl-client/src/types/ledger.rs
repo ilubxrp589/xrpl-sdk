@@ -1,13 +1,14 @@
 //! Responses of the ledger methods: `ledger`, `ledger_closed`,
 //! `ledger_current`, `ledger_data` and `ledger_entry`.
 
-use super::{count_as_string, LedgerObject};
+use super::LedgerObject;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// [`ledger`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger):
 /// a ledger's header, and its transactions or state when asked for.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerResult {
     /// The header (absent only for an unknown ledger, which is an error).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -29,9 +30,10 @@ pub struct LedgerResult {
     pub validated: Option<bool>,
 }
 
-/// A ledger header. `rippled`'s API version 1 writes `ledger_index` and
-/// `total_coins` as strings; both versions are read.
+/// A ledger header, and the transactions or state asked for with it. With
+/// `binary: true` the header is hex (`ledger_data`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerInfo {
     /// The state tree's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -57,13 +59,12 @@ pub struct LedgerInfo {
     /// That ledger's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_hash: Option<String>,
-    /// The ledger the answer is from.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "count_as_string"
-    )]
+    /// The ledger's index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
+    /// The header as hex (`binary: true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ledger_data: Option<String>,
     /// When the previous ledger closed (ledger time).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_close_time: Option<u64>,
@@ -76,10 +77,10 @@ pub struct LedgerInfo {
     /// The transaction tree's hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transaction_hash: Option<String>,
-    /// The ledger's transactions (`transactions: true`): hashes, or with
-    /// `expand: true` the transactions with their metadata (`metaData`).
+    /// The ledger's transactions (`transactions: true`): their IDs, or with
+    /// `expand: true` the transactions with their metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub transactions: Option<Vec<Value>>,
+    pub transactions: Option<Vec<LedgerTx>>,
     /// The whole state (`full: true`, admin only).
     #[serde(
         rename = "accountState",
@@ -89,9 +90,22 @@ pub struct LedgerInfo {
     pub account_state: Option<Vec<Value>>,
 }
 
+/// A transaction in a [`LedgerInfo`]: its ID, or (with `expand: true`) the
+/// transaction with its metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+#[non_exhaustive]
+pub enum LedgerTx {
+    /// The transaction's ID.
+    Hash(String),
+    /// The transaction with its metadata (`expand: true`).
+    Expanded(Box<super::TxResult>),
+}
+
 /// [`ledger_closed`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_closed):
 /// the latest closed (not necessarily validated) ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerClosedResult {
     /// That ledger's hash.
     pub ledger_hash: String,
@@ -102,6 +116,7 @@ pub struct LedgerClosedResult {
 /// [`ledger_current`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_current):
 /// the index of the open ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerCurrentResult {
     /// The open ledger the answer is from (when not a validated one).
     pub ledger_current_index: u32,
@@ -111,6 +126,7 @@ pub struct LedgerCurrentResult {
 /// a page of a ledger's state, typed. With `binary: true` each entry is
 /// `{ "data", "index" }`, kept as [`LedgerObject::Other`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerDataResult {
     /// What the server reports.
     pub state: Vec<LedgerObject>,
@@ -134,6 +150,7 @@ pub struct LedgerDataResult {
 /// [`ledger_entry`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_entry):
 /// one ledger entry, typed (`node`) or as hex (`node_binary`, with `binary: true`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerEntryResult {
     /// The entry's ID.
     pub index: String,

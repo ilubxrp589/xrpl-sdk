@@ -15,6 +15,12 @@
 //!
 //! The first three hold an XRPL seed and need the key type said; a BIP-39
 //! phrase derives a secp256k1 key along a BIP-32 path.
+//!
+//! A key that never leaves an HSM, a cloud KMS or a hardware wallet signs
+//! too: implement [`SigningKey`] (or [`AsyncSigningKey`], for a remote one)
+//! and pass it wherever a [`Keypair`] goes ([`sign_transaction`],
+//! [`sign_for_multisigning`], batch and channel-claim signing, the SDK's
+//! `sign_and_submit`).
 
 #[cfg(feature = "std")]
 pub mod channel;
@@ -28,14 +34,21 @@ pub mod secp256k1;
 pub mod secret_numbers;
 /// Seeds, key pairs and transaction signing.
 pub mod signing;
+pub(crate) mod signing_key;
 mod wordlists;
 
 pub use crate::address::KeyType;
 #[cfg(feature = "std")]
-pub use channel::{sign_payment_channel_claim, verify_payment_channel_claim};
+pub use channel::{
+    sign_payment_channel_claim, sign_payment_channel_claim_async, verify_payment_channel_claim,
+};
 pub use signing::{sha512_half, verify_signing_data, Keypair, Seed};
 #[cfg(feature = "std")]
-pub use signing::{sign_transaction, verify_transaction};
+pub use signing::{
+    sign_for_multisigning, sign_for_multisigning_async, sign_transaction, sign_transaction_async,
+    verify_transaction, MAX_MULTISIGNERS,
+};
+pub use signing_key::{AsyncSigningKey, SigningKey};
 
 use sha2::{Digest, Sha512};
 use zeroize::{Zeroize, Zeroizing};

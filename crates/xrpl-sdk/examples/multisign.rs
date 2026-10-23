@@ -25,22 +25,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let carol = generate_faucet_wallet(net).await?;
 
     // 1. Alice's signer list: Bob and Carol, one vote each, two needed.
-    let mut list = SignerListSet::new(alice.classic_address(), 2);
-    list.signer_entries = Some(
+    let list = SignerListSet::new(alice.classic_address(), 2).with_signer_entries(
         [&bob, &carol]
             .iter()
-            .map(|w| SignerEntry {
-                account: w.classic_address().to_string(),
-                signer_weight: 1,
-                wallet_locator: None,
-            })
-            .collect(),
+            .map(|w| SignerEntry::new(w.classic_address(), 1))
+            .collect::<Vec<_>>(),
     );
     send(&client, &alice, list.to_json()?).await?;
 
     // 2. A transaction from Alice's account, signed by Bob and Carol.
-    let mut domain = AccountSet::new(alice.classic_address());
-    domain.domain = Some(utils::str_to_hex("example.com"));
+    let domain =
+        AccountSet::new(alice.classic_address()).with_domain(utils::str_to_hex("example.com"));
     let mut tx = domain.to_json()?;
     client.autofill(&mut tx).await?;
     let fee: u64 = tx["Fee"].as_str().ok_or("no Fee")?.parse()?;
@@ -55,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Submit and wait.
     let submitted = client.submit_multisigned(&tx).await?;
     println!("  submit_multisigned        {}", submitted.engine_result);
-    let blob = hex::encode_upper(encode_transaction_json(&tx, false)?);
+    let blob = hex::encode_upper(encode_transaction_json(&tx)?);
     let hash = hash_signed_tx_blob(&blob)?.to_string();
     for _ in 0..15 {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -77,9 +72,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

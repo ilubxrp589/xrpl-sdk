@@ -7,6 +7,261 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+## [v0.8.0] (2026-10-23)
+
+One consistent API, the 1.0 candidate: 0.8 is the one deliberate set of
+breaking changes before 1.0. Each change below says how to update.
+
+### Changed (breaking)
+- **`rippled`'s API version 2, and typed metadata.** Every request now
+  asks for API version 2 (`xrpl_client::API_VERSION`; a request whose
+  parameters name `api_version` keeps it), on every transport
+  (`Client::raw_request` adds it, so a `Transport` of your own gets it too),
+  subscriptions too, and the
+  response types follow version 2 only. Every response type was checked
+  again against answers recorded in version 2 from `rippled` 3.4.1, Clio and
+  Testnet (`crates/xrpl-client/scripts/record_fixtures.py` re-records them).
+  What changes:
+  - **A transaction with its metadata is one type, `TxResult`**, whichever
+    method returns it: `tx`, `transaction_entry`, and each transaction of
+    `account_tx`, `nft_history` and an expanded `ledger`
+    (`LedgerInfo::transactions` is a list of `LedgerTx`: an ID, or the
+    transaction). The transaction is in `tx_json`, with `hash`,
+    `ledger_index`, `ledger_hash`, `close_time_iso`, `ctid` and `validated`
+    beside it (`tx_blob` and `meta_blob` with `binary: true`);
+    `TxResult::transaction()` reads it typed. *Update:*
+    `AccountTxEntry` and `TransactionEntryResult` → `TxResult`;
+    `tx.tx_fields["Sequence"]` → `tx.transaction()?.common()` (or
+    `tx.tx_json`); an `account_tx` entry's `tx` → `tx_json`; a binary
+    answer's `meta` → `meta_blob`. A Payment's amount is `DeliverMax` in
+    `tx_json` (version 2 writes no `Amount`); the typed models read either.
+  - **Metadata is typed: `TransactionMetadata`** (`transaction_result`,
+    `transaction_index`, `affected_nodes` as `CreatedNode` / `ModifiedNode`
+    / `DeletedNode`, `delivered_amount`, `nftoken_id`, `offer_id`,
+    `mpt_issuance_id`, `parent_batch_id`) in `TxResult`, `SimulateResult`
+    and transaction stream events. `utils::get_balance_changes`,
+    `utils::delivered_amount` and `utils::get_nftoken_id` take it (they took
+    JSON), and `get_nftoken_id` returns an `Option` (it cannot fail on typed
+    metadata). *Update:* `meta["TransactionResult"]` →
+    `meta.transaction_result`; for JSON you hold,
+    `serde_json::from_value::<TransactionMetadata>(json)?`.
+  - `WsEvent::PathFind` holds a typed `PathFindResult` (it held JSON).
+  - Transaction stream events: `TransactionEvent::transaction` →
+    `tx_json`, with `hash` beside it.
+  - `AccountInfo::signer_lists` is the only place signer lists are
+    (`AccountData` no longer has them); `LedgerInfo::ledger_index` is read
+    as a number; `ApiVersions` has `first` and `last` as numbers (no `good`);
+    `SubmitResult` has `hash` (where `submit_multisigned` writes it) and
+    `hash()` finds it either place.
+  - `ledger::verify_ledger_response` reads version 2's `meta_blob`, and
+    also checks each transaction against the `hash` written beside it.
+- **One `Asset` type.** `xrpl_core::types::Asset` (`Xrp`, `Token { currency,
+  issuer }`, `Mpt { issuance_id }`), checked when built
+  (`Asset::token("USD", issuer)?`, `Asset::mpt(id)?`), written as
+  `rippled`'s JSON, ordered as `rippled` orders assets, and read from and
+  written as text (`XRP`, `USD.r…`, `MPT:<id>`); `Amount::asset()` gives an
+  amount's. It replaces the transaction models' `Asset` (three optional
+  strings; `models::Asset` is now this type), `keylet::Issue` and the raw
+  JSON that `book_offers`, `amm_info`, `BookOffersRequest`,
+  `AmmInfoRequest` and `subscribe_order_book` took (`AmmInfoRequest::by_account`
+  for a pool named by its account).
+  - **`Client::book_offers(taker_gets, taker_pays)`** now takes what the
+    offers give first, as `BookOffersRequest::new` and `rippled` do (it took
+    `taker_pays` first, so the two were easy to swap). *Update:* swap the
+    arguments when you change them to `Asset`s.
+  - Keylets: `keylet::amm(&a, &b)` and `book_base` / `book_directory` take
+    `&Asset` and cannot fail; they compute MPT pools and books as `rippled`
+    3.4.1 does (MPT AMM IDs checked against `rippled`'s `ledger_entry`), and
+    `book_base` / `book_directory` take an optional permissioned-DEX
+    `domain`. The bridge keylets take a `models::XChainBridge`.
+- **One type for each other idea, too.**
+  - `xrpl_client::types::PathStep` is the transaction models' `PathStep`,
+    so a path `ripple_path_find` or `path_find` returns goes into
+    `Payment::paths` as it is. The client's `AuthAccount` (an auction slot's
+    `{"account": …}`) is renamed `AuctionSlotAccount`, so it is not confused
+    with the transaction models' `AuthAccount`.
+  - `AccountData::balance` is an `Amount` (`Amount::Xrp`, in drops; it was a
+    string of drops). *Update:* `balance_drops()` works as before; where you
+    parsed `balance`, match `Amount::Xrp(drops)`.
+  - `batch::sign_batch_for(batch, batch_signer, signer, key)` names the
+    signer-list member that signs (it took it from the key), so a member
+    can sign with its regular key, as `sign_for_multisigning` allows.
+    *Update:* add the signer's address (`Wallet::sign_batch_for` is
+    unchanged).
+  - `Wallet::sign_for_multisigning` returns a typed `models::Signer` and
+    `wallet::collect_signers` takes them (they were JSON objects).
+  - **`LedgerIndex` is passed by value** (it is `Copy`) to every `Client`
+    and `BlockingClient` method: `client.account_info(addr,
+    LedgerIndex::Validated)`. *Update:* drop the `&`. `LedgerIndex::as_value`
+    is renamed `to_value`.
+  - **`Client::account_tx(account)`** takes only the account (one page of up
+    to 200, newest first) and `account_tx_all(account)` likewise; the five
+    positional options (`None, None, Some(50), None, None`) are gone. For
+    bounds, order, page size or a marker, send an `AccountTxRequest`:
+    *Update:* `client.account_tx(a, None, None, Some(50), None, Some(true))`
+    → `client.request(&AccountTxRequest::new(a).with_limit(50u32).with_forward(true))`;
+    `account_tx_all(a, Some(min), None)` →
+    `client.request_all(AccountTxRequest::new(a).with_ledger_index_min(min))`.
+  - **The encoder has no `bool` argument.** `encode_transaction_json(&tx)`
+    encodes every field (it was `encode_transaction_json(&tx, false)`); what
+    a single signature covers is `encode_for_signing(&tx)`, which, as
+    xrpl.js's `encodeForSigning` and as `encode_for_multisigning` already
+    did, starts with its prefix (`"STX\0"`). *Update:* `(&tx, false)` →
+    `(&tx)`; `encode_transaction_json(&tx, true)` → `encode_for_signing(&tx)`,
+    dropping the first four bytes where you added the prefix yourself. The
+    wasm export `encode_transaction_for_signing` is now `encode_for_signing`
+    and returns the prefix too.
+  - **X-addresses decode to an `XAddress`** (`account_id`, `tag`,
+    `test_network`; `classic_address()`, `Display` and `FromStr`) instead of
+    a tuple. `x_address_to_classic` is removed: *Update:*
+    `let (classic, tag, test) = x_address_to_classic(x)?` →
+    `let x = decode_x_address(x)?;` then `x.classic_address()`, `x.tag`,
+    `x.test_network`.
+- **Typed flags.** Each transaction type has its own flags type
+  (`PaymentFlags`, `OfferCreateFlags`, …; `UniversalFlags` for types with
+  none of their own, each including `FULLY_CANONICAL_SIG` and
+  `INNER_BATCH_TXN`), so a flag of one type cannot be set on another:
+  `TxModel::with_flags` takes it and `TxModel::flags()` reads it. Each ledger
+  entry type with flags has a typed `flags` field (`AccountRootFlags`,
+  `RippleStateFlags`, …). A flags type combines with `|`, has `contains`,
+  `ALL` and `unknown_bits` (the `xrpl_core::flags::Flags` trait), shows its
+  names in `Debug`, and is written as the `u32` `rippled` writes.
+  `AccountSet`'s `SetFlag` / `ClearFlag` values are the `AccountSetFlag`
+  enum. *Update:* `Payment::TF_PARTIAL_PAYMENT` →
+  `PaymentFlags::PARTIAL_PAYMENT` (`u32::from(…)` where a number is needed);
+  `AccountSet::ASF_DEFAULT_RIPPLE` → `AccountSetFlag::DefaultRipple`;
+  0.7's `AccountRoot::LSF_DEFAULT_RIPPLE` / `ALL_FLAGS` / `has_flag` →
+  `AccountRootFlags::DEFAULT_RIPPLE` / `ALL` / `entry.flags.contains(…)`;
+  the module constants `TF_FULLY_CANONICAL_SIG` / `TF_INNER_BATCH_TXN` →
+  `UniversalFlags::…`.
+- **One way to build a transaction: the typed models.** The 28 hand-written
+  builders (`transaction::builders`, re-exported as `xrpl_sdk::transactions`,
+  with the `Transaction` trait and `TxCommon`) are removed, and so are the
+  deprecated `CommonFields` and `TransactionType`. Their checks moved to the
+  models: `TxModel::validate()` (and `Tx::validate()`) runs `rippled`'s
+  preflight rules that need no ledger for `AccountSet`, the five AMM types,
+  `Clawback`, `DelegateSet`, `SignerListSet`, `TrustSet` and
+  `NFTokenAcceptOffer`, and `Wallet::sign` / `ToTxJson` run it before
+  signing, so a transaction `rippled` would refuse (`tem…`) is refused here
+  first, saying why. With typed fields the checks are stricter: `AMMCreate`
+  compares the two assets (it compared JSON), and `TrustSet` and `Clawback`
+  check the amount's kind. *Update:*
+  `Payment::builder(a).destination(d).amount(json!("1000000")).fee("12").build()?`
+  becomes `models::Payment::new(a, d, Amount::xrp(1_000_000)?).with_fee(12)`.
+- **Room to grow: protocol types are `#[non_exhaustive]`.** The transaction
+  models, their nested types (`Memo`, `Signer`, `SignerEntry`, `PathStep`,
+  …), `Common`, `Tx`, the ledger entry types and `LedgerObject`, every
+  request and every response. A field or type `rippled` adds later is then
+  not a breaking change. Fields stay public to read and change; what changes
+  is building one with a struct literal outside the crate. *Update:*
+  - Requests: `new(required…)` then `with_…` for each optional parameter
+    (98 setters): `AccountLinesRequest::new(addr).with_limit(100u32)`
+    instead of `AccountLinesRequest { limit: Some(100), ..AccountLinesRequest::new(addr) }`.
+    Requests without parameters have `new()` (`FeeRequest::new()` instead
+    of `FeeRequest {}`); `TxRequest::by_ctid` looks one up by its CTID.
+  - Transactions: `new(required…)` then `with_…` for each optional field
+    (179 setters, generated) and, on every type through `TxModel`,
+    `with_fee`, `with_sequence`, `with_ticket_sequence`,
+    `with_last_ledger_sequence`, `with_flags`, `with_source_tag`,
+    `with_network_id`, `with_memo` and `with_delegate`. Or set the public
+    fields after `new`, as before.
+  - Nested types have constructors: `Memo::text("…")` / `Memo::new()`,
+    `SignerEntry::new(account, weight)`, `Signer::new`, `PriceData::new`,
+    `AuthAccount::new`, `Permission::new`, `CredentialSpec::new`,
+    `BatchSigner::new`, `XChainBridge::new`, `PathStep::account` /
+    `currency` / `mpt`.
+  - A `match` on `Tx` or `LedgerObject` needs a `_` arm.
+- **`Client` is every method on any `Transport`.** A transport implements
+  one method, `Transport::send_raw` (object safe: `Arc<dyn Transport>` and
+  `Box<dyn Transport>` are clients), plus `max_fee_drops`; `Client` has every
+  typed method for any transport, and on native targets each future it
+  returns is `Send`, so generic code (`C: Client`) can `tokio::spawn` it.
+  *Update:* callers change nothing (`client.raw_request(...)` and every
+  method work as before with `use xrpl_client::Client`). A type of your own
+  that implemented `Client` now implements `Transport`:
+  `fn send_raw<'a>(&'a self, method: &'a str, params: Value) ->
+  TransportFuture<'a> { Box::pin(async move { … }) }`. `max_fee_drops` is on
+  `Transport` (bring it into scope to call it). Request types must be
+  `Send + Sync` (all of this crate's are).
+- **One way to sign, too.** `Wallet::sign` (a typed transaction or JSON →
+  signed JSON, blob and ID) and `sign_and_submit` cover what four other
+  helpers did, so these are removed: `Wallet::sign_transaction(&json)` →
+  `wallet.sign(&json)?.tx_json`; `Wallet::sign_and_encode(&json)` →
+  `wallet.sign(&json)?.tx_blob`; `submit_transaction(&client, &mut json,
+  &wallet)` → `sign_and_submit(&client, &json, &wallet)` (it autofills a
+  copy; call `client.autofill(&mut json)` first if you need the filled
+  fields); `autofill_and_sign(&client, &mut json, &wallet)` →
+  `client.autofill(&mut json).await?` then `wallet.sign(&json)?.tx_blob`.
+  `Keypair::sign` and `Keypair::verify`, deprecated since 0.6.0, are removed:
+  use `sign_message` / `verify_message` (careful: for secp256k1 the old
+  `sign` took a 32-byte hash, `sign_message` hashes the message itself).
+- **Features that do something.** `http` and `ws` (both on by default)
+  now decide what is built, in `halcyon-xrpl-client` and
+  `halcyon-xrpl-sdk`: `http` is `XrplHttpClient`, the faucet and
+  `BlockingClient` (`reqwest`); `ws` is `XrplWsClient` (`tokio-tungstenite`).
+  Without either, the client is the `Client` trait with every typed request
+  and response, for a transport of your own. The SDK has a `wasm` feature
+  (it builds for `wasm32-unknown-unknown` now). tokio is no longer built
+  with every feature: only what each part uses, and the SDK needs it only
+  for its tests and examples. *Update:* `features = ["full"]` → the
+  default (`full` is gone); the WebSocket client is now on by default in
+  `halcyon-xrpl-client` too (`default-features = false, features = ["http"]`
+  to leave it out). The live Testnet tests are no longer a feature:
+  `RUSTFLAGS="--cfg xrpl_live_tests" cargo test` runs them (`live-tests`
+  is gone).
+- **Client errors.**
+  - `ClientError::Http(reqwest::Error)` is gone: reqwest is no longer part
+    of the public API, so a reqwest upgrade cannot break your code. A
+    connection or exchange that fails is `ClientError::Transport { kind,
+    message }` (`TransportErrorKind::Connect`, `Request`, `Body`, …; the
+    message never holds the URL), and **a timeout is
+    `ClientError::Timeout(duration)` on HTTP as on WebSocket** (it was a
+    reqwest error). *Update:* match `Transport { .. }` and `Timeout(_)` where
+    you matched `Http(_)`.
+  - The caller's own mistakes are `ClientError::InvalidRequest` (a
+    transaction with no `Account` or that is not an object, a `Batch` without
+    its inner transactions, a header HTTP does not allow); they were
+    `UnexpectedResponse`, which now means only a server's answer.
+  - `ClientError::Json` holds the `serde_json::Error` and shows its message,
+    but no longer returns it as `source()`; `ClientError::Core` shows the
+    core error as itself. So a chain printed with its sources (`anyhow`'s
+    `{:#}`) no longer repeats each message.
+
+### Added
+- **Keys that never leave an HSM, a cloud KMS or a hardware wallet can
+  sign.** `xrpl_core::crypto::SigningKey` (a key reached synchronously) and
+  `AsyncSigningKey` (a remote one; implement it with `async fn`) say what a
+  key is: its public key, and how it signs XRPL signing data. `Keypair` and
+  `Wallet` implement both, and every signing function takes any key:
+  `sign_transaction`, `sign_payment_channel_claim`, the batch signing
+  functions, and `sign_and_submit` (code that passes a `Keypair` or a
+  `Wallet` is unchanged). New: `sign_transaction_async`,
+  `sign_for_multisigning` / `sign_for_multisigning_async` (for an account
+  named, so a regular key can sign for its account),
+  `sign_batch_async` / `sign_batch_as_async` / `sign_batch_for_async`,
+  `sign_payment_channel_claim_async`, and in the SDK `sign` / `sign_async`,
+  which return a `SignedTransaction`. A secp256k1 signature
+  with a high S (as AWS KMS returns half the time) is turned into the low-S
+  form `rippled` requires, and a remote key's signature is checked against
+  its public key before it is used, so a key that signs the wrong thing (the
+  data where it should sign the digest) is an error
+  (`CoreError::SigningKeyFailed`) before anything is submitted.
+  `secp256k1::compressed_public_key` turns a KMS's uncompressed key into the
+  form the ledger takes, and `AccountId::from_public_key` gives a key's
+  address. Example: `remote_signer` (a stand-in signing service).
+- `MaybeSend` / `MaybeSync` are in `xrpl_core` (the client re-exports them).
+- **`Client::order_book(base, quote, limit)`**: both sides of a book from
+  one validated ledger, asks lowest first and bids highest first, as an
+  `OrderBook` with `best_ask`, `best_bid`, `spread` and `midpoint` (prices in
+  the quote per base, display units; approximations for display, the offers
+  themselves exact). `BlockingClient::order_book` too, and
+  `Amount::to_f64` (an approximate value for display).
+- **Typed `path_find`**: `XrplWsClient::path_find(&PathFindRequest)`
+  returns the first answer and a subscription to the updates;
+  `path_find_close` ends the search. Answers and updates are
+  `PathFindResult` (checked against a search recorded from `rippled`
+  3.4.1).
+
 ### Changed
 - **Licence: Apache-2.0.** The crates are now licensed under the Apache
   License 2.0 (`license = "Apache-2.0"` on crates.io, a standard SPDX
@@ -14,6 +269,20 @@ may break the API, and says so under "Changed (breaking)").
   James Turner must travel with any redistribution or derived work (section
   4(d)). Each crate carries LICENSE and NOTICE. Releases up to 0.7.0 keep
   their licence (MIT with an attribution clause).
+
+### Fixed
+- **`autofill` of a Batch sent with a Ticket** numbered the outer account's
+  inner transactions from 1 (the Ticket's `Sequence` is 0), so they failed
+  with `tefPAST_SEQ` while the Batch itself succeeded and was charged. They
+  now start at the account's next sequence.
+- **`verify_transaction` refuses what `rippled` refuses in a multi-signed
+  transaction**: the transaction's own `Account` as a signer ("Invalid
+  multisigner") and more than 32 signers (they verified). `collect_signers`
+  refuses the transaction's own `Account` too. `MAX_MULTISIGNERS` is in
+  `xrpl_core::crypto` (the SDK re-exports it).
+- The Cloudflare Worker example (`examples/cloudflare-worker`) did not
+  build: Cargo took it for a member of the SDK's workspace. It is now its
+  own workspace, and CI checks it and the benchmarks on every change.
 
 ## [v0.7.0] (2026-10-23)
 
@@ -652,7 +921,8 @@ Initial release.
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
 
-[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.0...HEAD
+[v0.8.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.4.0...v0.5.0

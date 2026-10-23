@@ -1,8 +1,10 @@
 {
  "method": "random",
- "params": {},
+ "params": {
+  "api_version": 2
+ },
  "result": {
-  "random": "F8AFC43CE588A20F453AE56C28CB35DF343F43D21A62E96C96BD54DBE7CCC92B",
+  "random": "1C71B110C615C91F287DDC4E3CE5553537F046294E5C73F38D83420C0A8AF122",
   "status": "success"
  }
 }

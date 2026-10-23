@@ -12,9 +12,9 @@ use xrpl_core::types::{Amount, LedgerObject};
 /// an account's `AccountRoot`, its flags spelled out, and (when asked for) its
 /// signer lists and queued transactions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountInfo {
-    /// The account's `AccountRoot` entry (with `signer_lists` inside it when
-    /// requested under API version 1, as `rippled` does).
+    /// The account's `AccountRoot` entry.
     pub account_data: AccountData,
     /// The `Flags` of `account_data`, one boolean each.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -22,7 +22,7 @@ pub struct AccountInfo {
     /// Transactions this account has in the queue (`queue: true`, current ledger only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_data: Option<QueueData>,
-    /// Signer lists, under API version 2 (version 1 puts them in `account_data`).
+    /// The account's signer list (`signer_lists: true`): none, or one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_lists: Option<Vec<LedgerObject>>,
     /// The open ledger the answer is from (when not a validated one).
@@ -45,13 +45,15 @@ pub struct AccountInfo {
 /// `rippled` names. For the whole entry typed, parse it as
 /// [`xrpl_core::types::LedgerObject`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountData {
     /// The account that sends the transaction or owns the entry (`Account`).
     #[serde(rename = "Account")]
     pub account: String,
-    /// The XRP balance, in drops (see [`AccountData::balance_drops`]).
+    /// The XRP balance (an [`Amount::Xrp`](xrpl_core::types::Amount::Xrp), in
+    /// drops; shown as XRP). See [`AccountData::balance_drops`].
     #[serde(rename = "Balance")]
-    pub balance: String,
+    pub balance: xrpl_core::types::Amount,
     /// Flag bits (`Flags`).
     #[serde(rename = "Flags")]
     pub flags: u32,
@@ -78,9 +80,6 @@ pub struct AccountData {
     /// The entry's ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<String>,
-    /// `SignerList` entries (API version 1, with `signer_lists: true`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_lists: Option<Vec<LedgerObject>>,
     /// Every other field of the `AccountRoot` (`LedgerEntryType`, `Domain`,
     /// `RegularKey`, `TransferRate`, `TickSize`, `NFTokenMinter`, …).
     #[serde(flatten)]
@@ -88,15 +87,20 @@ pub struct AccountData {
 }
 
 impl AccountData {
-    /// The XRP balance in drops, as a number.
+    /// The XRP balance in drops (`None` only if the server sent a balance
+    /// that is not XRP, which an account root never has).
     pub fn balance_drops(&self) -> Option<u64> {
-        self.balance.parse().ok()
+        match self.balance {
+            xrpl_core::types::Amount::Xrp(drops) => Some(drops),
+            _ => None,
+        }
     }
 }
 
 /// The account's flags, one boolean each, as `rippled` spells them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct AccountFlags {
     /// Rippling is on by default for the account's trust lines.
     #[serde(default)]
@@ -147,6 +151,7 @@ pub struct AccountFlags {
 
 /// What the account has in the transaction queue.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct QueueData {
     /// Transactions in the ledger.
     pub txn_count: u32,
@@ -170,6 +175,7 @@ pub struct QueueData {
 /// [`account_lines`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_lines):
 /// an account's trust lines.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountLinesResult {
     /// The account.
     #[serde(default)]
@@ -199,6 +205,7 @@ pub struct AccountLinesResult {
 /// One trust line, from the requesting account's side: `balance` is positive
 /// when the peer (`account`) owes the requester.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TrustLine {
     /// The peer on the other side of the line.
     pub account: String,
@@ -245,6 +252,7 @@ pub struct TrustLine {
 /// [`account_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_offers):
 /// an account's open DEX offers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountOffersResult {
     /// The account.
     #[serde(default)]
@@ -273,6 +281,7 @@ pub struct AccountOffersResult {
 
 /// One offer of `account_offers`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountOffer {
     /// The offer's flags.
     pub flags: u32,
@@ -293,6 +302,7 @@ pub struct AccountOffer {
 /// [`account_nfts`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_nfts):
 /// the NFTs an account holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountNftsResult {
     /// The account.
     #[serde(default)]
@@ -322,6 +332,7 @@ pub struct AccountNftsResult {
 /// One NFT held by the account. `xrpl_core::utils::parse_nftoken_id` splits
 /// its ID into issuer, taxon, flags, fee and serial.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFToken {
     /// The NFT's flags.
     #[serde(rename = "Flags")]
@@ -352,12 +363,13 @@ pub struct NFToken {
 /// [`account_tx`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_tx)
 /// (also the shape of Clio's `nft_history`): transactions that affected an account.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountTxResult {
     /// The account.
     #[serde(default)]
     pub account: String,
-    /// The transactions.
-    pub transactions: Vec<AccountTxEntry>,
+    /// The transactions, newest first unless `forward` was set.
+    pub transactions: Vec<super::TxResult>,
     /// The earliest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_min: Option<i64>,
@@ -375,30 +387,10 @@ pub struct AccountTxResult {
     pub validated: Option<bool>,
 }
 
-/// One transaction of `account_tx`: JSON (`tx` and `meta` objects) or, with
-/// `binary: true`, hex (`tx_blob` and `meta` as a string).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AccountTxEntry {
-    /// The transaction, as JSON.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tx: Option<Value>,
-    /// The transaction, as hex.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tx_blob: Option<String>,
-    /// The transaction's metadata.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub meta: Option<Value>,
-    /// The ledger the answer is from.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ledger_index: Option<u32>,
-    /// Whether the data is from a validated ledger (final).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub validated: Option<bool>,
-}
-
 /// [`account_objects`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_objects):
 /// the ledger entries an account owns, typed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountObjectsResult {
     /// The account.
     pub account: String,
@@ -427,6 +419,7 @@ pub struct AccountObjectsResult {
 /// [`account_currencies`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_currencies):
 /// currencies the account can send and receive, from its trust lines.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountCurrenciesResult {
     /// Currencies the account can receive.
     pub receive_currencies: Vec<String>,
@@ -449,6 +442,7 @@ pub struct AccountCurrenciesResult {
 /// [`account_channels`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_channels):
 /// payment channels where the account is the source.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountChannelsResult {
     /// The account.
     pub account: String,
@@ -476,6 +470,7 @@ pub struct AccountChannelsResult {
 
 /// One payment channel. Amounts are XRP in drops.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PaymentChannel {
     /// The channel's ID.
     pub channel_id: String,
@@ -512,6 +507,7 @@ pub struct PaymentChannel {
 /// [`gateway_balances`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/gateway_balances):
 /// what an issuer owes (`obligations`, by currency) and holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GatewayBalancesResult {
     /// The issuing account.
     pub account: String,
@@ -546,6 +542,7 @@ pub struct GatewayBalancesResult {
 
 /// One balance of `gateway_balances`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GatewayBalance {
     /// The currency code.
     pub currency: String,
@@ -557,6 +554,7 @@ pub struct GatewayBalance {
 /// trust-line settings that do not suit the account's role, and (when asked)
 /// the transactions that would fix them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NoRippleCheckResult {
     /// One sentence per problem.
     pub problems: Vec<String>,

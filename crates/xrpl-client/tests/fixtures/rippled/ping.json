@@ -1,6 +1,8 @@
 {
  "method": "ping",
- "params": {},
+ "params": {
+  "api_version": 2
+ },
  "result": {
   "role": "admin",
   "status": "success"

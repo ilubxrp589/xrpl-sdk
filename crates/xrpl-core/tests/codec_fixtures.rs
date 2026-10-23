@@ -21,7 +21,7 @@ fn check(section: &str) -> (usize, Vec<String>) {
             .as_str()
             .or(json["LedgerEntryType"].as_str())
             .unwrap_or("?");
-        match encode_transaction_json(json, false) {
+        match encode_transaction_json(json) {
             Ok(bytes) if hex::encode_upper(&bytes) == binary => {}
             Ok(bytes) => {
                 let expected = hex::decode(&binary).unwrap();

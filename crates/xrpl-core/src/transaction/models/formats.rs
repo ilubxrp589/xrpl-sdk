@@ -8,15 +8,93 @@
 
 use super::*;
 
-/// `tfFullyCanonicalSig`: set on every transaction since the RequireFullyCanonicalSig amendment.
-pub const TF_FULLY_CANONICAL_SIG: u32 = 0x80000000;
-/// `tfInnerBatchTxn`: marks a transaction inside a `Batch` (unsigned, zero fee).
-pub const TF_INNER_BATCH_TXN: u32 = 0x40000000;
+use crate::flags::flags_type;
+
+flags_type!(
+    /// The flags any transaction may carry (for the types with none of their own).
+    UniversalFlags {
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
+/// A value of [`AccountSet`]'s `SetFlag` / `ClearFlag` (`asf…`): one account setting to turn on
+/// or off. `u32::from(flag)` is its number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum AccountSetFlag {
+    /// `asfRequireDest` (1).
+    RequireDest = 1,
+    /// `asfRequireAuth` (2).
+    RequireAuth = 2,
+    /// `asfDisallowXRP` (3).
+    DisallowXRP = 3,
+    /// `asfDisableMaster` (4).
+    DisableMaster = 4,
+    /// `asfAccountTxnID` (5).
+    AccountTxnID = 5,
+    /// `asfNoFreeze` (6).
+    NoFreeze = 6,
+    /// `asfGlobalFreeze` (7).
+    GlobalFreeze = 7,
+    /// `asfDefaultRipple` (8).
+    DefaultRipple = 8,
+    /// `asfDepositAuth` (9).
+    DepositAuth = 9,
+    /// `asfAuthorizedNFTokenMinter` (10).
+    AuthorizedNFTokenMinter = 10,
+    /// `asfDisallowIncomingNFTokenOffer` (12).
+    DisallowIncomingNFTokenOffer = 12,
+    /// `asfDisallowIncomingCheck` (13).
+    DisallowIncomingCheck = 13,
+    /// `asfDisallowIncomingPayChan` (14).
+    DisallowIncomingPayChan = 14,
+    /// `asfDisallowIncomingTrustline` (15).
+    DisallowIncomingTrustline = 15,
+    /// `asfAllowTrustLineClawback` (16).
+    AllowTrustLineClawback = 16,
+    /// `asfAllowTrustLineLocking` (17).
+    AllowTrustLineLocking = 17,
+}
+
+impl From<AccountSetFlag> for u32 {
+    fn from(flag: AccountSetFlag) -> u32 {
+        flag as u32
+    }
+}
+
+impl AccountSetFlag {
+    /// The flag with this number, if this version knows it.
+    pub fn from_value(value: u32) -> Option<Self> {
+        match value {
+            1 => Some(Self::RequireDest),
+            2 => Some(Self::RequireAuth),
+            3 => Some(Self::DisallowXRP),
+            4 => Some(Self::DisableMaster),
+            5 => Some(Self::AccountTxnID),
+            6 => Some(Self::NoFreeze),
+            7 => Some(Self::GlobalFreeze),
+            8 => Some(Self::DefaultRipple),
+            9 => Some(Self::DepositAuth),
+            10 => Some(Self::AuthorizedNFTokenMinter),
+            12 => Some(Self::DisallowIncomingNFTokenOffer),
+            13 => Some(Self::DisallowIncomingCheck),
+            14 => Some(Self::DisallowIncomingPayChan),
+            15 => Some(Self::DisallowIncomingTrustline),
+            16 => Some(Self::AllowTrustLineClawback),
+            17 => Some(Self::AllowTrustLineLocking),
+            _ => None,
+        }
+    }
+}
 
 /// [`AMMBid`](https://xrpl.org/docs/references/protocol/transactions/types/ammbid) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMBid {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -58,10 +136,35 @@ impl AMMBid {
             auth_accounts: None,
         }
     }
+
+    /// With `BidMin` set (see [`Self::bid_min`]).
+    #[must_use]
+    pub fn with_bid_min(mut self, value: impl Into<Amount>) -> Self {
+        self.bid_min = Some(value.into());
+        self
+    }
+
+    /// With `BidMax` set (see [`Self::bid_max`]).
+    #[must_use]
+    pub fn with_bid_max(mut self, value: impl Into<Amount>) -> Self {
+        self.bid_max = Some(value.into());
+        self
+    }
+
+    /// With `AuthAccounts` set (see [`Self::auth_accounts`]).
+    #[must_use]
+    pub fn with_auth_accounts(mut self, value: impl Into<Vec<AuthAccount>>) -> Self {
+        self.auth_accounts = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for AMMBid {
     const TRANSACTION_TYPE: &'static str = "AMMBid";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_bid(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -76,10 +179,23 @@ impl From<AMMBid> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`AMMClawback`] (`Flags`).
+    AMMClawbackFlags {
+        /// `tfClawTwoAssets`.
+        CLAW_TWO_ASSETS = 0x00000001,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`AMMClawback`](https://xrpl.org/docs/references/protocol/transactions/types/ammclawback) transaction.
 ///
 /// Required: `Holder`, `Asset`, `Asset2`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -101,8 +217,6 @@ pub struct AMMClawback {
 impl AMMClawback {
     /// `"AMMClawback"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMClawback";
-    /// `tfClawTwoAssets`.
-    pub const TF_CLAW_TWO_ASSETS: u32 = 0x00000001;
 
     /// A `AMMClawback` from `account` with its required fields; everything else unset.
     pub fn new(
@@ -119,10 +233,18 @@ impl AMMClawback {
             amount: None,
         }
     }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for AMMClawback {
     const TRANSACTION_TYPE: &'static str = "AMMClawback";
+    type Flags = AMMClawbackFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -141,6 +263,7 @@ impl From<AMMClawback> for Tx {
 ///
 /// Required: `Amount`, `Amount2`, `TradingFee`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -178,6 +301,10 @@ impl AMMCreate {
 
 impl TxModel for AMMCreate {
     const TRANSACTION_TYPE: &'static str = "AMMCreate";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_create(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -196,6 +323,7 @@ impl From<AMMCreate> for Tx {
 ///
 /// Required: `Asset`, `Asset2`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -224,6 +352,7 @@ impl AMMDelete {
 
 impl TxModel for AMMDelete {
     const TRANSACTION_TYPE: &'static str = "AMMDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -238,10 +367,33 @@ impl From<AMMDelete> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`AMMDeposit`] (`Flags`).
+    AMMDepositFlags {
+        /// `tfLPToken`.
+        LP_TOKEN = 0x00010000,
+        /// `tfSingleAsset`.
+        SINGLE_ASSET = 0x00080000,
+        /// `tfTwoAsset`.
+        TWO_ASSET = 0x00100000,
+        /// `tfOneAssetLPToken`.
+        ONE_ASSET_LP_TOKEN = 0x00200000,
+        /// `tfLimitLPToken`.
+        LIMIT_LP_TOKEN = 0x00400000,
+        /// `tfTwoAssetIfEmpty`.
+        TWO_ASSET_IF_EMPTY = 0x00800000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`AMMDeposit`](https://xrpl.org/docs/references/protocol/transactions/types/ammdeposit) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMDeposit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -280,18 +432,6 @@ pub struct AMMDeposit {
 impl AMMDeposit {
     /// `"AMMDeposit"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMDeposit";
-    /// `tfLPToken`.
-    pub const TF_LP_TOKEN: u32 = 0x00010000;
-    /// `tfSingleAsset`.
-    pub const TF_SINGLE_ASSET: u32 = 0x00080000;
-    /// `tfTwoAsset`.
-    pub const TF_TWO_ASSET: u32 = 0x00100000;
-    /// `tfOneAssetLPToken`.
-    pub const TF_ONE_ASSET_LP_TOKEN: u32 = 0x00200000;
-    /// `tfLimitLPToken`.
-    pub const TF_LIMIT_LP_TOKEN: u32 = 0x00400000;
-    /// `tfTwoAssetIfEmpty`.
-    pub const TF_TWO_ASSET_IF_EMPTY: u32 = 0x00800000;
 
     /// A `AMMDeposit` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
@@ -306,10 +446,49 @@ impl AMMDeposit {
             trading_fee: None,
         }
     }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
+
+    /// With `Amount2` set (see [`Self::amount2`]).
+    #[must_use]
+    pub fn with_amount2(mut self, value: impl Into<Amount>) -> Self {
+        self.amount2 = Some(value.into());
+        self
+    }
+
+    /// With `EPrice` set (see [`Self::e_price`]).
+    #[must_use]
+    pub fn with_e_price(mut self, value: impl Into<Amount>) -> Self {
+        self.e_price = Some(value.into());
+        self
+    }
+
+    /// With `LPTokenOut` set (see [`Self::lp_token_out`]).
+    #[must_use]
+    pub fn with_lp_token_out(mut self, value: impl Into<Amount>) -> Self {
+        self.lp_token_out = Some(value.into());
+        self
+    }
+
+    /// With `TradingFee` set (see [`Self::trading_fee`]).
+    #[must_use]
+    pub fn with_trading_fee(mut self, value: impl Into<u16>) -> Self {
+        self.trading_fee = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for AMMDeposit {
     const TRANSACTION_TYPE: &'static str = "AMMDeposit";
+    type Flags = AMMDepositFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_deposit(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -328,6 +507,7 @@ impl From<AMMDeposit> for Tx {
 ///
 /// Required: `Asset`, `Asset2`, `TradingFee`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMVote {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -360,6 +540,10 @@ impl AMMVote {
 
 impl TxModel for AMMVote {
     const TRANSACTION_TYPE: &'static str = "AMMVote";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_vote(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -374,10 +558,35 @@ impl From<AMMVote> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`AMMWithdraw`] (`Flags`).
+    AMMWithdrawFlags {
+        /// `tfLPToken`.
+        LP_TOKEN = 0x00010000,
+        /// `tfWithdrawAll`.
+        WITHDRAW_ALL = 0x00020000,
+        /// `tfOneAssetWithdrawAll`.
+        ONE_ASSET_WITHDRAW_ALL = 0x00040000,
+        /// `tfSingleAsset`.
+        SINGLE_ASSET = 0x00080000,
+        /// `tfTwoAsset`.
+        TWO_ASSET = 0x00100000,
+        /// `tfOneAssetLPToken`.
+        ONE_ASSET_LP_TOKEN = 0x00200000,
+        /// `tfLimitLPToken`.
+        LIMIT_LP_TOKEN = 0x00400000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`AMMWithdraw`](https://xrpl.org/docs/references/protocol/transactions/types/ammwithdraw) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AMMWithdraw {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -405,20 +614,6 @@ pub struct AMMWithdraw {
 impl AMMWithdraw {
     /// `"AMMWithdraw"`.
     pub const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
-    /// `tfLPToken`.
-    pub const TF_LP_TOKEN: u32 = 0x00010000;
-    /// `tfWithdrawAll`.
-    pub const TF_WITHDRAW_ALL: u32 = 0x00020000;
-    /// `tfOneAssetWithdrawAll`.
-    pub const TF_ONE_ASSET_WITHDRAW_ALL: u32 = 0x00040000;
-    /// `tfSingleAsset`.
-    pub const TF_SINGLE_ASSET: u32 = 0x00080000;
-    /// `tfTwoAsset`.
-    pub const TF_TWO_ASSET: u32 = 0x00100000;
-    /// `tfOneAssetLPToken`.
-    pub const TF_ONE_ASSET_LP_TOKEN: u32 = 0x00200000;
-    /// `tfLimitLPToken`.
-    pub const TF_LIMIT_LP_TOKEN: u32 = 0x00400000;
 
     /// A `AMMWithdraw` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
@@ -432,10 +627,42 @@ impl AMMWithdraw {
             lp_token_in: None,
         }
     }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
+
+    /// With `Amount2` set (see [`Self::amount2`]).
+    #[must_use]
+    pub fn with_amount2(mut self, value: impl Into<Amount>) -> Self {
+        self.amount2 = Some(value.into());
+        self
+    }
+
+    /// With `EPrice` set (see [`Self::e_price`]).
+    #[must_use]
+    pub fn with_e_price(mut self, value: impl Into<Amount>) -> Self {
+        self.e_price = Some(value.into());
+        self
+    }
+
+    /// With `LPTokenIn` set (see [`Self::lp_token_in`]).
+    #[must_use]
+    pub fn with_lp_token_in(mut self, value: impl Into<Amount>) -> Self {
+        self.lp_token_in = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for AMMWithdraw {
     const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
+    type Flags = AMMWithdrawFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::amm_withdraw(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -454,6 +681,7 @@ impl From<AMMWithdraw> for Tx {
 ///
 /// Required: `Destination`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -490,10 +718,25 @@ impl AccountDelete {
             credential_ids: None,
         }
     }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for AccountDelete {
     const TRANSACTION_TYPE: &'static str = "AccountDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -508,10 +751,33 @@ impl From<AccountDelete> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`AccountSet`] (`Flags`).
+    AccountSetFlags {
+        /// `tfRequireDestTag`.
+        REQUIRE_DEST_TAG = 0x00010000,
+        /// `tfOptionalDestTag`.
+        OPTIONAL_DEST_TAG = 0x00020000,
+        /// `tfRequireAuth`.
+        REQUIRE_AUTH = 0x00040000,
+        /// `tfOptionalAuth`.
+        OPTIONAL_AUTH = 0x00080000,
+        /// `tfDisallowXRP`.
+        DISALLOW_XRP = 0x00100000,
+        /// `tfAllowXRP`.
+        ALLOW_XRP = 0x00200000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`AccountSet`](https://xrpl.org/docs/references/protocol/transactions/types/accountset) transaction.
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -571,50 +837,6 @@ pub struct AccountSet {
 impl AccountSet {
     /// `"AccountSet"`.
     pub const TRANSACTION_TYPE: &'static str = "AccountSet";
-    /// `tfRequireDestTag`.
-    pub const TF_REQUIRE_DEST_TAG: u32 = 0x00010000;
-    /// `tfOptionalDestTag`.
-    pub const TF_OPTIONAL_DEST_TAG: u32 = 0x00020000;
-    /// `tfRequireAuth`.
-    pub const TF_REQUIRE_AUTH: u32 = 0x00040000;
-    /// `tfOptionalAuth`.
-    pub const TF_OPTIONAL_AUTH: u32 = 0x00080000;
-    /// `tfDisallowXRP`.
-    pub const TF_DISALLOW_XRP: u32 = 0x00100000;
-    /// `tfAllowXRP`.
-    pub const TF_ALLOW_XRP: u32 = 0x00200000;
-    /// `asfRequireDest`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_REQUIRE_DEST: u32 = 1;
-    /// `asfRequireAuth`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_REQUIRE_AUTH: u32 = 2;
-    /// `asfDisallowXRP`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_XRP: u32 = 3;
-    /// `asfDisableMaster`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISABLE_MASTER: u32 = 4;
-    /// `asfAccountTxnID`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_ACCOUNT_TXN_ID: u32 = 5;
-    /// `asfNoFreeze`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_NO_FREEZE: u32 = 6;
-    /// `asfGlobalFreeze`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_GLOBAL_FREEZE: u32 = 7;
-    /// `asfDefaultRipple`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DEFAULT_RIPPLE: u32 = 8;
-    /// `asfDepositAuth`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DEPOSIT_AUTH: u32 = 9;
-    /// `asfAuthorizedNFTokenMinter`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_AUTHORIZED_NFTOKEN_MINTER: u32 = 10;
-    /// `asfDisallowIncomingNFTokenOffer`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_NFTOKEN_OFFER: u32 = 12;
-    /// `asfDisallowIncomingCheck`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_CHECK: u32 = 13;
-    /// `asfDisallowIncomingPayChan`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_PAY_CHAN: u32 = 14;
-    /// `asfDisallowIncomingTrustline`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_DISALLOW_INCOMING_TRUSTLINE: u32 = 15;
-    /// `asfAllowTrustLineClawback`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_ALLOW_TRUST_LINE_CLAWBACK: u32 = 16;
-    /// `asfAllowTrustLineLocking`: a `SetFlag` / `ClearFlag` value.
-    pub const ASF_ALLOW_TRUST_LINE_LOCKING: u32 = 17;
 
     /// A `AccountSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -632,10 +854,84 @@ impl AccountSet {
             nf_token_minter: None,
         }
     }
+
+    /// With `EmailHash` set (see [`Self::email_hash`]).
+    #[must_use]
+    pub fn with_email_hash(mut self, value: impl Into<Hash128>) -> Self {
+        self.email_hash = Some(value.into());
+        self
+    }
+
+    /// With `WalletLocator` set (see [`Self::wallet_locator`]).
+    #[must_use]
+    pub fn with_wallet_locator(mut self, value: impl Into<Hash256>) -> Self {
+        self.wallet_locator = Some(value.into());
+        self
+    }
+
+    /// With `WalletSize` set (see [`Self::wallet_size`]).
+    #[must_use]
+    pub fn with_wallet_size(mut self, value: impl Into<u32>) -> Self {
+        self.wallet_size = Some(value.into());
+        self
+    }
+
+    /// With `MessageKey` set (see [`Self::message_key`]).
+    #[must_use]
+    pub fn with_message_key(mut self, value: impl Into<String>) -> Self {
+        self.message_key = Some(value.into());
+        self
+    }
+
+    /// With `Domain` set (see [`Self::domain`]).
+    #[must_use]
+    pub fn with_domain(mut self, value: impl Into<String>) -> Self {
+        self.domain = Some(value.into());
+        self
+    }
+
+    /// With `TransferRate` set (see [`Self::transfer_rate`]).
+    #[must_use]
+    pub fn with_transfer_rate(mut self, value: impl Into<u32>) -> Self {
+        self.transfer_rate = Some(value.into());
+        self
+    }
+
+    /// With `SetFlag` set (see [`Self::set_flag`]).
+    #[must_use]
+    pub fn with_set_flag(mut self, value: impl Into<u32>) -> Self {
+        self.set_flag = Some(value.into());
+        self
+    }
+
+    /// With `ClearFlag` set (see [`Self::clear_flag`]).
+    #[must_use]
+    pub fn with_clear_flag(mut self, value: impl Into<u32>) -> Self {
+        self.clear_flag = Some(value.into());
+        self
+    }
+
+    /// With `TickSize` set (see [`Self::tick_size`]).
+    #[must_use]
+    pub fn with_tick_size(mut self, value: impl Into<u8>) -> Self {
+        self.tick_size = Some(value.into());
+        self
+    }
+
+    /// With `NFTokenMinter` set (see [`Self::nf_token_minter`]).
+    #[must_use]
+    pub fn with_nf_token_minter(mut self, value: impl Into<String>) -> Self {
+        self.nf_token_minter = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for AccountSet {
     const TRANSACTION_TYPE: &'static str = "AccountSet";
+    type Flags = AccountSetFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::account_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -650,10 +946,29 @@ impl From<AccountSet> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`Batch`] (`Flags`).
+    BatchFlags {
+        /// `tfAllOrNothing`.
+        ALL_OR_NOTHING = 0x00010000,
+        /// `tfOnlyOne`.
+        ONLY_ONE = 0x00020000,
+        /// `tfUntilFailure`.
+        UNTIL_FAILURE = 0x00040000,
+        /// `tfIndependent`.
+        INDEPENDENT = 0x00080000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`Batch`](https://xrpl.org/docs/references/protocol/transactions/types/batch) transaction.
 ///
 /// Required: `RawTransactions`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Batch {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -674,14 +989,6 @@ pub struct Batch {
 impl Batch {
     /// `"Batch"`.
     pub const TRANSACTION_TYPE: &'static str = "Batch";
-    /// `tfAllOrNothing`.
-    pub const TF_ALL_OR_NOTHING: u32 = 0x00010000;
-    /// `tfOnlyOne`.
-    pub const TF_ONLY_ONE: u32 = 0x00020000;
-    /// `tfUntilFailure`.
-    pub const TF_UNTIL_FAILURE: u32 = 0x00040000;
-    /// `tfIndependent`.
-    pub const TF_INDEPENDENT: u32 = 0x00080000;
 
     /// A `Batch` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, raw_transactions: Vec<Tx>) -> Self {
@@ -691,10 +998,18 @@ impl Batch {
             batch_signers: None,
         }
     }
+
+    /// With `BatchSigners` set (see [`Self::batch_signers`]).
+    #[must_use]
+    pub fn with_batch_signers(mut self, value: impl Into<Vec<BatchSigner>>) -> Self {
+        self.batch_signers = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for Batch {
     const TRANSACTION_TYPE: &'static str = "Batch";
+    type Flags = BatchFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -713,6 +1028,7 @@ impl From<Batch> for Tx {
 ///
 /// Required: `CheckID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CheckCancel {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -737,6 +1053,7 @@ impl CheckCancel {
 
 impl TxModel for CheckCancel {
     const TRANSACTION_TYPE: &'static str = "CheckCancel";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -755,6 +1072,7 @@ impl From<CheckCancel> for Tx {
 ///
 /// Required: `CheckID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CheckCash {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -787,10 +1105,25 @@ impl CheckCash {
             deliver_min: None,
         }
     }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
+
+    /// With `DeliverMin` set (see [`Self::deliver_min`]).
+    #[must_use]
+    pub fn with_deliver_min(mut self, value: impl Into<Amount>) -> Self {
+        self.deliver_min = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for CheckCash {
     const TRANSACTION_TYPE: &'static str = "CheckCash";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -809,6 +1142,7 @@ impl From<CheckCash> for Tx {
 ///
 /// Required: `Destination`, `SendMax`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CheckCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -857,10 +1191,32 @@ impl CheckCreate {
             invoice_id: None,
         }
     }
+
+    /// With `Expiration` set (see [`Self::expiration`]).
+    #[must_use]
+    pub fn with_expiration(mut self, value: impl Into<u32>) -> Self {
+        self.expiration = Some(value.into());
+        self
+    }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
+
+    /// With `InvoiceID` set (see [`Self::invoice_id`]).
+    #[must_use]
+    pub fn with_invoice_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.invoice_id = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for CheckCreate {
     const TRANSACTION_TYPE: &'static str = "CheckCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -879,6 +1235,7 @@ impl From<CheckCreate> for Tx {
 ///
 /// Required: `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Clawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -903,10 +1260,21 @@ impl Clawback {
             holder: None,
         }
     }
+
+    /// With `Holder` set (see [`Self::holder`]).
+    #[must_use]
+    pub fn with_holder(mut self, value: impl Into<String>) -> Self {
+        self.holder = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for Clawback {
     const TRANSACTION_TYPE: &'static str = "Clawback";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::clawback(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -925,6 +1293,7 @@ impl From<Clawback> for Tx {
 ///
 /// Required: `MPTokenIssuanceID`, `Holder`, `MPTAmount`, `ZKProof`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConfidentialMPTClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -967,6 +1336,7 @@ impl ConfidentialMPTClawback {
 
 impl TxModel for ConfidentialMPTClawback {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTClawback";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -985,6 +1355,7 @@ impl From<ConfidentialMPTClawback> for Tx {
 ///
 /// Required: `MPTokenIssuanceID`, `MPTAmount`, `HolderEncryptedAmount`, `IssuerEncryptedAmount`, `BlindingFactor`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConfidentialMPTConvert {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1048,10 +1419,32 @@ impl ConfidentialMPTConvert {
             zk_proof: None,
         }
     }
+
+    /// With `HolderEncryptionKey` set (see [`Self::holder_encryption_key`]).
+    #[must_use]
+    pub fn with_holder_encryption_key(mut self, value: impl Into<String>) -> Self {
+        self.holder_encryption_key = Some(value.into());
+        self
+    }
+
+    /// With `AuditorEncryptedAmount` set (see [`Self::auditor_encrypted_amount`]).
+    #[must_use]
+    pub fn with_auditor_encrypted_amount(mut self, value: impl Into<String>) -> Self {
+        self.auditor_encrypted_amount = Some(value.into());
+        self
+    }
+
+    /// With `ZKProof` set (see [`Self::zk_proof`]).
+    #[must_use]
+    pub fn with_zk_proof(mut self, value: impl Into<String>) -> Self {
+        self.zk_proof = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for ConfidentialMPTConvert {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTConvert";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1070,6 +1463,7 @@ impl From<ConfidentialMPTConvert> for Tx {
 ///
 /// Required: `MPTokenIssuanceID`, `MPTAmount`, `HolderEncryptedAmount`, `IssuerEncryptedAmount`, `BlindingFactor`, `ZKProof`, `BalanceCommitment`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConfidentialMPTConvertBack {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1131,10 +1525,18 @@ impl ConfidentialMPTConvertBack {
             balance_commitment: balance_commitment.into(),
         }
     }
+
+    /// With `AuditorEncryptedAmount` set (see [`Self::auditor_encrypted_amount`]).
+    #[must_use]
+    pub fn with_auditor_encrypted_amount(mut self, value: impl Into<String>) -> Self {
+        self.auditor_encrypted_amount = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for ConfidentialMPTConvertBack {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTConvertBack";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1153,6 +1555,7 @@ impl From<ConfidentialMPTConvertBack> for Tx {
 ///
 /// Required: `MPTokenIssuanceID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConfidentialMPTMergeInbox {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1177,6 +1580,7 @@ impl ConfidentialMPTMergeInbox {
 
 impl TxModel for ConfidentialMPTMergeInbox {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTMergeInbox";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1195,6 +1599,7 @@ impl From<ConfidentialMPTMergeInbox> for Tx {
 ///
 /// Required: `MPTokenIssuanceID`, `Destination`, `SenderEncryptedAmount`, `DestinationEncryptedAmount`, `IssuerEncryptedAmount`, `ZKProof`, `AmountCommitment`, `BalanceCommitment`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConfidentialMPTSend {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1277,10 +1682,32 @@ impl ConfidentialMPTSend {
             credential_ids: None,
         }
     }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
+
+    /// With `AuditorEncryptedAmount` set (see [`Self::auditor_encrypted_amount`]).
+    #[must_use]
+    pub fn with_auditor_encrypted_amount(mut self, value: impl Into<String>) -> Self {
+        self.auditor_encrypted_amount = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for ConfidentialMPTSend {
     const TRANSACTION_TYPE: &'static str = "ConfidentialMPTSend";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1299,6 +1726,7 @@ impl From<ConfidentialMPTSend> for Tx {
 ///
 /// Required: `Issuer`, `CredentialType`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CredentialAccept {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1331,6 +1759,7 @@ impl CredentialAccept {
 
 impl TxModel for CredentialAccept {
     const TRANSACTION_TYPE: &'static str = "CredentialAccept";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1349,6 +1778,7 @@ impl From<CredentialAccept> for Tx {
 ///
 /// Required: `Subject`, `CredentialType`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CredentialCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1389,10 +1819,25 @@ impl CredentialCreate {
             uri: None,
         }
     }
+
+    /// With `Expiration` set (see [`Self::expiration`]).
+    #[must_use]
+    pub fn with_expiration(mut self, value: impl Into<u32>) -> Self {
+        self.expiration = Some(value.into());
+        self
+    }
+
+    /// With `URI` set (see [`Self::uri`]).
+    #[must_use]
+    pub fn with_uri(mut self, value: impl Into<String>) -> Self {
+        self.uri = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for CredentialCreate {
     const TRANSACTION_TYPE: &'static str = "CredentialCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1411,6 +1856,7 @@ impl From<CredentialCreate> for Tx {
 ///
 /// Required: `CredentialType`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CredentialDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1439,10 +1885,25 @@ impl CredentialDelete {
             credential_type: credential_type.into(),
         }
     }
+
+    /// With `Subject` set (see [`Self::subject`]).
+    #[must_use]
+    pub fn with_subject(mut self, value: impl Into<String>) -> Self {
+        self.subject = Some(value.into());
+        self
+    }
+
+    /// With `Issuer` set (see [`Self::issuer`]).
+    #[must_use]
+    pub fn with_issuer(mut self, value: impl Into<String>) -> Self {
+        self.issuer = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for CredentialDelete {
     const TRANSACTION_TYPE: &'static str = "CredentialDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1461,6 +1922,7 @@ impl From<CredentialDelete> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DIDDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1481,6 +1943,7 @@ impl DIDDelete {
 
 impl TxModel for DIDDelete {
     const TRANSACTION_TYPE: &'static str = "DIDDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1499,6 +1962,7 @@ impl From<DIDDelete> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DIDSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1531,10 +1995,32 @@ impl DIDSet {
             data: None,
         }
     }
+
+    /// With `DIDDocument` set (see [`Self::did_document`]).
+    #[must_use]
+    pub fn with_did_document(mut self, value: impl Into<String>) -> Self {
+        self.did_document = Some(value.into());
+        self
+    }
+
+    /// With `URI` set (see [`Self::uri`]).
+    #[must_use]
+    pub fn with_uri(mut self, value: impl Into<String>) -> Self {
+        self.uri = Some(value.into());
+        self
+    }
+
+    /// With `Data` set (see [`Self::data`]).
+    #[must_use]
+    pub fn with_data(mut self, value: impl Into<String>) -> Self {
+        self.data = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for DIDSet {
     const TRANSACTION_TYPE: &'static str = "DIDSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1553,6 +2039,7 @@ impl From<DIDSet> for Tx {
 ///
 /// Required: `Authorize`, `Permissions`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DelegateSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1585,6 +2072,10 @@ impl DelegateSet {
 
 impl TxModel for DelegateSet {
     const TRANSACTION_TYPE: &'static str = "DelegateSet";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::delegate_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1603,6 +2094,7 @@ impl From<DelegateSet> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DepositPreauth {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1649,10 +2141,39 @@ impl DepositPreauth {
             unauthorize_credentials: None,
         }
     }
+
+    /// With `Authorize` set (see [`Self::authorize`]).
+    #[must_use]
+    pub fn with_authorize(mut self, value: impl Into<String>) -> Self {
+        self.authorize = Some(value.into());
+        self
+    }
+
+    /// With `Unauthorize` set (see [`Self::unauthorize`]).
+    #[must_use]
+    pub fn with_unauthorize(mut self, value: impl Into<String>) -> Self {
+        self.unauthorize = Some(value.into());
+        self
+    }
+
+    /// With `AuthorizeCredentials` set (see [`Self::authorize_credentials`]).
+    #[must_use]
+    pub fn with_authorize_credentials(mut self, value: impl Into<Vec<CredentialSpec>>) -> Self {
+        self.authorize_credentials = Some(value.into());
+        self
+    }
+
+    /// With `UnauthorizeCredentials` set (see [`Self::unauthorize_credentials`]).
+    #[must_use]
+    pub fn with_unauthorize_credentials(mut self, value: impl Into<Vec<CredentialSpec>>) -> Self {
+        self.unauthorize_credentials = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for DepositPreauth {
     const TRANSACTION_TYPE: &'static str = "DepositPreauth";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1667,10 +2188,25 @@ impl From<DepositPreauth> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`EnableAmendment`] (`Flags`).
+    EnableAmendmentFlags {
+        /// `tfGotMajority`.
+        GOT_MAJORITY = 0x00010000,
+        /// `tfLostMajority`.
+        LOST_MAJORITY = 0x00020000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`EnableAmendment`](https://xrpl.org/docs/references/protocol/transactions/types/enableamendment) transaction.
 ///
 /// Required: `LedgerSequence`, `Amendment`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EnableAmendment {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1686,10 +2222,6 @@ pub struct EnableAmendment {
 impl EnableAmendment {
     /// `"EnableAmendment"`.
     pub const TRANSACTION_TYPE: &'static str = "EnableAmendment";
-    /// `tfGotMajority`.
-    pub const TF_GOT_MAJORITY: u32 = 0x00010000;
-    /// `tfLostMajority`.
-    pub const TF_LOST_MAJORITY: u32 = 0x00020000;
 
     /// A `EnableAmendment` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, ledger_sequence: u32, amendment: Hash256) -> Self {
@@ -1703,6 +2235,7 @@ impl EnableAmendment {
 
 impl TxModel for EnableAmendment {
     const TRANSACTION_TYPE: &'static str = "EnableAmendment";
+    type Flags = EnableAmendmentFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1721,6 +2254,7 @@ impl From<EnableAmendment> for Tx {
 ///
 /// Required: `Owner`, `OfferSequence`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EscrowCancel {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1749,6 +2283,7 @@ impl EscrowCancel {
 
 impl TxModel for EscrowCancel {
     const TRANSACTION_TYPE: &'static str = "EscrowCancel";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1767,6 +2302,7 @@ impl From<EscrowCancel> for Tx {
 ///
 /// Required: `Destination`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EscrowCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1819,10 +2355,39 @@ impl EscrowCreate {
             destination_tag: None,
         }
     }
+
+    /// With `Condition` set (see [`Self::condition`]).
+    #[must_use]
+    pub fn with_condition(mut self, value: impl Into<String>) -> Self {
+        self.condition = Some(value.into());
+        self
+    }
+
+    /// With `CancelAfter` set (see [`Self::cancel_after`]).
+    #[must_use]
+    pub fn with_cancel_after(mut self, value: impl Into<u32>) -> Self {
+        self.cancel_after = Some(value.into());
+        self
+    }
+
+    /// With `FinishAfter` set (see [`Self::finish_after`]).
+    #[must_use]
+    pub fn with_finish_after(mut self, value: impl Into<u32>) -> Self {
+        self.finish_after = Some(value.into());
+        self
+    }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for EscrowCreate {
     const TRANSACTION_TYPE: &'static str = "EscrowCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1841,6 +2406,7 @@ impl From<EscrowCreate> for Tx {
 ///
 /// Required: `Owner`, `OfferSequence`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EscrowFinish {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1885,10 +2451,32 @@ impl EscrowFinish {
             credential_ids: None,
         }
     }
+
+    /// With `Fulfillment` set (see [`Self::fulfillment`]).
+    #[must_use]
+    pub fn with_fulfillment(mut self, value: impl Into<String>) -> Self {
+        self.fulfillment = Some(value.into());
+        self
+    }
+
+    /// With `Condition` set (see [`Self::condition`]).
+    #[must_use]
+    pub fn with_condition(mut self, value: impl Into<String>) -> Self {
+        self.condition = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for EscrowFinish {
     const TRANSACTION_TYPE: &'static str = "EscrowFinish";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1907,6 +2495,7 @@ impl From<EscrowFinish> for Tx {
 ///
 /// Required: `LedgerFixType`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerStateFix {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1939,10 +2528,25 @@ impl LedgerStateFix {
             book_directory: None,
         }
     }
+
+    /// With `Owner` set (see [`Self::owner`]).
+    #[must_use]
+    pub fn with_owner(mut self, value: impl Into<String>) -> Self {
+        self.owner = Some(value.into());
+        self
+    }
+
+    /// With `BookDirectory` set (see [`Self::book_directory`]).
+    #[must_use]
+    pub fn with_book_directory(mut self, value: impl Into<Hash256>) -> Self {
+        self.book_directory = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for LedgerStateFix {
     const TRANSACTION_TYPE: &'static str = "LedgerStateFix";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -1961,6 +2565,7 @@ impl From<LedgerStateFix> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanBrokerCoverClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -1989,10 +2594,25 @@ impl LoanBrokerCoverClawback {
             amount: None,
         }
     }
+
+    /// With `LoanBrokerID` set (see [`Self::loan_broker_id`]).
+    #[must_use]
+    pub fn with_loan_broker_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.loan_broker_id = Some(value.into());
+        self
+    }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for LoanBrokerCoverClawback {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverClawback";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2011,6 +2631,7 @@ impl From<LoanBrokerCoverClawback> for Tx {
 ///
 /// Required: `LoanBrokerID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanBrokerCoverDeposit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2039,6 +2660,7 @@ impl LoanBrokerCoverDeposit {
 
 impl TxModel for LoanBrokerCoverDeposit {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverDeposit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2057,6 +2679,7 @@ impl From<LoanBrokerCoverDeposit> for Tx {
 ///
 /// Required: `LoanBrokerID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanBrokerCoverWithdraw {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2105,10 +2728,32 @@ impl LoanBrokerCoverWithdraw {
             credential_ids: None,
         }
     }
+
+    /// With `Destination` set (see [`Self::destination`]).
+    #[must_use]
+    pub fn with_destination(mut self, value: impl Into<String>) -> Self {
+        self.destination = Some(value.into());
+        self
+    }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for LoanBrokerCoverWithdraw {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverWithdraw";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2127,6 +2772,7 @@ impl From<LoanBrokerCoverWithdraw> for Tx {
 ///
 /// Required: `LoanBrokerID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanBrokerDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2151,6 +2797,7 @@ impl LoanBrokerDelete {
 
 impl TxModel for LoanBrokerDelete {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2169,6 +2816,7 @@ impl From<LoanBrokerDelete> for Tx {
 ///
 /// Required: `VaultID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanBrokerSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2233,10 +2881,53 @@ impl LoanBrokerSet {
             cover_rate_liquidation: None,
         }
     }
+
+    /// With `LoanBrokerID` set (see [`Self::loan_broker_id`]).
+    #[must_use]
+    pub fn with_loan_broker_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.loan_broker_id = Some(value.into());
+        self
+    }
+
+    /// With `Data` set (see [`Self::data`]).
+    #[must_use]
+    pub fn with_data(mut self, value: impl Into<String>) -> Self {
+        self.data = Some(value.into());
+        self
+    }
+
+    /// With `ManagementFeeRate` set (see [`Self::management_fee_rate`]).
+    #[must_use]
+    pub fn with_management_fee_rate(mut self, value: impl Into<u16>) -> Self {
+        self.management_fee_rate = Some(value.into());
+        self
+    }
+
+    /// With `DebtMaximum` set (see [`Self::debt_maximum`]).
+    #[must_use]
+    pub fn with_debt_maximum(mut self, value: impl Into<String>) -> Self {
+        self.debt_maximum = Some(value.into());
+        self
+    }
+
+    /// With `CoverRateMinimum` set (see [`Self::cover_rate_minimum`]).
+    #[must_use]
+    pub fn with_cover_rate_minimum(mut self, value: impl Into<u32>) -> Self {
+        self.cover_rate_minimum = Some(value.into());
+        self
+    }
+
+    /// With `CoverRateLiquidation` set (see [`Self::cover_rate_liquidation`]).
+    #[must_use]
+    pub fn with_cover_rate_liquidation(mut self, value: impl Into<u32>) -> Self {
+        self.cover_rate_liquidation = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for LoanBrokerSet {
     const TRANSACTION_TYPE: &'static str = "LoanBrokerSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2255,6 +2946,7 @@ impl From<LoanBrokerSet> for Tx {
 ///
 /// Required: `LoanID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2279,6 +2971,7 @@ impl LoanDelete {
 
 impl TxModel for LoanDelete {
     const TRANSACTION_TYPE: &'static str = "LoanDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2293,10 +2986,27 @@ impl From<LoanDelete> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`LoanManage`] (`Flags`).
+    LoanManageFlags {
+        /// `tfLoanDefault`.
+        LOAN_DEFAULT = 0x00010000,
+        /// `tfLoanImpair`.
+        LOAN_IMPAIR = 0x00020000,
+        /// `tfLoanUnimpair`.
+        LOAN_UNIMPAIR = 0x00040000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`LoanManage`](https://xrpl.org/docs/references/protocol/transactions/types/loanmanage) transaction.
 ///
 /// Required: `LoanID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanManage {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2309,12 +3019,6 @@ pub struct LoanManage {
 impl LoanManage {
     /// `"LoanManage"`.
     pub const TRANSACTION_TYPE: &'static str = "LoanManage";
-    /// `tfLoanDefault`.
-    pub const TF_LOAN_DEFAULT: u32 = 0x00010000;
-    /// `tfLoanImpair`.
-    pub const TF_LOAN_IMPAIR: u32 = 0x00020000;
-    /// `tfLoanUnimpair`.
-    pub const TF_LOAN_UNIMPAIR: u32 = 0x00040000;
 
     /// A `LoanManage` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, loan_id: Hash256) -> Self {
@@ -2327,6 +3031,7 @@ impl LoanManage {
 
 impl TxModel for LoanManage {
     const TRANSACTION_TYPE: &'static str = "LoanManage";
+    type Flags = LoanManageFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2341,10 +3046,27 @@ impl From<LoanManage> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`LoanPay`] (`Flags`).
+    LoanPayFlags {
+        /// `tfLoanOverpayment`.
+        LOAN_OVERPAYMENT = 0x00010000,
+        /// `tfLoanFullPayment`.
+        LOAN_FULL_PAYMENT = 0x00020000,
+        /// `tfLoanLatePayment`.
+        LOAN_LATE_PAYMENT = 0x00040000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`LoanPay`](https://xrpl.org/docs/references/protocol/transactions/types/loanpay) transaction.
 ///
 /// Required: `LoanID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanPay {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2360,12 +3082,6 @@ pub struct LoanPay {
 impl LoanPay {
     /// `"LoanPay"`.
     pub const TRANSACTION_TYPE: &'static str = "LoanPay";
-    /// `tfLoanOverpayment`.
-    pub const TF_LOAN_OVERPAYMENT: u32 = 0x00010000;
-    /// `tfLoanFullPayment`.
-    pub const TF_LOAN_FULL_PAYMENT: u32 = 0x00020000;
-    /// `tfLoanLatePayment`.
-    pub const TF_LOAN_LATE_PAYMENT: u32 = 0x00040000;
 
     /// A `LoanPay` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, loan_id: Hash256, amount: Amount) -> Self {
@@ -2379,6 +3095,7 @@ impl LoanPay {
 
 impl TxModel for LoanPay {
     const TRANSACTION_TYPE: &'static str = "LoanPay";
+    type Flags = LoanPayFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2393,10 +3110,23 @@ impl From<LoanPay> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`LoanSet`] (`Flags`).
+    LoanSetFlags {
+        /// `tfLoanOverpayment`.
+        LOAN_OVERPAYMENT = 0x00010000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`LoanSet`](https://xrpl.org/docs/references/protocol/transactions/types/loanset) transaction.
 ///
 /// Required: `LoanBrokerID`, `PrincipalRequested`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoanSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2513,8 +3243,6 @@ pub struct LoanSet {
 impl LoanSet {
     /// `"LoanSet"`.
     pub const TRANSACTION_TYPE: &'static str = "LoanSet";
-    /// `tfLoanOverpayment`.
-    pub const TF_LOAN_OVERPAYMENT: u32 = 0x00010000;
 
     /// A `LoanSet` from `account` with its required fields; everything else unset.
     pub fn new(
@@ -2543,10 +3271,116 @@ impl LoanSet {
             grace_period: None,
         }
     }
+
+    /// With `Data` set (see [`Self::data`]).
+    #[must_use]
+    pub fn with_data(mut self, value: impl Into<String>) -> Self {
+        self.data = Some(value.into());
+        self
+    }
+
+    /// With `Counterparty` set (see [`Self::counterparty`]).
+    #[must_use]
+    pub fn with_counterparty(mut self, value: impl Into<String>) -> Self {
+        self.counterparty = Some(value.into());
+        self
+    }
+
+    /// With `CounterpartySignature` set (see [`Self::counterparty_signature`]).
+    #[must_use]
+    pub fn with_counterparty_signature(mut self, value: impl Into<Value>) -> Self {
+        self.counterparty_signature = Some(value.into());
+        self
+    }
+
+    /// With `LoanOriginationFee` set (see [`Self::loan_origination_fee`]).
+    #[must_use]
+    pub fn with_loan_origination_fee(mut self, value: impl Into<String>) -> Self {
+        self.loan_origination_fee = Some(value.into());
+        self
+    }
+
+    /// With `LoanServiceFee` set (see [`Self::loan_service_fee`]).
+    #[must_use]
+    pub fn with_loan_service_fee(mut self, value: impl Into<String>) -> Self {
+        self.loan_service_fee = Some(value.into());
+        self
+    }
+
+    /// With `LatePaymentFee` set (see [`Self::late_payment_fee`]).
+    #[must_use]
+    pub fn with_late_payment_fee(mut self, value: impl Into<String>) -> Self {
+        self.late_payment_fee = Some(value.into());
+        self
+    }
+
+    /// With `ClosePaymentFee` set (see [`Self::close_payment_fee`]).
+    #[must_use]
+    pub fn with_close_payment_fee(mut self, value: impl Into<String>) -> Self {
+        self.close_payment_fee = Some(value.into());
+        self
+    }
+
+    /// With `OverpaymentFee` set (see [`Self::overpayment_fee`]).
+    #[must_use]
+    pub fn with_overpayment_fee(mut self, value: impl Into<u32>) -> Self {
+        self.overpayment_fee = Some(value.into());
+        self
+    }
+
+    /// With `InterestRate` set (see [`Self::interest_rate`]).
+    #[must_use]
+    pub fn with_interest_rate(mut self, value: impl Into<u32>) -> Self {
+        self.interest_rate = Some(value.into());
+        self
+    }
+
+    /// With `LateInterestRate` set (see [`Self::late_interest_rate`]).
+    #[must_use]
+    pub fn with_late_interest_rate(mut self, value: impl Into<u32>) -> Self {
+        self.late_interest_rate = Some(value.into());
+        self
+    }
+
+    /// With `CloseInterestRate` set (see [`Self::close_interest_rate`]).
+    #[must_use]
+    pub fn with_close_interest_rate(mut self, value: impl Into<u32>) -> Self {
+        self.close_interest_rate = Some(value.into());
+        self
+    }
+
+    /// With `OverpaymentInterestRate` set (see [`Self::overpayment_interest_rate`]).
+    #[must_use]
+    pub fn with_overpayment_interest_rate(mut self, value: impl Into<u32>) -> Self {
+        self.overpayment_interest_rate = Some(value.into());
+        self
+    }
+
+    /// With `PaymentTotal` set (see [`Self::payment_total`]).
+    #[must_use]
+    pub fn with_payment_total(mut self, value: impl Into<u32>) -> Self {
+        self.payment_total = Some(value.into());
+        self
+    }
+
+    /// With `PaymentInterval` set (see [`Self::payment_interval`]).
+    #[must_use]
+    pub fn with_payment_interval(mut self, value: impl Into<u32>) -> Self {
+        self.payment_interval = Some(value.into());
+        self
+    }
+
+    /// With `GracePeriod` set (see [`Self::grace_period`]).
+    #[must_use]
+    pub fn with_grace_period(mut self, value: impl Into<u32>) -> Self {
+        self.grace_period = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for LoanSet {
     const TRANSACTION_TYPE: &'static str = "LoanSet";
+    type Flags = LoanSetFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2561,10 +3395,23 @@ impl From<LoanSet> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`MPTokenAuthorize`] (`Flags`).
+    MPTokenAuthorizeFlags {
+        /// `tfMPTUnauthorize`.
+        MPT_UNAUTHORIZE = 0x00000001,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`MPTokenAuthorize`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenauthorize) transaction.
 ///
 /// Required: `MPTokenIssuanceID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MPTokenAuthorize {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2580,8 +3427,6 @@ pub struct MPTokenAuthorize {
 impl MPTokenAuthorize {
     /// `"MPTokenAuthorize"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenAuthorize";
-    /// `tfMPTUnauthorize`.
-    pub const TF_MPT_UNAUTHORIZE: u32 = 0x00000001;
 
     /// A `MPTokenAuthorize` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
@@ -2591,10 +3436,18 @@ impl MPTokenAuthorize {
             holder: None,
         }
     }
+
+    /// With `Holder` set (see [`Self::holder`]).
+    #[must_use]
+    pub fn with_holder(mut self, value: impl Into<String>) -> Self {
+        self.holder = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for MPTokenAuthorize {
     const TRANSACTION_TYPE: &'static str = "MPTokenAuthorize";
+    type Flags = MPTokenAuthorizeFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2609,10 +3462,35 @@ impl From<MPTokenAuthorize> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`MPTokenIssuanceCreate`] (`Flags`).
+    MPTokenIssuanceCreateFlags {
+        /// `tfMPTCanLock`.
+        MPT_CAN_LOCK = 0x00000002,
+        /// `tfMPTRequireAuth`.
+        MPT_REQUIRE_AUTH = 0x00000004,
+        /// `tfMPTCanEscrow`.
+        MPT_CAN_ESCROW = 0x00000008,
+        /// `tfMPTCanTrade`.
+        MPT_CAN_TRADE = 0x00000010,
+        /// `tfMPTCanTransfer`.
+        MPT_CAN_TRANSFER = 0x00000020,
+        /// `tfMPTCanClawback`.
+        MPT_CAN_CLAWBACK = 0x00000040,
+        /// `tfMPTCanHoldConfidentialBalance`.
+        MPT_CAN_HOLD_CONFIDENTIAL_BALANCE = 0x00000080,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`MPTokenIssuanceCreate`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuancecreate) transaction.
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MPTokenIssuanceCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2660,20 +3538,6 @@ pub struct MPTokenIssuanceCreate {
 impl MPTokenIssuanceCreate {
     /// `"MPTokenIssuanceCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceCreate";
-    /// `tfMPTCanLock`.
-    pub const TF_MPT_CAN_LOCK: u32 = 0x00000002;
-    /// `tfMPTRequireAuth`.
-    pub const TF_MPT_REQUIRE_AUTH: u32 = 0x00000004;
-    /// `tfMPTCanEscrow`.
-    pub const TF_MPT_CAN_ESCROW: u32 = 0x00000008;
-    /// `tfMPTCanTrade`.
-    pub const TF_MPT_CAN_TRADE: u32 = 0x00000010;
-    /// `tfMPTCanTransfer`.
-    pub const TF_MPT_CAN_TRANSFER: u32 = 0x00000020;
-    /// `tfMPTCanClawback`.
-    pub const TF_MPT_CAN_CLAWBACK: u32 = 0x00000040;
-    /// `tfMPTCanHoldConfidentialBalance`.
-    pub const TF_MPT_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000080;
 
     /// A `MPTokenIssuanceCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -2687,10 +3551,53 @@ impl MPTokenIssuanceCreate {
             immutable_flags: None,
         }
     }
+
+    /// With `AssetScale` set (see [`Self::asset_scale`]).
+    #[must_use]
+    pub fn with_asset_scale(mut self, value: impl Into<u8>) -> Self {
+        self.asset_scale = Some(value.into());
+        self
+    }
+
+    /// With `TransferFee` set (see [`Self::transfer_fee`]).
+    #[must_use]
+    pub fn with_transfer_fee(mut self, value: impl Into<u16>) -> Self {
+        self.transfer_fee = Some(value.into());
+        self
+    }
+
+    /// With `MaximumAmount` set (see [`Self::maximum_amount`]).
+    #[must_use]
+    pub fn with_maximum_amount(mut self, value: impl Into<String>) -> Self {
+        self.maximum_amount = Some(value.into());
+        self
+    }
+
+    /// With `MPTokenMetadata` set (see [`Self::mp_token_metadata`]).
+    #[must_use]
+    pub fn with_mp_token_metadata(mut self, value: impl Into<String>) -> Self {
+        self.mp_token_metadata = Some(value.into());
+        self
+    }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
+
+    /// With `ImmutableFlags` set (see [`Self::immutable_flags`]).
+    #[must_use]
+    pub fn with_immutable_flags(mut self, value: impl Into<u32>) -> Self {
+        self.immutable_flags = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for MPTokenIssuanceCreate {
     const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceCreate";
+    type Flags = MPTokenIssuanceCreateFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2709,6 +3616,7 @@ impl From<MPTokenIssuanceCreate> for Tx {
 ///
 /// Required: `MPTokenIssuanceID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MPTokenIssuanceDestroy {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2733,6 +3641,7 @@ impl MPTokenIssuanceDestroy {
 
 impl TxModel for MPTokenIssuanceDestroy {
     const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceDestroy";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2747,10 +3656,39 @@ impl From<MPTokenIssuanceDestroy> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`MPTokenIssuanceSet`] (`Flags`).
+    MPTokenIssuanceSetFlags {
+        /// `tfMPTLock`.
+        MPT_LOCK = 0x00000001,
+        /// `tfMPTUnlock`.
+        MPT_UNLOCK = 0x00000002,
+        /// `tfMPTSetCanLock`.
+        MPT_SET_CAN_LOCK = 0x00000004,
+        /// `tfMPTSetRequireAuth`.
+        MPT_SET_REQUIRE_AUTH = 0x00000008,
+        /// `tfMPTSetCanEscrow`.
+        MPT_SET_CAN_ESCROW = 0x00000010,
+        /// `tfMPTSetCanTrade`.
+        MPT_SET_CAN_TRADE = 0x00000020,
+        /// `tfMPTSetCanTransfer`.
+        MPT_SET_CAN_TRANSFER = 0x00000040,
+        /// `tfMPTSetCanClawback`.
+        MPT_SET_CAN_CLAWBACK = 0x00000080,
+        /// `tfMPTSetCanHoldConfidentialBalance`.
+        MPT_SET_CAN_HOLD_CONFIDENTIAL_BALANCE = 0x00000100,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`MPTokenIssuanceSet`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuanceset) transaction.
 ///
 /// Required: `MPTokenIssuanceID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MPTokenIssuanceSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2804,24 +3742,6 @@ pub struct MPTokenIssuanceSet {
 impl MPTokenIssuanceSet {
     /// `"MPTokenIssuanceSet"`.
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceSet";
-    /// `tfMPTLock`.
-    pub const TF_MPT_LOCK: u32 = 0x00000001;
-    /// `tfMPTUnlock`.
-    pub const TF_MPT_UNLOCK: u32 = 0x00000002;
-    /// `tfMPTSetCanLock`.
-    pub const TF_MPT_SET_CAN_LOCK: u32 = 0x00000004;
-    /// `tfMPTSetRequireAuth`.
-    pub const TF_MPT_SET_REQUIRE_AUTH: u32 = 0x00000008;
-    /// `tfMPTSetCanEscrow`.
-    pub const TF_MPT_SET_CAN_ESCROW: u32 = 0x00000010;
-    /// `tfMPTSetCanTrade`.
-    pub const TF_MPT_SET_CAN_TRADE: u32 = 0x00000020;
-    /// `tfMPTSetCanTransfer`.
-    pub const TF_MPT_SET_CAN_TRANSFER: u32 = 0x00000040;
-    /// `tfMPTSetCanClawback`.
-    pub const TF_MPT_SET_CAN_CLAWBACK: u32 = 0x00000080;
-    /// `tfMPTSetCanHoldConfidentialBalance`.
-    pub const TF_MPT_SET_CAN_HOLD_CONFIDENTIAL_BALANCE: u32 = 0x00000100;
 
     /// A `MPTokenIssuanceSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
@@ -2837,10 +3757,60 @@ impl MPTokenIssuanceSet {
             auditor_encryption_key: None,
         }
     }
+
+    /// With `Holder` set (see [`Self::holder`]).
+    #[must_use]
+    pub fn with_holder(mut self, value: impl Into<String>) -> Self {
+        self.holder = Some(value.into());
+        self
+    }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
+
+    /// With `MPTokenMetadata` set (see [`Self::mp_token_metadata`]).
+    #[must_use]
+    pub fn with_mp_token_metadata(mut self, value: impl Into<String>) -> Self {
+        self.mp_token_metadata = Some(value.into());
+        self
+    }
+
+    /// With `TransferFee` set (see [`Self::transfer_fee`]).
+    #[must_use]
+    pub fn with_transfer_fee(mut self, value: impl Into<u16>) -> Self {
+        self.transfer_fee = Some(value.into());
+        self
+    }
+
+    /// With `ImmutableFlags` set (see [`Self::immutable_flags`]).
+    #[must_use]
+    pub fn with_immutable_flags(mut self, value: impl Into<u32>) -> Self {
+        self.immutable_flags = Some(value.into());
+        self
+    }
+
+    /// With `IssuerEncryptionKey` set (see [`Self::issuer_encryption_key`]).
+    #[must_use]
+    pub fn with_issuer_encryption_key(mut self, value: impl Into<String>) -> Self {
+        self.issuer_encryption_key = Some(value.into());
+        self
+    }
+
+    /// With `AuditorEncryptionKey` set (see [`Self::auditor_encryption_key`]).
+    #[must_use]
+    pub fn with_auditor_encryption_key(mut self, value: impl Into<String>) -> Self {
+        self.auditor_encryption_key = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for MPTokenIssuanceSet {
     const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceSet";
+    type Flags = MPTokenIssuanceSetFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2859,6 +3829,7 @@ impl From<MPTokenIssuanceSet> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenAcceptOffer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2899,10 +3870,35 @@ impl NFTokenAcceptOffer {
             nf_token_broker_fee: None,
         }
     }
+
+    /// With `NFTokenBuyOffer` set (see [`Self::nf_token_buy_offer`]).
+    #[must_use]
+    pub fn with_nf_token_buy_offer(mut self, value: impl Into<Hash256>) -> Self {
+        self.nf_token_buy_offer = Some(value.into());
+        self
+    }
+
+    /// With `NFTokenSellOffer` set (see [`Self::nf_token_sell_offer`]).
+    #[must_use]
+    pub fn with_nf_token_sell_offer(mut self, value: impl Into<Hash256>) -> Self {
+        self.nf_token_sell_offer = Some(value.into());
+        self
+    }
+
+    /// With `NFTokenBrokerFee` set (see [`Self::nf_token_broker_fee`]).
+    #[must_use]
+    pub fn with_nf_token_broker_fee(mut self, value: impl Into<Amount>) -> Self {
+        self.nf_token_broker_fee = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for NFTokenAcceptOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenAcceptOffer";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::nf_token_accept_offer(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2921,6 +3917,7 @@ impl From<NFTokenAcceptOffer> for Tx {
 ///
 /// Required: `NFTokenID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenBurn {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2945,10 +3942,18 @@ impl NFTokenBurn {
             owner: None,
         }
     }
+
+    /// With `Owner` set (see [`Self::owner`]).
+    #[must_use]
+    pub fn with_owner(mut self, value: impl Into<String>) -> Self {
+        self.owner = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for NFTokenBurn {
     const TRANSACTION_TYPE: &'static str = "NFTokenBurn";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -2967,6 +3972,7 @@ impl From<NFTokenBurn> for Tx {
 ///
 /// Required: `NFTokenOffers`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenCancelOffer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -2991,6 +3997,7 @@ impl NFTokenCancelOffer {
 
 impl TxModel for NFTokenCancelOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenCancelOffer";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3005,10 +4012,23 @@ impl From<NFTokenCancelOffer> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`NFTokenCreateOffer`] (`Flags`).
+    NFTokenCreateOfferFlags {
+        /// `tfSellNFToken`.
+        SELL_NFTOKEN = 0x00000001,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`NFTokenCreateOffer`](https://xrpl.org/docs/references/protocol/transactions/types/nftokencreateoffer) transaction.
 ///
 /// Required: `NFTokenID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenCreateOffer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3041,8 +4061,6 @@ pub struct NFTokenCreateOffer {
 impl NFTokenCreateOffer {
     /// `"NFTokenCreateOffer"`.
     pub const TRANSACTION_TYPE: &'static str = "NFTokenCreateOffer";
-    /// `tfSellNFToken`.
-    pub const TF_SELL_NFTOKEN: u32 = 0x00000001;
 
     /// A `NFTokenCreateOffer` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, nf_token_id: Hash256, amount: Amount) -> Self {
@@ -3055,10 +4073,32 @@ impl NFTokenCreateOffer {
             expiration: None,
         }
     }
+
+    /// With `Destination` set (see [`Self::destination`]).
+    #[must_use]
+    pub fn with_destination(mut self, value: impl Into<String>) -> Self {
+        self.destination = Some(value.into());
+        self
+    }
+
+    /// With `Owner` set (see [`Self::owner`]).
+    #[must_use]
+    pub fn with_owner(mut self, value: impl Into<String>) -> Self {
+        self.owner = Some(value.into());
+        self
+    }
+
+    /// With `Expiration` set (see [`Self::expiration`]).
+    #[must_use]
+    pub fn with_expiration(mut self, value: impl Into<u32>) -> Self {
+        self.expiration = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for NFTokenCreateOffer {
     const TRANSACTION_TYPE: &'static str = "NFTokenCreateOffer";
+    type Flags = NFTokenCreateOfferFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3073,10 +4113,29 @@ impl From<NFTokenCreateOffer> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`NFTokenMint`] (`Flags`).
+    NFTokenMintFlags {
+        /// `tfBurnable`.
+        BURNABLE = 0x00000001,
+        /// `tfOnlyXRP`.
+        ONLY_XRP = 0x00000002,
+        /// `tfTransferable`.
+        TRANSFERABLE = 0x00000008,
+        /// `tfMutable`.
+        MUTABLE = 0x00000010,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`NFTokenMint`](https://xrpl.org/docs/references/protocol/transactions/types/nftokenmint) transaction.
 ///
 /// Required: `NFTokenTaxon`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenMint {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3119,14 +4178,6 @@ pub struct NFTokenMint {
 impl NFTokenMint {
     /// `"NFTokenMint"`.
     pub const TRANSACTION_TYPE: &'static str = "NFTokenMint";
-    /// `tfBurnable`.
-    pub const TF_BURNABLE: u32 = 0x00000001;
-    /// `tfOnlyXRP`.
-    pub const TF_ONLY_XRP: u32 = 0x00000002;
-    /// `tfTransferable`.
-    pub const TF_TRANSFERABLE: u32 = 0x00000008;
-    /// `tfMutable`.
-    pub const TF_MUTABLE: u32 = 0x00000010;
 
     /// A `NFTokenMint` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, nf_token_taxon: u32) -> Self {
@@ -3141,10 +4192,53 @@ impl NFTokenMint {
             expiration: None,
         }
     }
+
+    /// With `TransferFee` set (see [`Self::transfer_fee`]).
+    #[must_use]
+    pub fn with_transfer_fee(mut self, value: impl Into<u16>) -> Self {
+        self.transfer_fee = Some(value.into());
+        self
+    }
+
+    /// With `Issuer` set (see [`Self::issuer`]).
+    #[must_use]
+    pub fn with_issuer(mut self, value: impl Into<String>) -> Self {
+        self.issuer = Some(value.into());
+        self
+    }
+
+    /// With `URI` set (see [`Self::uri`]).
+    #[must_use]
+    pub fn with_uri(mut self, value: impl Into<String>) -> Self {
+        self.uri = Some(value.into());
+        self
+    }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
+
+    /// With `Destination` set (see [`Self::destination`]).
+    #[must_use]
+    pub fn with_destination(mut self, value: impl Into<String>) -> Self {
+        self.destination = Some(value.into());
+        self
+    }
+
+    /// With `Expiration` set (see [`Self::expiration`]).
+    #[must_use]
+    pub fn with_expiration(mut self, value: impl Into<u32>) -> Self {
+        self.expiration = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for NFTokenMint {
     const TRANSACTION_TYPE: &'static str = "NFTokenMint";
+    type Flags = NFTokenMintFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3163,6 +4257,7 @@ impl From<NFTokenMint> for Tx {
 ///
 /// Required: `NFTokenID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NFTokenModify {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3191,10 +4286,25 @@ impl NFTokenModify {
             uri: None,
         }
     }
+
+    /// With `Owner` set (see [`Self::owner`]).
+    #[must_use]
+    pub fn with_owner(mut self, value: impl Into<String>) -> Self {
+        self.owner = Some(value.into());
+        self
+    }
+
+    /// With `URI` set (see [`Self::uri`]).
+    #[must_use]
+    pub fn with_uri(mut self, value: impl Into<String>) -> Self {
+        self.uri = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for NFTokenModify {
     const TRANSACTION_TYPE: &'static str = "NFTokenModify";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3213,6 +4323,7 @@ impl From<NFTokenModify> for Tx {
 ///
 /// Required: `OfferSequence`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OfferCancel {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3237,6 +4348,7 @@ impl OfferCancel {
 
 impl TxModel for OfferCancel {
     const TRANSACTION_TYPE: &'static str = "OfferCancel";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3251,10 +4363,31 @@ impl From<OfferCancel> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`OfferCreate`] (`Flags`).
+    OfferCreateFlags {
+        /// `tfPassive`.
+        PASSIVE = 0x00010000,
+        /// `tfImmediateOrCancel`.
+        IMMEDIATE_OR_CANCEL = 0x00020000,
+        /// `tfFillOrKill`.
+        FILL_OR_KILL = 0x00040000,
+        /// `tfSell`.
+        SELL = 0x00080000,
+        /// `tfHybrid`.
+        HYBRID = 0x00100000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`OfferCreate`](https://xrpl.org/docs/references/protocol/transactions/types/offercreate) transaction.
 ///
 /// Required: `TakerPays`, `TakerGets`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OfferCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3296,16 +4429,6 @@ pub struct OfferCreate {
 impl OfferCreate {
     /// `"OfferCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "OfferCreate";
-    /// `tfPassive`.
-    pub const TF_PASSIVE: u32 = 0x00010000;
-    /// `tfImmediateOrCancel`.
-    pub const TF_IMMEDIATE_OR_CANCEL: u32 = 0x00020000;
-    /// `tfFillOrKill`.
-    pub const TF_FILL_OR_KILL: u32 = 0x00040000;
-    /// `tfSell`.
-    pub const TF_SELL: u32 = 0x00080000;
-    /// `tfHybrid`.
-    pub const TF_HYBRID: u32 = 0x00100000;
 
     /// A `OfferCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, taker_pays: Amount, taker_gets: Amount) -> Self {
@@ -3319,10 +4442,32 @@ impl OfferCreate {
             owner_funds: None,
         }
     }
+
+    /// With `Expiration` set (see [`Self::expiration`]).
+    #[must_use]
+    pub fn with_expiration(mut self, value: impl Into<u32>) -> Self {
+        self.expiration = Some(value.into());
+        self
+    }
+
+    /// With `OfferSequence` set (see [`Self::offer_sequence`]).
+    #[must_use]
+    pub fn with_offer_sequence(mut self, value: impl Into<u32>) -> Self {
+        self.offer_sequence = Some(value.into());
+        self
+    }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for OfferCreate {
     const TRANSACTION_TYPE: &'static str = "OfferCreate";
+    type Flags = OfferCreateFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3341,6 +4486,7 @@ impl From<OfferCreate> for Tx {
 ///
 /// Required: `OracleDocumentID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OracleDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3365,6 +4511,7 @@ impl OracleDelete {
 
 impl TxModel for OracleDelete {
     const TRANSACTION_TYPE: &'static str = "OracleDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3383,6 +4530,7 @@ impl From<OracleDelete> for Tx {
 ///
 /// Required: `OracleDocumentID`, `LastUpdateTime`, `PriceDataSeries`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OracleSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3432,10 +4580,32 @@ impl OracleSet {
             price_data_series,
         }
     }
+
+    /// With `Provider` set (see [`Self::provider`]).
+    #[must_use]
+    pub fn with_provider(mut self, value: impl Into<String>) -> Self {
+        self.provider = Some(value.into());
+        self
+    }
+
+    /// With `URI` set (see [`Self::uri`]).
+    #[must_use]
+    pub fn with_uri(mut self, value: impl Into<String>) -> Self {
+        self.uri = Some(value.into());
+        self
+    }
+
+    /// With `AssetClass` set (see [`Self::asset_class`]).
+    #[must_use]
+    pub fn with_asset_class(mut self, value: impl Into<String>) -> Self {
+        self.asset_class = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for OracleSet {
     const TRANSACTION_TYPE: &'static str = "OracleSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3450,10 +4620,29 @@ impl From<OracleSet> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`Payment`] (`Flags`).
+    PaymentFlags {
+        /// `tfNoRippleDirect`.
+        NO_RIPPLE_DIRECT = 0x00010000,
+        /// `tfPartialPayment`.
+        PARTIAL_PAYMENT = 0x00020000,
+        /// `tfLimitQuality`.
+        LIMIT_QUALITY = 0x00040000,
+        /// `tfSponsorCreatedAccount`.
+        SPONSOR_CREATED_ACCOUNT = 0x00080000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`Payment`](https://xrpl.org/docs/references/protocol/transactions/types/payment) transaction.
 ///
 /// Required: `Destination`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Payment {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3514,14 +4703,6 @@ pub struct Payment {
 impl Payment {
     /// `"Payment"`.
     pub const TRANSACTION_TYPE: &'static str = "Payment";
-    /// `tfNoRippleDirect`.
-    pub const TF_NO_RIPPLE_DIRECT: u32 = 0x00010000;
-    /// `tfPartialPayment`.
-    pub const TF_PARTIAL_PAYMENT: u32 = 0x00020000;
-    /// `tfLimitQuality`.
-    pub const TF_LIMIT_QUALITY: u32 = 0x00040000;
-    /// `tfSponsorCreatedAccount`.
-    pub const TF_SPONSOR_CREATED_ACCOUNT: u32 = 0x00080000;
 
     /// A `Payment` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, destination: impl Into<String>, amount: Amount) -> Self {
@@ -3539,10 +4720,60 @@ impl Payment {
             deliver_max: None,
         }
     }
+
+    /// With `SendMax` set (see [`Self::send_max`]).
+    #[must_use]
+    pub fn with_send_max(mut self, value: impl Into<Amount>) -> Self {
+        self.send_max = Some(value.into());
+        self
+    }
+
+    /// With `Paths` set (see [`Self::paths`]).
+    #[must_use]
+    pub fn with_paths(mut self, value: impl Into<Vec<Vec<PathStep>>>) -> Self {
+        self.paths = Some(value.into());
+        self
+    }
+
+    /// With `InvoiceID` set (see [`Self::invoice_id`]).
+    #[must_use]
+    pub fn with_invoice_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.invoice_id = Some(value.into());
+        self
+    }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
+
+    /// With `DeliverMin` set (see [`Self::deliver_min`]).
+    #[must_use]
+    pub fn with_deliver_min(mut self, value: impl Into<Amount>) -> Self {
+        self.deliver_min = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for Payment {
     const TRANSACTION_TYPE: &'static str = "Payment";
+    type Flags = PaymentFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3557,10 +4788,25 @@ impl From<Payment> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`PaymentChannelClaim`] (`Flags`).
+    PaymentChannelClaimFlags {
+        /// `tfRenew`.
+        RENEW = 0x00010000,
+        /// `tfClose`.
+        CLOSE = 0x00020000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`PaymentChannelClaim`](https://xrpl.org/docs/references/protocol/transactions/types/paymentchannelclaim) transaction.
 ///
 /// Required: `Channel`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PaymentChannelClaim {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3592,10 +4838,6 @@ pub struct PaymentChannelClaim {
 impl PaymentChannelClaim {
     /// `"PaymentChannelClaim"`.
     pub const TRANSACTION_TYPE: &'static str = "PaymentChannelClaim";
-    /// `tfRenew`.
-    pub const TF_RENEW: u32 = 0x00010000;
-    /// `tfClose`.
-    pub const TF_CLOSE: u32 = 0x00020000;
 
     /// A `PaymentChannelClaim` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, channel: Hash256) -> Self {
@@ -3609,10 +4851,46 @@ impl PaymentChannelClaim {
             credential_ids: None,
         }
     }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
+
+    /// With `Balance` set (see [`Self::balance`]).
+    #[must_use]
+    pub fn with_balance(mut self, value: impl Into<Amount>) -> Self {
+        self.balance = Some(value.into());
+        self
+    }
+
+    /// With `Signature` set (see [`Self::signature`]).
+    #[must_use]
+    pub fn with_signature(mut self, value: impl Into<String>) -> Self {
+        self.signature = Some(value.into());
+        self
+    }
+
+    /// With `PublicKey` set (see [`Self::public_key`]).
+    #[must_use]
+    pub fn with_public_key(mut self, value: impl Into<String>) -> Self {
+        self.public_key = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for PaymentChannelClaim {
     const TRANSACTION_TYPE: &'static str = "PaymentChannelClaim";
+    type Flags = PaymentChannelClaimFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3631,6 +4909,7 @@ impl From<PaymentChannelClaim> for Tx {
 ///
 /// Required: `Destination`, `Amount`, `SettleDelay`, `PublicKey`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PaymentChannelCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3685,10 +4964,25 @@ impl PaymentChannelCreate {
             destination_tag: None,
         }
     }
+
+    /// With `CancelAfter` set (see [`Self::cancel_after`]).
+    #[must_use]
+    pub fn with_cancel_after(mut self, value: impl Into<u32>) -> Self {
+        self.cancel_after = Some(value.into());
+        self
+    }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for PaymentChannelCreate {
     const TRANSACTION_TYPE: &'static str = "PaymentChannelCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3707,6 +5001,7 @@ impl From<PaymentChannelCreate> for Tx {
 ///
 /// Required: `Channel`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PaymentChannelFund {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3739,10 +5034,18 @@ impl PaymentChannelFund {
             expiration: None,
         }
     }
+
+    /// With `Expiration` set (see [`Self::expiration`]).
+    #[must_use]
+    pub fn with_expiration(mut self, value: impl Into<u32>) -> Self {
+        self.expiration = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for PaymentChannelFund {
     const TRANSACTION_TYPE: &'static str = "PaymentChannelFund";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3761,6 +5064,7 @@ impl From<PaymentChannelFund> for Tx {
 ///
 /// Required: `DomainID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PermissionedDomainDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3785,6 +5089,7 @@ impl PermissionedDomainDelete {
 
 impl TxModel for PermissionedDomainDelete {
     const TRANSACTION_TYPE: &'static str = "PermissionedDomainDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3803,6 +5108,7 @@ impl From<PermissionedDomainDelete> for Tx {
 ///
 /// Required: `AcceptedCredentials`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PermissionedDomainSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3827,10 +5133,18 @@ impl PermissionedDomainSet {
             accepted_credentials,
         }
     }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for PermissionedDomainSet {
     const TRANSACTION_TYPE: &'static str = "PermissionedDomainSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3849,6 +5163,7 @@ impl From<PermissionedDomainSet> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SetFee {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3925,10 +5240,67 @@ impl SetFee {
             reserve_increment_drops: None,
         }
     }
+
+    /// With `LedgerSequence` set (see [`Self::ledger_sequence`]).
+    #[must_use]
+    pub fn with_ledger_sequence(mut self, value: impl Into<u32>) -> Self {
+        self.ledger_sequence = Some(value.into());
+        self
+    }
+
+    /// With `BaseFee` set (see [`Self::base_fee`]).
+    #[must_use]
+    pub fn with_base_fee(mut self, value: impl Into<String>) -> Self {
+        self.base_fee = Some(value.into());
+        self
+    }
+
+    /// With `ReferenceFeeUnits` set (see [`Self::reference_fee_units`]).
+    #[must_use]
+    pub fn with_reference_fee_units(mut self, value: impl Into<u32>) -> Self {
+        self.reference_fee_units = Some(value.into());
+        self
+    }
+
+    /// With `ReserveBase` set (see [`Self::reserve_base`]).
+    #[must_use]
+    pub fn with_reserve_base(mut self, value: impl Into<u32>) -> Self {
+        self.reserve_base = Some(value.into());
+        self
+    }
+
+    /// With `ReserveIncrement` set (see [`Self::reserve_increment`]).
+    #[must_use]
+    pub fn with_reserve_increment(mut self, value: impl Into<u32>) -> Self {
+        self.reserve_increment = Some(value.into());
+        self
+    }
+
+    /// With `BaseFeeDrops` set (see [`Self::base_fee_drops`]).
+    #[must_use]
+    pub fn with_base_fee_drops(mut self, value: impl Into<Amount>) -> Self {
+        self.base_fee_drops = Some(value.into());
+        self
+    }
+
+    /// With `ReserveBaseDrops` set (see [`Self::reserve_base_drops`]).
+    #[must_use]
+    pub fn with_reserve_base_drops(mut self, value: impl Into<Amount>) -> Self {
+        self.reserve_base_drops = Some(value.into());
+        self
+    }
+
+    /// With `ReserveIncrementDrops` set (see [`Self::reserve_increment_drops`]).
+    #[must_use]
+    pub fn with_reserve_increment_drops(mut self, value: impl Into<Amount>) -> Self {
+        self.reserve_increment_drops = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for SetFee {
     const TRANSACTION_TYPE: &'static str = "SetFee";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3947,6 +5319,7 @@ impl From<SetFee> for Tx {
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SetRegularKey {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -3971,10 +5344,18 @@ impl SetRegularKey {
             regular_key: None,
         }
     }
+
+    /// With `RegularKey` set (see [`Self::regular_key`]).
+    #[must_use]
+    pub fn with_regular_key(mut self, value: impl Into<String>) -> Self {
+        self.regular_key = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for SetRegularKey {
     const TRANSACTION_TYPE: &'static str = "SetRegularKey";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -3993,6 +5374,7 @@ impl From<SetRegularKey> for Tx {
 ///
 /// Required: `SignerQuorum`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SignerListSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4022,10 +5404,21 @@ impl SignerListSet {
             signer_entries: None,
         }
     }
+
+    /// With `SignerEntries` set (see [`Self::signer_entries`]).
+    #[must_use]
+    pub fn with_signer_entries(mut self, value: impl Into<Vec<SignerEntry>>) -> Self {
+        self.signer_entries = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for SignerListSet {
     const TRANSACTION_TYPE: &'static str = "SignerListSet";
+    type Flags = UniversalFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::signer_list_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4040,10 +5433,31 @@ impl From<SignerListSet> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`SponsorshipSet`] (`Flags`).
+    SponsorshipSetFlags {
+        /// `tfSponsorshipSetRequireSignForFee`.
+        SPONSORSHIP_SET_REQUIRE_SIGN_FOR_FEE = 0x00010000,
+        /// `tfSponsorshipClearRequireSignForFee`.
+        SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_FEE = 0x00020000,
+        /// `tfSponsorshipSetRequireSignForReserve`.
+        SPONSORSHIP_SET_REQUIRE_SIGN_FOR_RESERVE = 0x00040000,
+        /// `tfSponsorshipClearRequireSignForReserve`.
+        SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_RESERVE = 0x00080000,
+        /// `tfDeleteObject`.
+        DELETE_OBJECT = 0x00100000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`SponsorshipSet`](https://xrpl.org/docs/references/protocol/transactions/types/sponsorshipset) transaction.
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SponsorshipSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4080,16 +5494,6 @@ pub struct SponsorshipSet {
 impl SponsorshipSet {
     /// `"SponsorshipSet"`.
     pub const TRANSACTION_TYPE: &'static str = "SponsorshipSet";
-    /// `tfSponsorshipSetRequireSignForFee`.
-    pub const TF_SPONSORSHIP_SET_REQUIRE_SIGN_FOR_FEE: u32 = 0x00010000;
-    /// `tfSponsorshipClearRequireSignForFee`.
-    pub const TF_SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_FEE: u32 = 0x00020000;
-    /// `tfSponsorshipSetRequireSignForReserve`.
-    pub const TF_SPONSORSHIP_SET_REQUIRE_SIGN_FOR_RESERVE: u32 = 0x00040000;
-    /// `tfSponsorshipClearRequireSignForReserve`.
-    pub const TF_SPONSORSHIP_CLEAR_REQUIRE_SIGN_FOR_RESERVE: u32 = 0x00080000;
-    /// `tfDeleteObject`.
-    pub const TF_DELETE_OBJECT: u32 = 0x00100000;
 
     /// A `SponsorshipSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -4102,10 +5506,46 @@ impl SponsorshipSet {
             remaining_owner_count_delta: None,
         }
     }
+
+    /// With `CounterpartySponsor` set (see [`Self::counterparty_sponsor`]).
+    #[must_use]
+    pub fn with_counterparty_sponsor(mut self, value: impl Into<String>) -> Self {
+        self.counterparty_sponsor = Some(value.into());
+        self
+    }
+
+    /// With `Sponsee` set (see [`Self::sponsee`]).
+    #[must_use]
+    pub fn with_sponsee(mut self, value: impl Into<String>) -> Self {
+        self.sponsee = Some(value.into());
+        self
+    }
+
+    /// With `FeeAmountDelta` set (see [`Self::fee_amount_delta`]).
+    #[must_use]
+    pub fn with_fee_amount_delta(mut self, value: impl Into<Amount>) -> Self {
+        self.fee_amount_delta = Some(value.into());
+        self
+    }
+
+    /// With `MaxFee` set (see [`Self::max_fee`]).
+    #[must_use]
+    pub fn with_max_fee(mut self, value: impl Into<Amount>) -> Self {
+        self.max_fee = Some(value.into());
+        self
+    }
+
+    /// With `RemainingOwnerCountDelta` set (see [`Self::remaining_owner_count_delta`]).
+    #[must_use]
+    pub fn with_remaining_owner_count_delta(mut self, value: impl Into<i32>) -> Self {
+        self.remaining_owner_count_delta = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for SponsorshipSet {
     const TRANSACTION_TYPE: &'static str = "SponsorshipSet";
+    type Flags = SponsorshipSetFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4120,10 +5560,27 @@ impl From<SponsorshipSet> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`SponsorshipTransfer`] (`Flags`).
+    SponsorshipTransferFlags {
+        /// `tfSponsorshipEnd`.
+        SPONSORSHIP_END = 0x00010000,
+        /// `tfSponsorshipCreate`.
+        SPONSORSHIP_CREATE = 0x00020000,
+        /// `tfSponsorshipReassign`.
+        SPONSORSHIP_REASSIGN = 0x00040000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`SponsorshipTransfer`](https://xrpl.org/docs/references/protocol/transactions/types/sponsorshiptransfer) transaction.
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SponsorshipTransfer {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4139,12 +5596,6 @@ pub struct SponsorshipTransfer {
 impl SponsorshipTransfer {
     /// `"SponsorshipTransfer"`.
     pub const TRANSACTION_TYPE: &'static str = "SponsorshipTransfer";
-    /// `tfSponsorshipEnd`.
-    pub const TF_SPONSORSHIP_END: u32 = 0x00010000;
-    /// `tfSponsorshipCreate`.
-    pub const TF_SPONSORSHIP_CREATE: u32 = 0x00020000;
-    /// `tfSponsorshipReassign`.
-    pub const TF_SPONSORSHIP_REASSIGN: u32 = 0x00040000;
 
     /// A `SponsorshipTransfer` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -4154,10 +5605,25 @@ impl SponsorshipTransfer {
             sponsee: None,
         }
     }
+
+    /// With `ObjectID` set (see [`Self::object_id`]).
+    #[must_use]
+    pub fn with_object_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.object_id = Some(value.into());
+        self
+    }
+
+    /// With `Sponsee` set (see [`Self::sponsee`]).
+    #[must_use]
+    pub fn with_sponsee(mut self, value: impl Into<String>) -> Self {
+        self.sponsee = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for SponsorshipTransfer {
     const TRANSACTION_TYPE: &'static str = "SponsorshipTransfer";
+    type Flags = SponsorshipTransferFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4176,6 +5642,7 @@ impl From<SponsorshipTransfer> for Tx {
 ///
 /// Required: `TicketCount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TicketCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4200,6 +5667,7 @@ impl TicketCreate {
 
 impl TxModel for TicketCreate {
     const TRANSACTION_TYPE: &'static str = "TicketCreate";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4214,10 +5682,35 @@ impl From<TicketCreate> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`TrustSet`] (`Flags`).
+    TrustSetFlags {
+        /// `tfSetfAuth`.
+        SETF_AUTH = 0x00010000,
+        /// `tfSetNoRipple`.
+        SET_NO_RIPPLE = 0x00020000,
+        /// `tfClearNoRipple`.
+        CLEAR_NO_RIPPLE = 0x00040000,
+        /// `tfSetFreeze`.
+        SET_FREEZE = 0x00100000,
+        /// `tfClearFreeze`.
+        CLEAR_FREEZE = 0x00200000,
+        /// `tfSetDeepFreeze`.
+        SET_DEEP_FREEZE = 0x00400000,
+        /// `tfClearDeepFreeze`.
+        CLEAR_DEEP_FREEZE = 0x00800000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`TrustSet`](https://xrpl.org/docs/references/protocol/transactions/types/trustset) transaction.
 ///
 /// Required: none beyond the common fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TrustSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4244,20 +5737,6 @@ pub struct TrustSet {
 impl TrustSet {
     /// `"TrustSet"`.
     pub const TRANSACTION_TYPE: &'static str = "TrustSet";
-    /// `tfSetfAuth`.
-    pub const TF_SETF_AUTH: u32 = 0x00010000;
-    /// `tfSetNoRipple`.
-    pub const TF_SET_NO_RIPPLE: u32 = 0x00020000;
-    /// `tfClearNoRipple`.
-    pub const TF_CLEAR_NO_RIPPLE: u32 = 0x00040000;
-    /// `tfSetFreeze`.
-    pub const TF_SET_FREEZE: u32 = 0x00100000;
-    /// `tfClearFreeze`.
-    pub const TF_CLEAR_FREEZE: u32 = 0x00200000;
-    /// `tfSetDeepFreeze`.
-    pub const TF_SET_DEEP_FREEZE: u32 = 0x00400000;
-    /// `tfClearDeepFreeze`.
-    pub const TF_CLEAR_DEEP_FREEZE: u32 = 0x00800000;
 
     /// A `TrustSet` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>) -> Self {
@@ -4268,10 +5747,35 @@ impl TrustSet {
             quality_out: None,
         }
     }
+
+    /// With `LimitAmount` set (see [`Self::limit_amount`]).
+    #[must_use]
+    pub fn with_limit_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.limit_amount = Some(value.into());
+        self
+    }
+
+    /// With `QualityIn` set (see [`Self::quality_in`]).
+    #[must_use]
+    pub fn with_quality_in(mut self, value: impl Into<u32>) -> Self {
+        self.quality_in = Some(value.into());
+        self
+    }
+
+    /// With `QualityOut` set (see [`Self::quality_out`]).
+    #[must_use]
+    pub fn with_quality_out(mut self, value: impl Into<u32>) -> Self {
+        self.quality_out = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for TrustSet {
     const TRANSACTION_TYPE: &'static str = "TrustSet";
+    type Flags = TrustSetFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::trust_set(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4290,6 +5794,7 @@ impl From<TrustSet> for Tx {
 ///
 /// Required: `UNLModifyDisabling`, `LedgerSequence`, `UNLModifyValidator`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UNLModify {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4327,6 +5832,7 @@ impl UNLModify {
 
 impl TxModel for UNLModify {
     const TRANSACTION_TYPE: &'static str = "UNLModify";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4345,6 +5851,7 @@ impl From<UNLModify> for Tx {
 ///
 /// Required: `VaultID`, `Holder`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultClawback {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4373,10 +5880,18 @@ impl VaultClawback {
             amount: None,
         }
     }
+
+    /// With `Amount` set (see [`Self::amount`]).
+    #[must_use]
+    pub fn with_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.amount = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for VaultClawback {
     const TRANSACTION_TYPE: &'static str = "VaultClawback";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4391,10 +5906,25 @@ impl From<VaultClawback> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`VaultCreate`] (`Flags`).
+    VaultCreateFlags {
+        /// `tfVaultPrivate`.
+        VAULT_PRIVATE = 0x00010000,
+        /// `tfVaultShareNonTransferable`.
+        VAULT_SHARE_NON_TRANSFERABLE = 0x00020000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`VaultCreate`](https://xrpl.org/docs/references/protocol/transactions/types/vaultcreate) transaction.
 ///
 /// Required: `Asset`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultCreate {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4454,10 +5984,6 @@ pub struct VaultCreate {
 impl VaultCreate {
     /// `"VaultCreate"`.
     pub const TRANSACTION_TYPE: &'static str = "VaultCreate";
-    /// `tfVaultPrivate`.
-    pub const TF_VAULT_PRIVATE: u32 = 0x00010000;
-    /// `tfVaultShareNonTransferable`.
-    pub const TF_VAULT_SHARE_NON_TRANSFERABLE: u32 = 0x00020000;
 
     /// A `VaultCreate` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, asset: Asset) -> Self {
@@ -4475,10 +6001,74 @@ impl VaultCreate {
             redemption_date: None,
         }
     }
+
+    /// With `AssetsMaximum` set (see [`Self::assets_maximum`]).
+    #[must_use]
+    pub fn with_assets_maximum(mut self, value: impl Into<String>) -> Self {
+        self.assets_maximum = Some(value.into());
+        self
+    }
+
+    /// With `MPTokenMetadata` set (see [`Self::mp_token_metadata`]).
+    #[must_use]
+    pub fn with_mp_token_metadata(mut self, value: impl Into<String>) -> Self {
+        self.mp_token_metadata = Some(value.into());
+        self
+    }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
+
+    /// With `WithdrawalPolicy` set (see [`Self::withdrawal_policy`]).
+    #[must_use]
+    pub fn with_withdrawal_policy(mut self, value: impl Into<u8>) -> Self {
+        self.withdrawal_policy = Some(value.into());
+        self
+    }
+
+    /// With `Data` set (see [`Self::data`]).
+    #[must_use]
+    pub fn with_data(mut self, value: impl Into<String>) -> Self {
+        self.data = Some(value.into());
+        self
+    }
+
+    /// With `Scale` set (see [`Self::scale`]).
+    #[must_use]
+    pub fn with_scale(mut self, value: impl Into<u8>) -> Self {
+        self.scale = Some(value.into());
+        self
+    }
+
+    /// With `VaultKind` set (see [`Self::vault_kind`]).
+    #[must_use]
+    pub fn with_vault_kind(mut self, value: impl Into<u8>) -> Self {
+        self.vault_kind = Some(value.into());
+        self
+    }
+
+    /// With `SubscriptionDate` set (see [`Self::subscription_date`]).
+    #[must_use]
+    pub fn with_subscription_date(mut self, value: impl Into<u32>) -> Self {
+        self.subscription_date = Some(value.into());
+        self
+    }
+
+    /// With `RedemptionDate` set (see [`Self::redemption_date`]).
+    #[must_use]
+    pub fn with_redemption_date(mut self, value: impl Into<u32>) -> Self {
+        self.redemption_date = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for VaultCreate {
     const TRANSACTION_TYPE: &'static str = "VaultCreate";
+    type Flags = VaultCreateFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4497,6 +6087,7 @@ impl From<VaultCreate> for Tx {
 ///
 /// Required: `VaultID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultDelete {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4521,10 +6112,18 @@ impl VaultDelete {
             memo_data: None,
         }
     }
+
+    /// With `MemoData` set (see [`Self::memo_data`]).
+    #[must_use]
+    pub fn with_memo_data(mut self, value: impl Into<String>) -> Self {
+        self.memo_data = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for VaultDelete {
     const TRANSACTION_TYPE: &'static str = "VaultDelete";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4543,6 +6142,7 @@ impl From<VaultDelete> for Tx {
 ///
 /// Required: `VaultID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultDeposit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4571,6 +6171,7 @@ impl VaultDeposit {
 
 impl TxModel for VaultDeposit {
     const TRANSACTION_TYPE: &'static str = "VaultDeposit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4589,6 +6190,7 @@ impl From<VaultDeposit> for Tx {
 ///
 /// Required: `VaultID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultSet {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4625,10 +6227,32 @@ impl VaultSet {
             data: None,
         }
     }
+
+    /// With `AssetsMaximum` set (see [`Self::assets_maximum`]).
+    #[must_use]
+    pub fn with_assets_maximum(mut self, value: impl Into<String>) -> Self {
+        self.assets_maximum = Some(value.into());
+        self
+    }
+
+    /// With `DomainID` set (see [`Self::domain_id`]).
+    #[must_use]
+    pub fn with_domain_id(mut self, value: impl Into<Hash256>) -> Self {
+        self.domain_id = Some(value.into());
+        self
+    }
+
+    /// With `Data` set (see [`Self::data`]).
+    #[must_use]
+    pub fn with_data(mut self, value: impl Into<String>) -> Self {
+        self.data = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for VaultSet {
     const TRANSACTION_TYPE: &'static str = "VaultSet";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4647,6 +6271,7 @@ impl From<VaultSet> for Tx {
 ///
 /// Required: `VaultID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VaultWithdraw {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4695,10 +6320,32 @@ impl VaultWithdraw {
             credential_ids: None,
         }
     }
+
+    /// With `Destination` set (see [`Self::destination`]).
+    #[must_use]
+    pub fn with_destination(mut self, value: impl Into<String>) -> Self {
+        self.destination = Some(value.into());
+        self
+    }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
+
+    /// With `CredentialIDs` set (see [`Self::credential_ids`]).
+    #[must_use]
+    pub fn with_credential_ids(mut self, value: impl Into<Vec<Hash256>>) -> Self {
+        self.credential_ids = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for VaultWithdraw {
     const TRANSACTION_TYPE: &'static str = "VaultWithdraw";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4717,6 +6364,7 @@ impl From<VaultWithdraw> for Tx {
 ///
 /// Required: `XChainBridge`, `Destination`, `Amount`, `SignatureReward`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainAccountCreateCommit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4759,6 +6407,7 @@ impl XChainAccountCreateCommit {
 
 impl TxModel for XChainAccountCreateCommit {
     const TRANSACTION_TYPE: &'static str = "XChainAccountCreateCommit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4777,6 +6426,7 @@ impl From<XChainAccountCreateCommit> for Tx {
 ///
 /// Required: `XChainBridge`, `AttestationSignerAccount`, `PublicKey`, `Signature`, `OtherChainSource`, `Amount`, `AttestationRewardAccount`, `WasLockingChainSend`, `XChainAccountCreateCount`, `Destination`, `SignatureReward`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainAddAccountCreateAttestation {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4854,6 +6504,7 @@ impl XChainAddAccountCreateAttestation {
 
 impl TxModel for XChainAddAccountCreateAttestation {
     const TRANSACTION_TYPE: &'static str = "XChainAddAccountCreateAttestation";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4872,6 +6523,7 @@ impl From<XChainAddAccountCreateAttestation> for Tx {
 ///
 /// Required: `XChainBridge`, `AttestationSignerAccount`, `PublicKey`, `Signature`, `OtherChainSource`, `Amount`, `AttestationRewardAccount`, `WasLockingChainSend`, `XChainClaimID`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainAddClaimAttestation {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -4943,10 +6595,18 @@ impl XChainAddClaimAttestation {
             destination: None,
         }
     }
+
+    /// With `Destination` set (see [`Self::destination`]).
+    #[must_use]
+    pub fn with_destination(mut self, value: impl Into<String>) -> Self {
+        self.destination = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for XChainAddClaimAttestation {
     const TRANSACTION_TYPE: &'static str = "XChainAddClaimAttestation";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -4965,6 +6625,7 @@ impl From<XChainAddClaimAttestation> for Tx {
 ///
 /// Required: `XChainBridge`, `XChainClaimID`, `Destination`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainClaim {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -5011,10 +6672,18 @@ impl XChainClaim {
             amount,
         }
     }
+
+    /// With `DestinationTag` set (see [`Self::destination_tag`]).
+    #[must_use]
+    pub fn with_destination_tag(mut self, value: impl Into<u32>) -> Self {
+        self.destination_tag = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for XChainClaim {
     const TRANSACTION_TYPE: &'static str = "XChainClaim";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5033,6 +6702,7 @@ impl From<XChainClaim> for Tx {
 ///
 /// Required: `XChainBridge`, `XChainClaimID`, `Amount`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainCommit {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -5074,10 +6744,18 @@ impl XChainCommit {
             other_chain_destination: None,
         }
     }
+
+    /// With `OtherChainDestination` set (see [`Self::other_chain_destination`]).
+    #[must_use]
+    pub fn with_other_chain_destination(mut self, value: impl Into<String>) -> Self {
+        self.other_chain_destination = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for XChainCommit {
     const TRANSACTION_TYPE: &'static str = "XChainCommit";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5096,6 +6774,7 @@ impl From<XChainCommit> for Tx {
 ///
 /// Required: `XChainBridge`, `SignatureReward`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainCreateBridge {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -5132,10 +6811,18 @@ impl XChainCreateBridge {
             min_account_create_amount: None,
         }
     }
+
+    /// With `MinAccountCreateAmount` set (see [`Self::min_account_create_amount`]).
+    #[must_use]
+    pub fn with_min_account_create_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.min_account_create_amount = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for XChainCreateBridge {
     const TRANSACTION_TYPE: &'static str = "XChainCreateBridge";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5154,6 +6841,7 @@ impl From<XChainCreateBridge> for Tx {
 ///
 /// Required: `XChainBridge`, `SignatureReward`, `OtherChainSource`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainCreateClaimID {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -5191,6 +6879,7 @@ impl XChainCreateClaimID {
 
 impl TxModel for XChainCreateClaimID {
     const TRANSACTION_TYPE: &'static str = "XChainCreateClaimID";
+    type Flags = UniversalFlags;
     fn common(&self) -> &Common {
         &self.common
     }
@@ -5205,10 +6894,23 @@ impl From<XChainCreateClaimID> for Tx {
     }
 }
 
+flags_type!(
+    /// The flags of a [`XChainModifyBridge`] (`Flags`).
+    XChainModifyBridgeFlags {
+        /// `tfClearAccountCreateAmount`.
+        CLEAR_ACCOUNT_CREATE_AMOUNT = 0x00010000,
+        /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
+        FULLY_CANONICAL_SIG = 0x80000000,
+        /// `tfInnerBatchTxn` (any type): marks a transaction inside a `Batch` (unsigned, zero fee).
+        INNER_BATCH_TXN = 0x40000000,
+    }
+);
+
 /// [`XChainModifyBridge`](https://xrpl.org/docs/references/protocol/transactions/types/xchainmodifybridge) transaction.
 ///
 /// Required: `XChainBridge`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct XChainModifyBridge {
     /// The fields every transaction has (`Account`, `Fee`, `Sequence`, `Flags`, `Memos`, …).
     #[serde(flatten)]
@@ -5235,8 +6937,6 @@ pub struct XChainModifyBridge {
 impl XChainModifyBridge {
     /// `"XChainModifyBridge"`.
     pub const TRANSACTION_TYPE: &'static str = "XChainModifyBridge";
-    /// `tfClearAccountCreateAmount`.
-    pub const TF_CLEAR_ACCOUNT_CREATE_AMOUNT: u32 = 0x00010000;
 
     /// A `XChainModifyBridge` from `account` with its required fields; everything else unset.
     pub fn new(account: impl Into<String>, x_chain_bridge: XChainBridge) -> Self {
@@ -5247,10 +6947,25 @@ impl XChainModifyBridge {
             min_account_create_amount: None,
         }
     }
+
+    /// With `SignatureReward` set (see [`Self::signature_reward`]).
+    #[must_use]
+    pub fn with_signature_reward(mut self, value: impl Into<Amount>) -> Self {
+        self.signature_reward = Some(value.into());
+        self
+    }
+
+    /// With `MinAccountCreateAmount` set (see [`Self::min_account_create_amount`]).
+    #[must_use]
+    pub fn with_min_account_create_amount(mut self, value: impl Into<Amount>) -> Self {
+        self.min_account_create_amount = Some(value.into());
+        self
+    }
 }
 
 impl TxModel for XChainModifyBridge {
     const TRANSACTION_TYPE: &'static str = "XChainModifyBridge";
+    type Flags = XChainModifyBridgeFlags;
     fn common(&self) -> &Common {
         &self.common
     }

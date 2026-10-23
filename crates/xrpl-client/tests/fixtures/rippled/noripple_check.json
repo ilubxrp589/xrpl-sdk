@@ -5,7 +5,8 @@
   "role": "gateway",
   "ledger_index": 107831520,
   "limit": 3,
-  "transactions": true
+  "transactions": true,
+  "api_version": 2
  },
  "result": {
   "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",

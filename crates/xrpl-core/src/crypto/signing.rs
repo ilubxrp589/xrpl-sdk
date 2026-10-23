@@ -1,3 +1,5 @@
+#[cfg(feature = "std")]
+use super::signing_key::{AsyncSigningKey, SigningKey};
 use crate::address::{self, KeyType};
 use crate::types::AccountId;
 use crate::CoreError;
@@ -295,40 +297,6 @@ impl Keypair {
     pub fn sign_signing_data(&self, data: &[u8]) -> Result<Vec<u8>, CoreError> {
         self.sign_message(data)
     }
-
-    /// The raw primitive: Ed25519 signs `message`; secp256k1 signs
-    /// `message` as an already-computed 32-byte hash (any other length is an
-    /// error). The two key types mean different things by the same call, so
-    /// prefer [`Keypair::sign_message`].
-    ///
-    /// # Errors
-    ///
-    /// For secp256k1, [`CoreError::SigningFailed`] if `message` is not 32
-    /// bytes. Ed25519 never fails.
-    #[deprecated(
-        since = "0.6.0",
-        note = "use sign_message (hashes for secp256k1 as rippled verifies); sign signs a 32-byte hash for secp256k1"
-    )]
-    pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, CoreError> {
-        match self.key_type {
-            KeyType::Ed25519 => super::ed25519::sign(&self.private_key, message),
-            KeyType::Secp256k1 => super::secp256k1::sign(&self.private_key, message),
-        }
-    }
-
-    /// Verify a [`Keypair::sign`] signature (secp256k1: over a 32-byte hash).
-    ///
-    /// # Errors
-    ///
-    /// For secp256k1, [`CoreError::SigningFailed`] if `message` is not 32
-    /// bytes or `signature` is not DER. Ed25519 never fails.
-    #[deprecated(since = "0.6.0", note = "use verify_message")]
-    pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CoreError> {
-        match self.key_type {
-            KeyType::Ed25519 => super::ed25519::verify(&self.public_key, message, signature),
-            KeyType::Secp256k1 => super::secp256k1::verify(&self.public_key, message, signature),
-        }
-    }
 }
 
 impl fmt::Debug for Keypair {
@@ -417,31 +385,65 @@ pub fn sha512_half(data: &[u8]) -> [u8; 32] {
     out
 }
 
-/// Sign a transaction (JSON) with a keypair.
-///
-/// 1. Sets SigningPubKey
-/// 2. Removes TxnSignature
-/// 3. Serializes for signing (prefix "STX\0")
-/// 4. Signs it (`Keypair::sign_signing_data`), sets TxnSignature
-///
-/// Returns the signed transaction as a JSON Value with TxnSignature and SigningPubKey set.
+/// The most signers a multi-signed transaction may carry (`rippled`'s
+/// `STTx::maxMultiSigners`).
+#[cfg(feature = "std")]
+pub const MAX_MULTISIGNERS: usize = 32;
+
+/// Sign a transaction (JSON) with `key` (a [`Keypair`], or any
+/// [`SigningKey`]): sets `SigningPubKey` to the key's, signs the
+/// transaction's signing data ([`encode_for_signing`](crate::codec::encode_for_signing))
+/// and sets `TxnSignature`. Returns the signed transaction; `tx_json` is
+/// left as it was.
 ///
 /// # Errors
 ///
 /// [`CoreError::CodecError`] if `tx_json` is not a JSON object;
-/// [`CoreError::ValidationError`] if it has `Signers` (it is multi-signed);
-/// and the errors of [`encode_transaction_json`](crate::codec::encode_transaction_json)
-/// when it does not encode.
+/// [`CoreError::ValidationError`] if it has `Signers` (it is multi-signed:
+/// see [`sign_for_multisigning`]); the errors of
+/// [`encode_for_signing`](crate::codec::encode_for_signing) when it does not
+/// encode; and the key's own errors ([`CoreError::SigningKeyFailed`] for a
+/// public key the XRP Ledger does not take, or a secp256k1 signature that is
+/// not DER).
 #[cfg(feature = "std")]
-pub fn sign_transaction(
+pub fn sign_transaction<K: SigningKey + ?Sized>(
     tx_json: &serde_json::Value,
-    keypair: &Keypair,
+    key: &K,
 ) -> Result<serde_json::Value, CoreError> {
+    let (tx, data) = single_signing_data(tx_json, SigningKey::public_key(key))?;
+    with_signature(tx, &super::signing_key::sign_with(key, &data)?)
+}
+
+/// [`sign_transaction`] with an [`AsyncSigningKey`] (a remote key: a KMS, a
+/// signing service). The signature is checked against the key's public key
+/// before it is set, so a key that signs the wrong thing is an error here,
+/// not a refusal from the network.
+///
+/// # Errors
+///
+/// As [`sign_transaction`], and [`CoreError::SigningKeyFailed`] for a
+/// signature that does not verify.
+#[cfg(feature = "std")]
+pub async fn sign_transaction_async<K: AsyncSigningKey + ?Sized>(
+    tx_json: &serde_json::Value,
+    key: &K,
+) -> Result<serde_json::Value, CoreError> {
+    let (tx, data) = single_signing_data(tx_json, AsyncSigningKey::public_key(key))?;
+    with_signature(tx, &super::signing_key::sign_with_async(key, &data).await?)
+}
+
+/// The transaction a single key signs (`tx_json` with the key's
+/// `SigningPubKey` and no `TxnSignature`), and what the signature covers.
+#[cfg(feature = "std")]
+fn single_signing_data(
+    tx_json: &serde_json::Value,
+    public_key: &[u8],
+) -> Result<(serde_json::Value, Vec<u8>), CoreError> {
+    let public_key = super::signing_key::checked_public_key(public_key)?;
     let mut tx = tx_json.clone();
     let obj = tx
         .as_object_mut()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
-
     // A multi-signed transaction is signed by each signer, not by one key.
     if obj
         .get("Signers")
@@ -453,45 +455,92 @@ pub fn sign_transaction(
                 .to_string(),
         ));
     }
-
-    // Set SigningPubKey
     obj.insert(
         "SigningPubKey".to_string(),
-        serde_json::Value::String(hex::encode_upper(&keypair.public_key)),
+        serde_json::Value::String(hex::encode_upper(public_key)),
     );
-
-    // Remove TxnSignature for signing
     obj.remove("TxnSignature");
+    let data = crate::codec::encode_for_signing(&tx)?;
+    Ok((tx, data))
+}
 
-    let signature = keypair.sign_signing_data(&single_signing_data(&tx)?)?;
-
-    // Set TxnSignature — tx was cloned from a known object, so this always succeeds
+/// `tx` with `signature` as its `TxnSignature`.
+#[cfg(feature = "std")]
+fn with_signature(
+    mut tx: serde_json::Value,
+    signature: &[u8],
+) -> Result<serde_json::Value, CoreError> {
     let obj = tx
         .as_object_mut()
         .ok_or_else(|| CoreError::CodecError("transaction must be a JSON object".to_string()))?;
     obj.insert(
         "TxnSignature".to_string(),
-        serde_json::Value::String(hex::encode_upper(&signature)),
+        serde_json::Value::String(hex::encode_upper(signature)),
     );
-
     Ok(tx)
 }
 
-/// What a single signature covers: the prefix `"STX\0"` and the
-/// transaction's signing fields (`rippled`'s `HashPrefix::txSign`).
+/// Sign `tx` as one of its multi-signers: `account`'s
+/// [`Signer`](crate::transaction::models::Signer) entry, signed by `key`
+/// (the account's master key or its regular key), for the transaction's
+/// `Signers`. The transaction is signed with an empty `SigningPubKey` (a
+/// missing one counts as empty), as `rippled`'s `sign_for` does.
+///
+/// # Errors
+///
+/// The errors of
+/// [`encode_for_multisigning`](crate::codec::encode_for_multisigning):
+/// [`CoreError::ValidationError`] for a non-empty `SigningPubKey`, an
+/// address error for an `account` that is not a classic address, and a
+/// codec error for a field that does not encode; and the key's own errors,
+/// as [`sign_transaction`].
 #[cfg(feature = "std")]
-fn single_signing_data(tx: &serde_json::Value) -> Result<Vec<u8>, CoreError> {
-    let mut data = vec![0x53, 0x54, 0x58, 0x00];
-    data.extend_from_slice(&crate::codec::encode_transaction_json(tx, true)?);
-    Ok(data)
+pub fn sign_for_multisigning<K: SigningKey + ?Sized>(
+    tx: &serde_json::Value,
+    account: &str,
+    key: &K,
+) -> Result<crate::transaction::models::Signer, CoreError> {
+    let public_key = super::signing_key::checked_public_key(SigningKey::public_key(key))?;
+    let data = crate::codec::encode_for_multisigning(tx, account)?;
+    let signature = super::signing_key::sign_with(key, &data)?;
+    Ok(crate::transaction::models::Signer::new(
+        account,
+        hex::encode_upper(public_key),
+        hex::encode_upper(signature),
+    ))
+}
+
+/// [`sign_for_multisigning`] with an [`AsyncSigningKey`]; the signature is
+/// checked against the key's public key, as in [`sign_transaction_async`].
+///
+/// # Errors
+///
+/// As [`sign_for_multisigning`], and [`CoreError::SigningKeyFailed`] for a
+/// signature that does not verify.
+#[cfg(feature = "std")]
+pub async fn sign_for_multisigning_async<K: AsyncSigningKey + ?Sized>(
+    tx: &serde_json::Value,
+    account: &str,
+    key: &K,
+) -> Result<crate::transaction::models::Signer, CoreError> {
+    let public_key = super::signing_key::checked_public_key(AsyncSigningKey::public_key(key))?;
+    let data = crate::codec::encode_for_multisigning(tx, account)?;
+    let signature = super::signing_key::sign_with_async(key, &data).await?;
+    Ok(crate::transaction::models::Signer::new(
+        account,
+        hex::encode_upper(public_key),
+        hex::encode_upper(signature),
+    ))
 }
 
 /// Whether a signed transaction's signatures verify, as `rippled` checks
 /// them (`STTx::checkSign`): the `TxnSignature` against the `SigningPubKey`
 /// over the transaction's signing data; or, for a multi-signed transaction
 /// (empty `SigningPubKey`, `Signers` set), each signer's signature over its
-/// multi-signing data, with the signers in strictly ascending account-ID
-/// order (a repeat or the wrong order is `false`, as `rippled` refuses it). A
+/// multi-signing data, with at most [`MAX_MULTISIGNERS`] signers in strictly
+/// ascending account-ID order, none of them the transaction's own `Account`
+/// (a repeat, the wrong order, too many signers or the account signing for
+/// itself is `false`, as `rippled` refuses each). A
 /// `Batch`'s `BatchSigners` are checked too
 /// ([`verify_batch_signers`](crate::transaction::batch::verify_batch_signers)).
 ///
@@ -547,19 +596,31 @@ pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
             if key.is_empty() {
                 return Ok(false);
             }
-            verify_signing_data(&key, &single_signing_data(tx)?, &signature)?
+            verify_signing_data(&key, &crate::codec::encode_for_signing(tx)?, &signature)?
         }
         (false, Some(signers)) => {
             if !text(tx.get("SigningPubKey"), "SigningPubKey")?.is_empty() {
                 return Ok(false);
             }
+            // rippled's bounds (STTx::maxMultiSigners).
+            if signers.len() > MAX_MULTISIGNERS {
+                return Ok(false);
+            }
+            let own = tx
+                .get("Account")
+                .and_then(serde_json::Value::as_str)
+                .map(crate::address::decode_account_id)
+                .transpose()?;
             let mut previous: Option<[u8; 20]> = None;
             let mut all = true;
             for entry in signers {
                 let signer = entry.get("Signer").unwrap_or(entry);
                 let account = text(signer.get("Account"), "a signer's Account")?;
                 let id = crate::address::decode_account_id(account)?;
-                if previous.is_some_and(|p| p >= id) {
+                // An account may not multi-sign for itself ("Invalid
+                // multisigner"), and the signers are in strictly ascending
+                // account-ID order.
+                if own == Some(id) || previous.is_some_and(|p| p >= id) {
                     return Ok(false);
                 }
                 previous = Some(id);
@@ -740,7 +801,7 @@ mod tests {
             "Flags": 0
         });
         let signed = sign_transaction(&tx, &keypair).unwrap();
-        hex::encode_upper(crate::codec::encode_transaction_json(&signed, false).unwrap())
+        hex::encode_upper(crate::codec::encode_transaction_json(&signed).unwrap())
     }
 
     #[test]

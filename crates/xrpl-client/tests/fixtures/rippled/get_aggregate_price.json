@@ -2,10 +2,11 @@
   "method": "get_aggregate_price",
   "network": "testnet",
   "params": {
+    "api_version": 2,
     "base_asset": "XRP",
     "oracles": [
       {
-        "account": "rhq9ydnmVWsTurLyEjJyaK3G6cUZC6E5nC",
+        "account": "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W",
         "oracle_document_id": 1
       }
     ],
@@ -17,10 +18,10 @@
       "size": 1,
       "standard_deviation": "0"
     },
-    "ledger_current_index": 21739826,
+    "ledger_current_index": 21768546,
     "median": "0.74",
     "status": "success",
-    "time": 1792689919,
+    "time": 1792785775,
     "validated": false
   }
 }

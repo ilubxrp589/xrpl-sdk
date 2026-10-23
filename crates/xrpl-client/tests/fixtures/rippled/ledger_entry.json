@@ -2,7 +2,8 @@
  "method": "ledger_entry",
  "params": {
   "account_root": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
-  "ledger_index": 107831520
+  "ledger_index": 107831520,
+  "api_version": 2
  },
  "result": {
   "index": "383BB05FBB110F9BE530B75C44DF100F86C5600F0F146593D3E7133FD1C99FF2",

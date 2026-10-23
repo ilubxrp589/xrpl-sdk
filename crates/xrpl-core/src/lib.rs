@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! halcyon-xrpl-core = "0.7"   # imported as `xrpl_core`
+//! halcyon-xrpl-core = "0.8"   # imported as `xrpl_core`
 //! ```
 //!
 //! ## Modules
@@ -20,7 +20,7 @@
 //! | [`codec`] | JSON ↔ binary for transactions and ledger entries, driven by `rippled` 3.4.1's definitions |
 //! | [`hashes`] | transaction IDs, and [`hashes::keylet`]: the ID of every kind of ledger entry |
 //! | [`types`] | [`Amount`] (XRP, token, MPT), [`AccountId`], [`Currency`], hashes, and [`LedgerObject`]: all 31 ledger entry types, typed |
-//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); builders for common transactions |
+//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); [`transaction::cost`]: what `rippled` charges |
 //! | [`utils`] | XRP ↔ drops, ledger time, text ↔ hex, rates, NFTokenIDs, balance changes, reserves |
 //! | [`error`] | [`CoreError`] |
 //!
@@ -41,7 +41,7 @@
 //! assert_eq!(tx["Amount"], "1000000");
 //! assert_eq!(tx["Destination"], "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
 //!
-//! assert_eq!(encode_transaction_json(&tx, false)?, blob);
+//! assert_eq!(encode_transaction_json(&tx)?, blob);
 //!
 //! // Its ID, as rippled reported it.
 //! assert_eq!(
@@ -54,7 +54,7 @@
 //! ## Keys and addresses
 //!
 //! ```
-//! use xrpl_core::address::{classic_to_x_address, x_address_to_classic, KeyType};
+//! use xrpl_core::address::{classic_to_x_address, decode_x_address, KeyType};
 //! use xrpl_core::crypto::{Keypair, Seed};
 //!
 //! // A public test seed (never fund it on mainnet).
@@ -65,7 +65,9 @@
 //!
 //! // X-addresses carry a destination tag inside the address.
 //! let x = classic_to_x_address("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", Some(12345), false)?;
-//! assert_eq!(x_address_to_classic(&x)?, ("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1".to_string(), Some(12345), false));
+//! let decoded = decode_x_address(&x)?;
+//! assert_eq!(decoded.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+//! assert_eq!(decoded.tag, Some(12345));
 //! # Ok::<(), xrpl_core::CoreError>(())
 //! ```
 //!
@@ -107,21 +109,22 @@
 //!
 //! [`transaction::models`] has a struct for each of the 82 transaction types
 //! `rippled` 3.4.1 defines, generated from its own definitions: every field
-//! under `rippled`'s name, `new` with the required ones, and the flags as
-//! constants. [`transaction::models::Tx`] parses any transaction strictly (a
+//! under `rippled`'s name, `new` with the required ones and `with_…` for
+//! the rest, and its flags as a typed set ([`flags`]).
+//! [`transaction::models::Tx`] parses any transaction strictly (a
 //! field its type does not have is an error).
 //!
 //! ```
-//! use xrpl_core::transaction::models::{OfferCreate, Tx, TxModel};
+//! use xrpl_core::transaction::models::{OfferCreate, OfferCreateFlags, Tx, TxModel};
 //! use xrpl_core::types::Amount;
 //!
 //! // Sell 25 XRP for 10 USD: the taker pays 10 USD and gets 25 XRP.
-//! let mut offer = OfferCreate::new(
+//! let offer = OfferCreate::new(
 //!     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
 //!     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?, // TakerPays
 //!     Amount::Xrp(25_000_000),                                          // TakerGets
-//! );
-//! offer.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
+//! )
+//! .with_flags(OfferCreateFlags::IMMEDIATE_OR_CANCEL);
 //! let json = offer.to_json()?;
 //! assert_eq!(json["Flags"], 0x0002_0000);
 //! assert!(matches!(Tx::from_value(json)?, Tx::OfferCreate(_)));
@@ -139,7 +142,7 @@
 //! `std` feature (on by default).
 //!
 //! ```toml
-//! halcyon-xrpl-core = { version = "0.7", default-features = false }
+//! halcyon-xrpl-core = { version = "0.8", default-features = false }
 //! ```
 //!
 //! ## How it is checked
@@ -159,7 +162,7 @@
 //! does; the few deliberate differences (each safer than `rippled`'s JSON reader) are listed in
 //! the parity report. A field name `rippled` does not define, or an integer too large for its
 //! field, is an error, never dropped or wrapped.
-//! Eight fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
+//! Nine fuzz targets run in CI on every change. Every check, with its numbers and how to repeat
 //! it, is in the [parity report](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md);
 //! speed against xrpl-rust is in the
 //! [benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md).
@@ -181,10 +184,12 @@ pub mod address;
 pub mod codec;
 pub mod crypto;
 pub mod error;
+pub mod flags;
 #[cfg(feature = "std")]
 pub mod hashes;
 #[cfg(feature = "std")]
 pub mod ledger;
+mod maybe_send;
 mod number_text;
 pub mod transaction;
 pub mod types;
@@ -193,4 +198,5 @@ pub mod utils;
 pub mod wasm_bindgen_exports;
 
 pub use error::CoreError;
+pub use maybe_send::{MaybeSend, MaybeSync};
 pub use types::*;

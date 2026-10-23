@@ -1,6 +1,8 @@
-//! Every typed response against responses recorded from real servers:
-//! `rippled` 3.4.1 on mainnet (tests/fixtures/rippled/*.json) and Clio
-//! (`s2.ripple.com`), plus the Testnet recordings the live test makes. Each
+//! Every typed response against responses recorded from real servers, in
+//! `rippled`'s API version 2: `rippled` 3.4.1 on mainnet
+//! (tests/fixtures/rippled/*.json) and Clio (`s2.ripple.com`), recorded with
+//! `scripts/record_fixtures.py`, plus the Testnet recordings the live test
+//! makes. Each
 //! must parse into its request's `Response` type, and serializing that back
 //! must keep every field the server sent: a field the types do not model
 //! fails the test instead of vanishing.
@@ -51,6 +53,11 @@ where
         recorded["method"],
         R::METHOD,
         "{file} was recorded from another method"
+    );
+    assert_eq!(
+        recorded["params"]["api_version"],
+        xrpl_client::API_VERSION,
+        "{file} was recorded with another API version"
     );
     let mut result = recorded["result"].clone();
     for k in ENVELOPE {
@@ -110,6 +117,7 @@ fn every_recorded_response_parses_and_keeps_every_field() {
         GetAggregatePriceRequest => "get_aggregate_price.json";
         NftSellOffersRequest => "nft_sell_offers.json";
         RipplePathFindRequest => "ripple_path_find.json";
+        PathFindRequest => "path_find.json";
         ChannelVerifyRequest => "channel_verify.json";
         FeeRequest => "fee.json";
         FeatureRequest => "feature.json";

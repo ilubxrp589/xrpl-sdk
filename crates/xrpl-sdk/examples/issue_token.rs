@@ -10,8 +10,7 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use serde_json::json;
-use xrpl_sdk::models::{AccountSet, Payment, TrustSet};
+use xrpl_sdk::models::{AccountSet, AccountSetFlag, Payment, TrustSet};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -26,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. The issuer lets its token ripple between holders (DefaultRipple).
     let mut settings = AccountSet::new(issuer.classic_address());
-    settings.set_flag = Some(AccountSet::ASF_DEFAULT_RIPPLE);
+    settings.set_flag = Some(u32::from(AccountSetFlag::DefaultRipple));
     send(&client, &issuer, settings.to_json()?).await?;
 
     // 2. Alice and Bob each trust the issuer for up to 1,000 USD.
@@ -48,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pay = Payment::new(alice.classic_address(), bob.classic_address(), usd("25")?);
     let result = send(&client, &alice, pay.to_json()?).await?;
     println!("\nWhat Alice's payment changed:");
-    for account in utils::get_balance_changes(result.meta.as_ref().unwrap_or(&json!({})))? {
+    for account in utils::get_balance_changes(result.meta.as_ref().ok_or("no metadata")?)? {
         for b in &account.balances {
             println!("  {}  {:>8} {}", account.account, b.value, b.currency);
         }
@@ -57,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nTrust lines now:");
     for (name, holder) in [("Alice", &alice), ("Bob", &bob)] {
         for line in client
-            .account_lines_all(holder.classic_address(), &LedgerIndex::Validated)
+            .account_lines_all(holder.classic_address(), LedgerIndex::Validated)
             .await?
         {
             println!(
@@ -73,9 +72,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

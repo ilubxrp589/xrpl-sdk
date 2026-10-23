@@ -1,69 +1,28 @@
 [
  {
-  "changes": [
-   {
-    "close": "762687.8462861796",
-    "currency_a": "XRP_drops",
-    "currency_b": "rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y/USD",
-    "high": "762687.8462861796",
-    "low": "762687.8462861796",
-    "open": "762687.8462861796",
-    "volume_a": "5040",
-    "volume_b": "0.00660820809528"
-   },
-   {
-    "close": "766982.9192903874",
-    "currency_a": "XRP_drops",
-    "currency_b": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
-    "high": "766982.9192903874",
-    "low": "766982.9192903874",
-    "open": "766982.9192903874",
-    "volume_a": "4547995",
-    "volume_b": "5.92972136095"
-   },
-   {
-    "close": "536432.5332356563",
-    "currency_a": "XRP_drops",
-    "currency_b": "rUN5Zxt3K1AnMRJgEWywDJT8QDMMeLH5ok/4155444400000000000000000000000000000000",
-    "high": "536432.5332356563",
-    "low": "536432.5332356563",
-    "open": "536432.5332356563",
-    "volume_a": "27134",
-    "volume_b": "0.05058231617"
-   }
-  ],
-  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
-  "ledger_index": 107832394,
-  "ledger_time": 846007770,
+  "changes": [],
+  "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+  "ledger_index": 107856091,
+  "ledger_time": 846100681,
   "type": "bookChanges",
   "validated": true
  },
  {
   "changes": [
    {
-    "close": "2157.3145348266",
+    "close": "768403.5",
     "currency_a": "XRP_drops",
-    "currency_b": "rBEARGUAsyu7tUw53rufQzFdWmJHpJEqFW/4245415200000000000000000000000000000000",
-    "high": "2157.3145348266",
-    "low": "2157.3145348266",
-    "open": "2157.3145348266",
-    "volume_a": "100",
-    "volume_b": "0.0463539267852"
-   },
-   {
-    "close": "67.09645813037275",
-    "currency_a": "XRP_drops",
-    "currency_b": "rhCAT4hRdi2Y9puNdkpMzxrdKa5wkppR62/46555A5A59000000000000000000000000000000",
-    "high": "67.09645813037275",
-    "low": "67.09645813037275",
-    "open": "67.09645813037275",
-    "volume_a": "6151963",
-    "volume_b": "91688.34199931"
+    "currency_b": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
+    "high": "768403.5",
+    "low": "768261.5776082667",
+    "open": "768261.6957471645",
+    "volume_a": "4902965822",
+    "volume_b": "6381.896062861999"
    }
   ],
-  "ledger_hash": "F16D64C8708238082670E3D1782FF3F79FADE82C2BE1A5C7DC35E107984F9CA4",
-  "ledger_index": 107832395,
-  "ledger_time": 846007771,
+  "ledger_hash": "4A98DEE7F8D18C9865761A37D28B14E18C7856BB5E31623C7BBAA879793F0B7C",
+  "ledger_index": 107856092,
+  "ledger_time": 846100690,
   "type": "bookChanges",
   "validated": true
  }

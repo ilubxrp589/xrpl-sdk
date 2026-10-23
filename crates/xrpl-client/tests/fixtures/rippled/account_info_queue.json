@@ -3,18 +3,19 @@
  "params": {
   "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
   "ledger_index": "current",
-  "queue": true
+  "queue": true,
+  "api_version": 2
  },
  "result": {
   "account_data": {
    "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
-   "Balance": "177622561085",
+   "Balance": "201954198430",
    "Flags": 0,
    "LedgerEntryType": "AccountRoot",
-   "OwnerCount": 24,
-   "PreviousTxnID": "9D85858F3A3D2A57250CEDE2C574DED8292821CC9BBE88C9B7C72445CD266869",
-   "PreviousTxnLgrSeq": 107831518,
-   "Sequence": 109300249,
+   "OwnerCount": 23,
+   "PreviousTxnID": "E3879013B23ED035EA7003ACE67552D7391CD3C8610446EFC3170F83259BD9AD",
+   "PreviousTxnLgrSeq": 107856059,
+   "Sequence": 109343929,
    "index": "B2220016B5A52B30D9297EF383200FF328197E160BFE8FB7B0C74E261FE32647"
   },
   "account_flags": {
@@ -34,7 +35,7 @@
    "requireAuthorization": false,
    "requireDestinationTag": false
   },
-  "ledger_current_index": 107831521,
+  "ledger_current_index": 107856071,
   "queue_data": {
    "txn_count": 0
   },

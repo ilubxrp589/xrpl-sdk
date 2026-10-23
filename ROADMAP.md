@@ -42,7 +42,7 @@ welcome as GitHub issues.
 
 ## 0.5: trust (released 2026-10-22)
 
-- [x] Fuzzing in CI: eight targets, seeded with real XRPL data, on every pull request and weekly
+- [x] Fuzzing in CI: eight targets (nine since 0.7), seeded with real XRPL data, on every pull request and weekly
 - [x] Benchmarks against xrpl-rust on the same inputs ([docs/BENCHMARKS.md](docs/BENCHMARKS.md))
 - [x] A minimum supported Rust version, checked in CI (1.85 for core, 1.88 for the rest)
 - [x] A parity report: every check against `rippled` 3.4.1 ([docs/PARITY.md](docs/PARITY.md))
@@ -60,7 +60,7 @@ welcome as GitHub issues.
 - [x] Narrowing `as` casts denied by Clippy in every crate
 - [x] [docs/CRYPTO.md](docs/CRYPTO.md) and a security policy with a private reporting channel
 
-## 0.7: complete and professional (no breaking changes)
+## 0.7: complete and professional (released 2026-10-23, no breaking changes)
 
 - [x] Open a wallet from another wallet's backup: a BIP-39 recovery phrase (BIP-32 paths, as
       Ledger and xrpl.js), Xaman's secret numbers, `rippled`'s RFC 1751 `master_key`
@@ -81,17 +81,22 @@ welcome as GitHub issues.
 
 One deliberate set of breaking changes, so that 1.0 can then stay stable:
 
-- [ ] One way to build a transaction (the typed models, with setters and checks); the builders
+- [x] One way to build a transaction (the typed models, with setters and checks); the builders
       retired
-- [ ] Room to grow without breaking: `#[non_exhaustive]` on protocol types, setters instead of
+- [x] Room to grow without breaking: `#[non_exhaustive]` on protocol types, setters instead of
       struct literals
-- [ ] One type per idea: addresses, assets and path steps the same everywhere; typed flags per
-      transaction type
-- [ ] A `Client` trait whose futures are `Send`, usable as `dyn`; errors that separate the
-      caller's mistakes from the server's
-- [ ] An external signer (hardware wallet, HSM, cloud key service)
-- [ ] `rippled` API version 2 by default, with typed transaction metadata
-- [ ] An order book helper with typed assets
+- [x] One type per idea: assets, path steps, signers and balances the same everywhere; typed
+      flags per transaction and ledger entry type (addresses stay strings: X-addresses and
+      pseudo-accounts must round-trip)
+- [x] A `Client` trait whose futures are `Send`, usable as `dyn` (`Transport`); errors that
+      separate the caller's mistakes from the server's, with no `reqwest` types
+- [x] An external signer (hardware wallet, HSM, cloud key service): `SigningKey` and
+      `AsyncSigningKey`
+- [x] `rippled` API version 2 by default, with typed transaction metadata; every recorded
+      response re-recorded in version 2
+- [x] An order book helper with typed assets; typed `path_find`
+- [x] Features that gate code (`http`, `ws`, `wasm`), trimmed dependencies
+- [x] Apache-2.0 licence, with a NOTICE
 
 ## 1.0
 

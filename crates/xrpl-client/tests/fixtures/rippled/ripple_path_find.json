@@ -4,7 +4,8 @@
   "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
   "destination_account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
   "destination_amount": "1000000",
-  "ledger_index": 107831520
+  "ledger_index": 107831520,
+  "api_version": 2
  },
  "result": {
   "alternatives": [

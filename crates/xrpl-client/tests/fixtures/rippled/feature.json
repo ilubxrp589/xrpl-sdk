@@ -1,6 +1,8 @@
 {
  "method": "feature",
- "params": {},
+ "params": {
+  "api_version": 2
+ },
  "result": {
   "features": {
    "00C1FC4A53E60AB02C864641002B3172F38677E29C26C5406685179B37E1EDAC": {

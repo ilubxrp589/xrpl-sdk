@@ -143,10 +143,84 @@ pub fn verify(public_key: &[u8], prehash: &[u8], signature_der: &[u8]) -> Result
     Ok(verifying_key.verify_prehash(prehash, &signature).is_ok())
 }
 
+/// The low-S form of a DER signature, the only form `rippled` takes (it
+/// refuses a signature that is not fully canonical): a signature with a high
+/// S, as some KMS return, becomes the equivalent one with `n - S`; a low-S
+/// signature comes back as it is.
+///
+/// # Errors
+///
+/// [`CoreError::SigningFailed`] if `signature_der` is not a DER signature.
+#[cfg(feature = "std")]
+pub(crate) fn low_s(signature_der: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let signature =
+        Signature::from_der(signature_der).map_err(|e| CoreError::SigningFailed(e.to_string()))?;
+    Ok(match signature.normalize_s() {
+        Some(low) => low.to_der().as_bytes().to_vec(),
+        None => signature_der.to_vec(),
+    })
+}
+
+/// A public key in the compressed form the XRP Ledger writes (33 bytes,
+/// `0x02` or `0x03` then X), from the uncompressed form (65 bytes, `0x04`
+/// then X and Y) that a KMS or HSM may give (the last 65 bytes of an
+/// AWS KMS `GetPublicKey` answer, for instance). A compressed key comes
+/// back as it is.
+///
+/// ```
+/// use xrpl_core::crypto::{secp256k1, Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// let compressed = secp256k1::compressed_public_key(keys.public_key())?;
+/// assert_eq!(compressed, keys.public_key());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
+/// # Errors
+///
+/// [`CoreError::SigningFailed`] if `public_key` is not a SEC1 point on the
+/// curve (65 bytes starting `0x04`, or 33 starting `0x02` / `0x03`).
+pub fn compressed_public_key(public_key: &[u8]) -> Result<Vec<u8>, CoreError> {
+    let key = VerifyingKey::from_sec1_bytes(public_key)
+        .map_err(|e| CoreError::SigningFailed(format!("not a secp256k1 public key: {e}")))?;
+    Ok(key.to_encoded_point(true).as_bytes().to_vec())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_high_s_signature_becomes_the_low_s_one() {
+        use k256::elliptic_curve::ops::Neg;
+        let (private_key, public_key) = derive_keypair(&[0u8; 16]).unwrap();
+        let hash = [0x5Au8; 32];
+        let low = sign(&private_key, &hash).unwrap();
+        let parsed = Signature::from_der(&low).unwrap();
+        let (r, s) = parsed.split_scalars();
+        let high = Signature::from_scalars(r, s.neg()).unwrap();
+        let high_der = high.to_der().as_bytes().to_vec();
+        assert_ne!(high_der, low);
+        // rippled refuses the high-S form; low_s gives back the one it takes.
+        assert!(!verify(&public_key, &hash, &high_der).unwrap());
+        assert_eq!(low_s(&high_der).unwrap(), low);
+        assert_eq!(low_s(&low).unwrap(), low);
+        assert!(low_s(b"not DER").is_err());
+    }
+
+    #[test]
+    fn uncompressed_public_keys_compress() {
+        let (private_key, public_key) = derive_keypair(&[7u8; 16]).unwrap();
+        let secret = secret_key(&private_key).unwrap();
+        let uncompressed = secret.public_key().to_encoded_point(false);
+        assert_eq!(uncompressed.as_bytes().len(), 65);
+        assert_eq!(
+            compressed_public_key(uncompressed.as_bytes()).unwrap(),
+            public_key
+        );
+        assert_eq!(compressed_public_key(&public_key).unwrap(), public_key);
+        assert!(compressed_public_key(&[0x04; 65]).is_err());
+    }
 
     #[test]
     fn secp256k1_derive_known_seed() {

@@ -3,7 +3,8 @@
  "params": {
   "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
   "ledger_index": 107831520,
-  "limit": 3
+  "limit": 3,
+  "api_version": 2
  },
  "result": {
   "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",

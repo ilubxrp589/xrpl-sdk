@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-client"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.88"
 description = "XRP Ledger clients: one async Client trait over HTTP JSON-RPC, WebSocket (subscriptions, auto-reconnect) and browser WebSocket, with typed requests and responses"
@@ -17,7 +17,7 @@ name = "xrpl_client"
 crate-type = ["rlib"]
 
 [dependencies]
-xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.7" }
+xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.8" }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true, features = ["std"] }
@@ -26,12 +26,13 @@ futures = { workspace = true }
 hex = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { workspace = true }
-reqwest = { workspace = true }
-tokio-tungstenite = { workspace = true }
+# Timers (submit_and_wait, retries) on every native build.
+tokio = { workspace = true, features = ["time"] }
+reqwest = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"], optional = true }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
@@ -47,17 +48,19 @@ web-sys = { version = "0.3", features = [
 futures = "0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread", "net", "io-util"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 
 [features]
-default = ["http"]
-http = []
-ws = []
-full = ["http", "ws"]
-live-tests = []
+default = ["http", "ws"]
+# The HTTP JSON-RPC client (XrplHttpClient), the Testnet / Devnet faucet and
+# BlockingClient.
+http = ["dep:reqwest", "tokio/rt"]
+# The WebSocket client (XrplWsClient).
+ws = ["dep:tokio-tungstenite", "tokio/rt", "tokio/sync", "tokio/macros", "tokio/net"]
+# The browser / Node.js build (wasm32-unknown-unknown).
 wasm = ["xrpl-core/wasm"]
 
 [lints]

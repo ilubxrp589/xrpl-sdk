@@ -5,10 +5,28 @@ use crate::error::ClientError;
 use crate::requests::*;
 use crate::types::*;
 use serde_json::{json, Value};
+use std::future::Future;
 use xrpl_core::types::LedgerObject;
 
 /// The most pages [`Client::request_all`] follows before it gives up.
 pub const MAX_PAGES: usize = 50;
+
+/// The `rippled` API version every request asks for, unless its parameters
+/// name one (`"api_version"`). The response types follow version 2: a
+/// transaction in `tx_json` with its `hash` and `meta` beside it (`tx`,
+/// `account_tx`, `ledger`, streams), a Payment's `DeliverMax`, numeric
+/// ledger indexes. Clio answers version 2 too.
+pub const API_VERSION: u32 = 2;
+
+/// `params` with [`API_VERSION`] added, unless it names a version (or is not
+/// an object).
+pub(crate) fn with_api_version(mut params: Value) -> Value {
+    if let Some(obj) = params.as_object_mut() {
+        obj.entry("api_version")
+            .or_insert_with(|| Value::Number(API_VERSION.into()));
+    }
+    params
+}
 
 /// The fee cap a client starts with: 2 XRP (xrpl.js's default `maxFeeXRP`).
 /// A normal fee is 10-20 drops; fees near the cap mean the network is
@@ -33,9 +51,10 @@ fn check_x_address_networks(tx: &Value, network_id: u32) -> Result<(), ClientErr
         let Some(text) = value.as_str().filter(|s| s.starts_with(['X', 'T'])) else {
             continue;
         };
-        let Ok((_, _, test)) = xrpl_core::address::decode_x_address(text) else {
+        let Ok(decoded) = xrpl_core::address::decode_x_address(text) else {
             continue;
         };
+        let test = decoded.test_network;
         if test == mainnet {
             return Err(ClientError::Core(xrpl_core::CoreError::ValidationError(
                 format!(
@@ -49,7 +68,6 @@ fn check_x_address_networks(tx: &Value, network_id: u32) -> Result<(), ClientErr
     Ok(())
 }
 
-/// `fee`, or [`ClientError::FeeTooHigh`] above `max`.
 /// [`Client::autofill_batch`] with the prices already known.
 async fn fill_batch<C: Client + ?Sized>(
     client: &C,
@@ -58,7 +76,7 @@ async fn fill_batch<C: Client + ?Sized>(
     prices: Option<Prices>,
     outer_signers: u32,
 ) -> Result<(), ClientError> {
-    let bad = |m: &str| ClientError::UnexpectedResponse(format!("Batch: {m}"));
+    let bad = |m: &str| ClientError::InvalidRequest(format!("Batch: {m}"));
     let outer_seq = tx
         .get("Sequence")
         .and_then(Value::as_u64)
@@ -69,7 +87,12 @@ async fn fill_batch<C: Client + ?Sized>(
         .and_then(Value::as_array_mut)
         .ok_or_else(|| bad("no RawTransactions"))?;
     let mut next: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
-    next.insert(outer.to_string(), outer_seq.saturating_add(1));
+    // A Batch sent with a Ticket (Sequence 0) does not use the account's
+    // sequence: its inner transactions start at the account's next one, as
+    // any other account's do.
+    if outer_seq != 0 {
+        next.insert(outer.to_string(), outer_seq.saturating_add(1));
+    }
     for wrapped in raw.iter_mut() {
         let inner = wrapped
             .get_mut("RawTransaction")
@@ -87,7 +110,7 @@ async fn fill_batch<C: Client + ?Sized>(
             Some(s) => *s,
             None => {
                 client
-                    .account_info(&account, &LedgerIndex::Current)
+                    .account_info(&account, LedgerIndex::Current)
                     .await?
                     .account_data
                     .sequence
@@ -265,11 +288,51 @@ fn capped_fee(fee: u64, max: u64) -> Result<u64, ClientError> {
     Ok(fee)
 }
 
-/// A connection to a rippled server. `XrplHttpClient` and `XrplWsClient`
-/// implement it; bring it into scope (`use xrpl_client::Client;`) to call
-/// the methods below on either.
-#[allow(async_fn_in_trait)]
-pub trait Client {
+/// `Send` on native targets, nothing on `wasm32` (re-exported from
+/// `halcyon-xrpl-core`, where signing keys use it too).
+pub use xrpl_core::{MaybeSend, MaybeSync};
+
+/// The future [`Transport::send_raw`] returns: boxed, and `Send` on
+/// native targets.
+#[cfg(not(target_arch = "wasm32"))]
+pub type TransportFuture<'a> =
+    std::pin::Pin<Box<dyn Future<Output = Result<Value, ClientError>> + Send + 'a>>;
+/// The future [`Transport::send_raw`] returns: boxed, and `Send` on
+/// native targets.
+#[cfg(target_arch = "wasm32")]
+pub type TransportFuture<'a> =
+    std::pin::Pin<Box<dyn Future<Output = Result<Value, ClientError>> + 'a>>;
+
+/// How requests reach a `rippled` server: one method, and the fee cap. The
+/// HTTP and WebSocket clients implement it; implement it for your own
+/// transport (a proxy, a mock in tests) and you have every [`Client`]
+/// method. It is object safe, so `Arc<dyn Transport>` and
+/// `Box<dyn Transport>` are clients too. [`Client`] adds `api_version`
+/// ([`API_VERSION`]) to the parameters before they reach
+/// [`Transport::send_raw`], which sends them as given.
+///
+/// ```
+/// use std::sync::Arc;
+/// use serde_json::{json, Value};
+/// use xrpl_client::{Client, ClientError, Transport, TransportFuture};
+///
+/// /// A transport that answers every request with a fixed result.
+/// struct Canned(Value);
+///
+/// impl Transport for Canned {
+///     fn send_raw<'a>(&'a self, _method: &'a str, _params: Value) -> TransportFuture<'a> {
+///         let answer = self.0.clone();
+///         Box::pin(async move { Ok::<Value, ClientError>(answer) })
+///     }
+/// }
+///
+/// # async fn run() -> Result<(), ClientError> {
+/// let client: Arc<dyn Transport> = Arc::new(Canned(json!({"ledger_current_index": 7})));
+/// assert_eq!(client.ledger_current().await?, 7);
+/// # Ok(())
+/// # }
+/// ```
+pub trait Transport: MaybeSend + MaybeSync {
     /// Send `method` with `params` and return the response's `result`.
     /// A rippled error (`"status": "error"`) is [`ClientError::RpcError`].
     ///
@@ -278,11 +341,73 @@ pub trait Client {
     /// [`ClientError::RpcError`] when `rippled` answers with an error (`code`
     /// is its token, such as `actNotFound`), and
     /// [`ClientError::UnexpectedResponse`] for an answer with no `result` (or,
-    /// over HTTP, a body too large or not UTF-8). Over HTTP a request also
-    /// fails with [`ClientError::Http`] (no connection, or a timeout),
+    /// over HTTP, a body too large or not UTF-8), and [`ClientError::Timeout`]
+    /// when no answer comes in time. Over HTTP a request also fails with
+    /// [`ClientError::Transport`] (no connection, a broken exchange),
     /// [`ClientError::HttpStatus`] or [`ClientError::Json`]; over WebSocket
-    /// with [`ClientError::Disconnected`] or [`ClientError::Timeout`].
-    async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError>;
+    /// with [`ClientError::Disconnected`].
+    fn send_raw<'a>(&'a self, method: &'a str, params: Value) -> TransportFuture<'a>;
+
+    /// The most [`Client::autofill`] sets as a `Fee`, in drops:
+    /// [`DEFAULT_MAX_FEE_DROPS`] (2 XRP) unless the client was built with
+    /// another (`with_max_fee_drops`).
+    fn max_fee_drops(&self) -> u64 {
+        DEFAULT_MAX_FEE_DROPS
+    }
+}
+
+impl<T: Transport + ?Sized> Transport for &T {
+    fn send_raw<'a>(&'a self, method: &'a str, params: Value) -> TransportFuture<'a> {
+        (**self).send_raw(method, params)
+    }
+    fn max_fee_drops(&self) -> u64 {
+        (**self).max_fee_drops()
+    }
+}
+
+impl<T: Transport + ?Sized> Transport for Box<T> {
+    fn send_raw<'a>(&'a self, method: &'a str, params: Value) -> TransportFuture<'a> {
+        (**self).send_raw(method, params)
+    }
+    fn max_fee_drops(&self) -> u64 {
+        (**self).max_fee_drops()
+    }
+}
+
+impl<T: Transport + ?Sized> Transport for std::sync::Arc<T> {
+    fn send_raw<'a>(&'a self, method: &'a str, params: Value) -> TransportFuture<'a> {
+        (**self).send_raw(method, params)
+    }
+    fn max_fee_drops(&self) -> u64 {
+        (**self).max_fee_drops()
+    }
+}
+
+/// Every typed `rippled` method, on any [`Transport`]: the HTTP and
+/// WebSocket clients, `Arc<dyn Transport>`, or your own. Bring it into scope
+/// (`use xrpl_client::Client;`) to call the methods. On native targets every
+/// future it returns is `Send`, so generic code can spawn it.
+///
+/// Every request asks for [`API_VERSION`], unless its parameters name a
+/// version. The methods that wait ([`Client::submit_and_wait`] and those
+/// built on it) wait with Tokio's timer on native targets, so run them in a
+/// Tokio runtime with its timer enabled (`#[tokio::main]` has it); in
+/// `wasm32` they wait with JavaScript's `setTimeout`.
+pub trait Client: Transport {
+    /// Send `method` with `params` (and `api_version`, [`API_VERSION`],
+    /// unless `params` names one) and return the response's `result`, as the
+    /// transport sends it ([`Transport::send_raw`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`Transport::send_raw`].
+    fn raw_request<'a>(
+        &'a self,
+        method: &'a str,
+        params: Value,
+    ) -> impl Future<Output = Result<Value, ClientError>> + MaybeSend + 'a {
+        self.send_raw(method, with_api_version(params))
+    }
 
     /// Send a typed request and decode its `result`.
     ///
@@ -290,11 +415,16 @@ pub trait Client {
     ///
     /// The errors of [`Client::raw_request`], and [`ClientError::Json`] when
     /// the answer does not decode as `R::Response`.
-    async fn request<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
-        let result = self
-            .raw_request(R::METHOD, serde_json::to_value(req)?)
-            .await?;
-        Ok(serde_json::from_value(result)?)
+    fn request<R: Request>(
+        &self,
+        req: &R,
+    ) -> impl Future<Output = Result<R::Response, ClientError>> + MaybeSend {
+        async move {
+            let result = self
+                .raw_request(R::METHOD, serde_json::to_value(req)?)
+                .await?;
+            Ok(serde_json::from_value(result)?)
+        }
     }
 
     /// The pages of a paginated request, one at a time: follow its `marker`
@@ -323,7 +453,7 @@ pub trait Client {
     fn pages<R: Paginated>(
         &self,
         req: R,
-    ) -> impl futures::Stream<Item = Result<Vec<R::Item>, ClientError>> {
+    ) -> impl futures::Stream<Item = Result<Vec<R::Item>, ClientError>> + MaybeSend {
         futures::stream::unfold(Some(req), move |state| async move {
             let req = state?;
             match self.request(&req).await {
@@ -356,26 +486,31 @@ pub trait Client {
     /// [`ClientError::PaginationLimitReached`] when there are still more
     /// pages after [`MAX_PAGES`], and the errors of [`Client::request`] for
     /// any page.
-    async fn request_all<R: Paginated>(&self, req: R) -> Result<Vec<R::Item>, ClientError> {
-        let mut all = Vec::new();
-        let mut req = req;
-        for _ in 0..MAX_PAGES {
-            let response = self.request(&req).await?;
-            let ledger = R::ledger_of(&response);
-            let (items, marker) = R::page(response);
-            all.extend(items);
-            match marker {
-                Some(marker) => {
-                    req = req.with_marker(marker);
-                    // A marker is only good for the ledger it came from.
-                    if let Some(index) = ledger {
-                        req = req.at_ledger(index);
+    fn request_all<R: Paginated>(
+        &self,
+        req: R,
+    ) -> impl Future<Output = Result<Vec<R::Item>, ClientError>> + MaybeSend {
+        async move {
+            let mut all = Vec::new();
+            let mut req = req;
+            for _ in 0..MAX_PAGES {
+                let response = self.request(&req).await?;
+                let ledger = R::ledger_of(&response);
+                let (items, marker) = R::page(response);
+                all.extend(items);
+                match marker {
+                    Some(marker) => {
+                        req = req.with_marker(marker);
+                        // A marker is only good for the ledger it came from.
+                        if let Some(index) = ledger {
+                            req = req.at_ledger(index);
+                        }
                     }
+                    None => return Ok(all),
                 }
-                None => return Ok(all),
             }
+            Err(ClientError::PaginationLimitReached(MAX_PAGES))
         }
-        Err(ClientError::PaginationLimitReached(MAX_PAGES))
     }
 
     /// Get account information.
@@ -384,16 +519,18 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_info(
+    fn account_info(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountInfo, ClientError> {
-        self.request(&AccountInfoRequest {
-            ledger_index: *ledger,
-            ..AccountInfoRequest::new(account)
-        })
-        .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<AccountInfo, ClientError>> + MaybeSend {
+        async move {
+            self.request(&AccountInfoRequest {
+                ledger_index: ledger,
+                ..AccountInfoRequest::new(account)
+            })
+            .await
+        }
     }
 
     /// Get current fee information.
@@ -401,8 +538,8 @@ pub trait Client {
     /// # Errors
     ///
     /// The errors of [`Client::request`].
-    async fn fee(&self) -> Result<FeeResult, ClientError> {
-        self.request(&FeeRequest {}).await
+    fn fee(&self) -> impl Future<Output = Result<FeeResult, ClientError>> + MaybeSend {
+        async move { self.request(&FeeRequest {}).await }
     }
 
     /// Get the current (open) ledger index.
@@ -410,11 +547,13 @@ pub trait Client {
     /// # Errors
     ///
     /// The errors of [`Client::request`].
-    async fn ledger_current(&self) -> Result<u32, ClientError> {
-        Ok(self
-            .request(&LedgerCurrentRequest {})
-            .await?
-            .ledger_current_index)
+    fn ledger_current(&self) -> impl Future<Output = Result<u32, ClientError>> + MaybeSend {
+        async move {
+            Ok(self
+                .request(&LedgerCurrentRequest {})
+                .await?
+                .ledger_current_index)
+        }
     }
 
     /// Get ledger information.
@@ -423,8 +562,11 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`lgrNotFound`) for a ledger the server does
     /// not have, and the errors of [`Client::request`].
-    async fn ledger(&self, ledger: &LedgerIndex) -> Result<LedgerResult, ClientError> {
-        self.request(&LedgerRequest::new(*ledger)).await
+    fn ledger(
+        &self,
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<LedgerResult, ClientError>> + MaybeSend {
+        async move { self.request(&LedgerRequest::new(ledger)).await }
     }
 
     /// Submit a signed transaction blob (hex) once and sort the server's
@@ -445,8 +587,11 @@ pub trait Client {
     /// or [`ClientError::TransactionClaimed`] for an engine result other than
     /// `tesSUCCESS`, sorted as above ([`ClientError::UnexpectedResponse`] for
     /// one of no known class), and the errors of [`Client::request`].
-    async fn submit(&self, tx_blob: &str) -> Result<SubmitResult, ClientError> {
-        classify_submit(self.request(&SubmitRequest::new(tx_blob)).await?)
+    fn submit(
+        &self,
+        tx_blob: &str,
+    ) -> impl Future<Output = Result<SubmitResult, ClientError>> + MaybeSend {
+        async move { classify_submit(self.request(&SubmitRequest::new(tx_blob)).await?) }
     }
 
     /// Submit a multi-signed transaction (JSON with `Signers` and an empty
@@ -455,11 +600,16 @@ pub trait Client {
     /// # Errors
     ///
     /// The same as [`Client::submit`].
-    async fn submit_multisigned(&self, tx_json: &Value) -> Result<SubmitResult, ClientError> {
-        classify_submit(
-            self.request(&SubmitMultisignedRequest::new(tx_json.clone()))
-                .await?,
-        )
+    fn submit_multisigned(
+        &self,
+        tx_json: &Value,
+    ) -> impl Future<Output = Result<SubmitResult, ClientError>> + MaybeSend {
+        async move {
+            classify_submit(
+                self.request(&SubmitMultisignedRequest::new(tx_json.clone()))
+                    .await?,
+            )
+        }
     }
 
     /// What a transaction would do in the open ledger, without signing or
@@ -472,8 +622,11 @@ pub trait Client {
     /// (`unknownCmd` from a server older than 2.4), and the errors of
     /// [`Client::request`]. A transaction that would fail is not an error:
     /// its engine result is in the answer.
-    async fn simulate(&self, tx_json: &Value) -> Result<SimulateResult, ClientError> {
-        self.request(&SimulateRequest::new(tx_json.clone())).await
+    fn simulate(
+        &self,
+        tx_json: &Value,
+    ) -> impl Future<Output = Result<SimulateResult, ClientError>> + MaybeSend {
+        async move { self.request(&SimulateRequest::new(tx_json.clone())).await }
     }
 
     /// Look up a transaction by hash.
@@ -482,8 +635,8 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`txnNotFound`) for a transaction the server
     /// does not find, and the errors of [`Client::request`].
-    async fn tx(&self, hash: &str) -> Result<TxResult, ClientError> {
-        self.request(&TxRequest::new(hash)).await
+    fn tx(&self, hash: &str) -> impl Future<Output = Result<TxResult, ClientError>> + MaybeSend {
+        async move { self.request(&TxRequest::new(hash)).await }
     }
 
     /// Get trust lines for an account (one page of up to 400).
@@ -492,12 +645,12 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_lines(
+    fn account_lines(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountLinesResult, ClientError> {
-        self.request(&account_lines_request(account, ledger)).await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<AccountLinesResult, ClientError>> + MaybeSend {
+        async move { self.request(&account_lines_request(account, ledger)).await }
     }
 
     /// Get open offers for an account (one page of up to 400).
@@ -506,12 +659,12 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_offers(
+    fn account_offers(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountOffersResult, ClientError> {
-        self.request(&account_offers_request(account, ledger)).await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<AccountOffersResult, ClientError>> + MaybeSend {
+        async move { self.request(&account_offers_request(account, ledger)).await }
     }
 
     /// Get NFTs owned by an account (one page of up to 400).
@@ -520,31 +673,79 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_nfts(
+    fn account_nfts(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountNftsResult, ClientError> {
-        self.request(&account_nfts_request(account, ledger)).await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<AccountNftsResult, ClientError>> + MaybeSend {
+        async move { self.request(&account_nfts_request(account, ledger)).await }
     }
 
-    /// Get order book offers (up to 20).
+    /// The best offers (up to 20) that give `taker_gets` for `taker_pays`:
+    /// the same order as [`BookOffersRequest::new`] and `rippled`'s
+    /// `book_offers` (what the offer gives, then what it wants).
     ///
     /// # Errors
     ///
-    /// [`ClientError::RpcError`] when the server refuses the request (a
-    /// currency or issuer it cannot read, for one), and the errors of
-    /// [`Client::request`].
-    async fn book_offers(
+    /// [`ClientError::RpcError`] when the server refuses the request, and the
+    /// errors of [`Client::request`].
+    fn book_offers(
         &self,
-        taker_pays: &Value,
-        taker_gets: &Value,
-    ) -> Result<BookOffersResult, ClientError> {
-        self.request(&BookOffersRequest {
-            limit: Some(20),
-            ..BookOffersRequest::new(taker_gets.clone(), taker_pays.clone())
-        })
-        .await
+        taker_gets: &xrpl_core::types::Asset,
+        taker_pays: &xrpl_core::types::Asset,
+    ) -> impl Future<Output = Result<BookOffersResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(
+                &BookOffersRequest::new(taker_gets.clone(), taker_pays.clone()).with_limit(20u32),
+            )
+            .await
+        }
+    }
+
+    /// Both sides of the order book for `base` priced in `quote`, from one
+    /// validated ledger: the asks (offers selling `base` for `quote`) and
+    /// the bids (offers buying `base` with `quote`), best first, up to
+    /// `limit` offers a side. See [`OrderBook`] for prices and the spread.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::RpcError`] when the server refuses the request, and the
+    /// errors of [`Client::request`]; [`ClientError::UnexpectedResponse`]
+    /// when the server names no ledger for the first side.
+    fn order_book<'a>(
+        &'a self,
+        base: &'a xrpl_core::types::Asset,
+        quote: &'a xrpl_core::types::Asset,
+        limit: u32,
+    ) -> impl Future<Output = Result<OrderBook, ClientError>> + MaybeSend + 'a {
+        async move {
+            let asks = self
+                .request(
+                    &BookOffersRequest::new(base.clone(), quote.clone())
+                        .with_limit(limit)
+                        .with_ledger_index(LedgerIndex::Validated),
+                )
+                .await?;
+            let ledger_index = asks.ledger_index.ok_or_else(|| {
+                ClientError::UnexpectedResponse("book_offers named no validated ledger".into())
+            })?;
+            // The other side from the same ledger.
+            let bids = self
+                .request(
+                    &BookOffersRequest::new(quote.clone(), base.clone())
+                        .with_limit(limit)
+                        .with_ledger_index(LedgerIndex::Index(ledger_index)),
+                )
+                .await?;
+            Ok(OrderBook {
+                base: base.clone(),
+                quote: quote.clone(),
+                asks: asks.offers,
+                bids: bids.offers,
+                ledger_index,
+                validated: asks.validated.unwrap_or(false) && bids.validated.unwrap_or(false),
+            })
+        }
     }
 
     /// Get AMM pool information.
@@ -553,38 +754,48 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) when no AMM holds that pair
     /// of assets, and the errors of [`Client::request`].
-    async fn amm_info(&self, asset: &Value, asset2: &Value) -> Result<AmmInfoResult, ClientError> {
-        self.request(&AmmInfoRequest::new(asset.clone(), asset2.clone()))
-            .await
+    fn amm_info(
+        &self,
+        asset: &xrpl_core::types::Asset,
+        asset2: &xrpl_core::types::Asset,
+    ) -> impl Future<Output = Result<AmmInfoResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&AmmInfoRequest::new(asset.clone(), asset2.clone()))
+                .await
+        }
     }
 
-    /// Get transaction history for an account (bounds default to all
-    /// validated ledgers, limit to 200, order to newest first).
+    /// An account's latest transactions: one page of up to 200, newest
+    /// first, from every validated ledger. For other bounds, order or page
+    /// size, send an [`AccountTxRequest`] (with [`Client::request`], or
+    /// [`Client::pages`] to read on page by page):
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::requests::AccountTxRequest;
+    ///
+    /// let oldest = client
+    ///     .request(&AccountTxRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
+    ///         .with_forward(true)
+    ///         .with_limit(10u32))
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] when the server refuses the request
     /// (`actMalformed` for an address that is not valid), and the errors of
     /// [`Client::request`].
-    async fn account_tx(
+    fn account_tx(
         &self,
         account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-        limit: Option<u32>,
-        marker: Option<Value>,
-        forward: Option<bool>,
-    ) -> Result<AccountTxResult, ClientError> {
-        self.request(&AccountTxRequest {
-            account: account.into(),
-            ledger_index_min: ledger_index_min.unwrap_or(-1),
-            ledger_index_max: ledger_index_max.unwrap_or(-1),
-            limit: Some(limit.unwrap_or(200)),
-            marker,
-            forward: forward.unwrap_or(false),
-            binary: None,
-        })
-        .await
+    ) -> impl Future<Output = Result<AccountTxResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&AccountTxRequest::new(account).with_limit(200u32))
+                .await
+        }
     }
 
     /// Get objects owned by an account (limit defaults to 200).
@@ -593,20 +804,22 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_objects(
+    fn account_objects(
         &self,
         account: &str,
         object_type: Option<&str>,
-        ledger: &LedgerIndex,
+        ledger: LedgerIndex,
         limit: Option<u32>,
         marker: Option<Value>,
-    ) -> Result<AccountObjectsResult, ClientError> {
-        self.request(&AccountObjectsRequest {
-            limit: Some(limit.unwrap_or(200)),
-            marker,
-            ..account_objects_request(account, object_type, ledger)
-        })
-        .await
+    ) -> impl Future<Output = Result<AccountObjectsResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&AccountObjectsRequest {
+                limit: Some(limit.unwrap_or(200)),
+                marker,
+                ..account_objects_request(account, object_type, ledger)
+            })
+            .await
+        }
     }
 
     /// Get currencies an account can send or receive.
@@ -615,16 +828,18 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_currencies(
+    fn account_currencies(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountCurrenciesResult, ClientError> {
-        self.request(&AccountCurrenciesRequest {
-            account: account.into(),
-            ledger_index: *ledger,
-        })
-        .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<AccountCurrenciesResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&AccountCurrenciesRequest {
+                account: account.into(),
+                ledger_index: ledger,
+            })
+            .await
+        }
     }
 
     /// Get payment channels for an account.
@@ -633,18 +848,20 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request`].
-    async fn account_channels(
+    fn account_channels(
         &self,
         account: &str,
         destination_account: Option<&str>,
-        ledger: &LedgerIndex,
-    ) -> Result<AccountChannelsResult, ClientError> {
-        self.request(&AccountChannelsRequest {
-            destination_account: destination_account.map(Into::into),
-            ledger_index: *ledger,
-            ..AccountChannelsRequest::new(account)
-        })
-        .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<AccountChannelsResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&AccountChannelsRequest {
+                destination_account: destination_account.map(Into::into),
+                ledger_index: ledger,
+                ..AccountChannelsRequest::new(account)
+            })
+            .await
+        }
     }
 
     /// Get a single ledger entry by its object ID.
@@ -653,16 +870,18 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`entryNotFound`) when that ledger holds no
     /// object with this ID, and the errors of [`Client::request`].
-    async fn ledger_entry(
+    fn ledger_entry(
         &self,
         index: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<LedgerEntryResult, ClientError> {
-        self.request(&LedgerEntryRequest {
-            ledger_index: *ledger,
-            ..LedgerEntryRequest::new(index)
-        })
-        .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<LedgerEntryResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&LedgerEntryRequest {
+                ledger_index: ledger,
+                ..LedgerEntryRequest::new(index)
+            })
+            .await
+        }
     }
 
     /// Get server information.
@@ -670,8 +889,10 @@ pub trait Client {
     /// # Errors
     ///
     /// The errors of [`Client::request`].
-    async fn server_info(&self) -> Result<ServerInfoResult, ClientError> {
-        self.request(&ServerInfoRequest {}).await
+    fn server_info(
+        &self,
+    ) -> impl Future<Output = Result<ServerInfoResult, ClientError>> + MaybeSend {
+        async move { self.request(&ServerInfoRequest {}).await }
     }
 
     /// Get gateway balances for an issuing account.
@@ -681,25 +902,20 @@ pub trait Client {
     /// [`ClientError::RpcError`] when the server refuses the request
     /// (`actMalformed` for an address that is not valid), and the errors of
     /// [`Client::request`].
-    async fn gateway_balances(
+    fn gateway_balances(
         &self,
         account: &str,
         hotwallet: Option<Vec<&str>>,
-        ledger: &LedgerIndex,
-    ) -> Result<GatewayBalancesResult, ClientError> {
-        self.request(&GatewayBalancesRequest {
-            hotwallet: hotwallet.map(|h| h.into_iter().map(Into::into).collect()),
-            ledger_index: *ledger,
-            ..GatewayBalancesRequest::new(account)
-        })
-        .await
-    }
-
-    /// The most [`Client::autofill`] sets as a `Fee`, in drops:
-    /// [`DEFAULT_MAX_FEE_DROPS`] (2 XRP) unless the client was built with
-    /// another (`with_max_fee_drops`).
-    fn max_fee_drops(&self) -> u64 {
-        DEFAULT_MAX_FEE_DROPS
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<GatewayBalancesResult, ClientError>> + MaybeSend {
+        async move {
+            self.request(&GatewayBalancesRequest {
+                hotwallet: hotwallet.map(|h| h.into_iter().map(Into::into).collect()),
+                ledger_index: ledger,
+                ..GatewayBalancesRequest::new(account)
+            })
+            .await
+        }
     }
 
     /// Fill in what a transaction needs and does not have (a field that is
@@ -714,7 +930,7 @@ pub trait Client {
     ///   `EscrowFinish` with a fulfillment, …) at the open-ledger fee. A
     ///   `LoanSet` is priced for its counterparty's signatures too (the size
     ///   of its signer list, or one). The fee is refused with
-    ///   [`ClientError::FeeTooHigh`] above [`Client::max_fee_drops`] (a
+    ///   [`ClientError::FeeTooHigh`] above [`Transport::max_fee_drops`] (a
     ///   busy network, or a server that names any fee it likes, cannot make
     ///   it spend more);
     /// - `LastLedgerSequence`: the current ledger + [`LAST_LEDGER_OFFSET`];
@@ -726,7 +942,7 @@ pub trait Client {
     ///
     /// # Errors
     ///
-    /// - [`ClientError::FeeTooHigh`] for a fee above [`Client::max_fee_drops`].
+    /// - [`ClientError::FeeTooHigh`] for a fee above [`Transport::max_fee_drops`].
     /// - [`ClientError::UnexpectedResponse`] for a transaction with no
     ///   `Account`, or a server answer the fee cannot be worked out from.
     /// - [`ClientError::Core`] for a transaction that cannot be priced (no
@@ -735,8 +951,11 @@ pub trait Client {
     /// - A [`ClientError`] when a request fails (`actNotFound` when
     ///   `Sequence` is missing and `Account` does not exist).
     /// - For a `Batch`, the errors of [`Client::autofill_batch`].
-    async fn autofill(&self, tx: &mut Value) -> Result<(), ClientError> {
-        self.autofill_for_multisigning(tx, 0).await
+    fn autofill(
+        &self,
+        tx: &mut Value,
+    ) -> impl Future<Output = Result<(), ClientError>> + MaybeSend {
+        async move { self.autofill_for_multisigning(tx, 0).await }
     }
 
     /// [`Client::autofill`] for a transaction that `signers` accounts will
@@ -747,123 +966,127 @@ pub trait Client {
     /// # Errors
     ///
     /// The same as [`Client::autofill`].
-    async fn autofill_for_multisigning(
+    fn autofill_for_multisigning(
         &self,
         tx: &mut Value,
         signers: u32,
-    ) -> Result<(), ClientError> {
-        let account = tx
-            .get("Account")
-            .and_then(Value::as_str)
-            .ok_or_else(|| ClientError::UnexpectedResponse("tx missing Account field".into()))?
-            .to_string();
-        let missing = |tx: &Value, field: &str| tx.get(field).is_none_or(Value::is_null);
-        let uses_ticket = !missing(tx, "TicketSequence");
-        let need_seq = missing(tx, "Sequence");
-        let need_fee = missing(tx, "Fee");
-        let need_lls = missing(tx, "LastLedgerSequence");
-        let need_network = missing(tx, "NetworkID");
-        let kind = tx.get("TransactionType").and_then(Value::as_str);
-        let is_batch = kind == Some("Batch");
-        // What rippled charges for this type, to know what to look up.
-        let cost = if need_fee {
-            Some(xrpl_core::transaction::cost::transaction_cost(
-                tx,
-                usize::try_from(signers).unwrap_or(usize::MAX),
-            )?)
-        } else {
-            None
-        };
-        let counterparty_signs =
-            need_fee && kind == Some("LoanSet") && tx.get("CounterpartySignature").is_none();
-
-        let seq_fut = async {
-            if need_seq && !uses_ticket {
-                self.account_info(&account, &LedgerIndex::Current)
-                    .await
-                    .map(Some)
+    ) -> impl Future<Output = Result<(), ClientError>> + MaybeSend {
+        async move {
+            let account = tx
+                .get("Account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    ClientError::InvalidRequest("the transaction has no Account".into())
+                })?
+                .to_string();
+            let missing = |tx: &Value, field: &str| tx.get(field).is_none_or(Value::is_null);
+            let uses_ticket = !missing(tx, "TicketSequence");
+            let need_seq = missing(tx, "Sequence");
+            let need_fee = missing(tx, "Fee");
+            let need_lls = missing(tx, "LastLedgerSequence");
+            let need_network = missing(tx, "NetworkID");
+            let kind = tx.get("TransactionType").and_then(Value::as_str);
+            let is_batch = kind == Some("Batch");
+            // What rippled charges for this type, to know what to look up.
+            let cost = if need_fee {
+                Some(xrpl_core::transaction::cost::transaction_cost(
+                    tx,
+                    usize::try_from(signers).unwrap_or(usize::MAX),
+                )?)
             } else {
-                Ok(None)
-            }
-        };
-        let fee_fut = async {
-            if !need_fee {
-                return Ok(None);
-            }
-            let reserve = async {
-                if cost.is_some_and(|c| c.owner_reserves > 0) {
-                    owner_reserve_drops(self).await.map(Some)
+                None
+            };
+            let counterparty_signs =
+                need_fee && kind == Some("LoanSet") && tx.get("CounterpartySignature").is_none();
+
+            let seq_fut = async {
+                if need_seq && !uses_ticket {
+                    self.account_info(&account, LedgerIndex::Current)
+                        .await
+                        .map(Some)
                 } else {
                     Ok(None)
                 }
             };
-            let counterparty = async {
-                if counterparty_signs {
-                    loan_counterparty_signers(self, tx).await
+            let fee_fut = async {
+                if !need_fee {
+                    return Ok(None);
+                }
+                let reserve = async {
+                    if cost.is_some_and(|c| c.owner_reserves > 0) {
+                        owner_reserve_drops(self).await.map(Some)
+                    } else {
+                        Ok(None)
+                    }
+                };
+                let counterparty = async {
+                    if counterparty_signs {
+                        loan_counterparty_signers(self, tx).await
+                    } else {
+                        Ok(0)
+                    }
+                };
+                let (fee, reserve, counterparty) =
+                    futures::future::try_join3(self.fee(), reserve, counterparty).await?;
+                Ok(Some((fee, reserve, counterparty)))
+            };
+            let lls_fut = async {
+                if need_lls {
+                    self.ledger_current().await.map(Some)
                 } else {
-                    Ok(0)
+                    Ok(None)
                 }
             };
-            let (fee, reserve, counterparty) =
-                futures::future::try_join3(self.fee(), reserve, counterparty).await?;
-            Ok(Some((fee, reserve, counterparty)))
-        };
-        let lls_fut = async {
-            if need_lls {
-                self.ledger_current().await.map(Some)
-            } else {
-                Ok(None)
+            let network_fut = async {
+                if need_network {
+                    self.server_info().await.map(|r| r.info.network_id)
+                } else {
+                    Ok(None)
+                }
+            };
+            let (acct_info, fee_result, ledger_idx, network_id) =
+                futures::future::try_join4(seq_fut, fee_fut, lls_fut, network_fut).await?;
+            if let Some(id) = network_id {
+                check_x_address_networks(tx, id)?;
             }
-        };
-        let network_fut = async {
-            if need_network {
-                self.server_info().await.map(|r| r.info.network_id)
-            } else {
-                Ok(None)
-            }
-        };
-        let (acct_info, fee_result, ledger_idx, network_id) =
-            futures::future::try_join4(seq_fut, fee_fut, lls_fut, network_fut).await?;
-        if let Some(id) = network_id {
-            check_x_address_networks(tx, id)?;
-        }
-        let prices = fee_result
-            .map(|(fee, reserve, counterparty)| Prices::new(&fee, reserve, counterparty))
-            .transpose()?;
-        // Refuse a fee above the cap before changing anything.
-        let fee = match (prices, cost) {
-            (Some(p), Some(c)) if !is_batch => Some(capped_fee(p.of(c), self.max_fee_drops())?),
-            _ => None,
-        };
+            let prices = fee_result
+                .map(|(fee, reserve, counterparty)| Prices::new(&fee, reserve, counterparty))
+                .transpose()?;
+            // Refuse a fee above the cap before changing anything.
+            let fee = match (prices, cost) {
+                (Some(p), Some(c)) if !is_batch => Some(capped_fee(p.of(c), self.max_fee_drops())?),
+                _ => None,
+            };
 
-        let obj = tx
-            .as_object_mut()
-            .ok_or_else(|| ClientError::UnexpectedResponse("tx is not a JSON object".into()))?;
-        if need_seq && uses_ticket {
-            obj.insert("Sequence".into(), json!(0));
+            let obj = tx.as_object_mut().ok_or_else(|| {
+                ClientError::InvalidRequest("the transaction is not a JSON object".into())
+            })?;
+            if need_seq && uses_ticket {
+                obj.insert("Sequence".into(), json!(0));
+            }
+            if let Some(info) = acct_info {
+                obj.insert("Sequence".into(), json!(info.account_data.sequence));
+            }
+            if let Some(idx) = ledger_idx {
+                obj.insert(
+                    "LastLedgerSequence".into(),
+                    json!(idx.saturating_add(LAST_LEDGER_OFFSET)),
+                );
+            }
+            if let Some(id) = network_id.filter(|id| *id > 1024) {
+                obj.insert("NetworkID".into(), json!(id));
+            }
+            if signers > 0 {
+                obj.insert("SigningPubKey".into(), json!(""));
+            }
+            if is_batch {
+                return fill_batch(self, tx, &account, prices, signers).await;
+            }
+            if let Some(fee) = fee {
+                obj.insert("Fee".into(), json!(fee.to_string()));
+            }
+            Ok(())
         }
-        if let Some(info) = acct_info {
-            obj.insert("Sequence".into(), json!(info.account_data.sequence));
-        }
-        if let Some(idx) = ledger_idx {
-            obj.insert(
-                "LastLedgerSequence".into(),
-                json!(idx.saturating_add(LAST_LEDGER_OFFSET)),
-            );
-        }
-        if let Some(id) = network_id.filter(|id| *id > 1024) {
-            obj.insert("NetworkID".into(), json!(id));
-        }
-        if signers > 0 {
-            obj.insert("SigningPubKey".into(), json!(""));
-        }
-        if is_batch {
-            return fill_batch(self, tx, &account, prices, signers).await;
-        }
-        if let Some(fee) = fee {
-            obj.insert("Fee".into(), json!(fee.to_string()));
-        }
-        Ok(())
     }
 
     /// The inner-transaction part of [`Client::autofill`] for a `Batch`: mark
@@ -884,38 +1107,41 @@ pub trait Client {
     ///   or `RawTransactions`, or an inner transaction with no `Account`.
     /// - [`ClientError::Core`] for an inner transaction that is not a JSON
     ///   object or has bad `Flags`, or a batch that cannot be priced.
-    /// - [`ClientError::FeeTooHigh`] for a fee above [`Client::max_fee_drops`].
+    /// - [`ClientError::FeeTooHigh`] for a fee above [`Transport::max_fee_drops`].
     /// - A [`ClientError`] when a request fails or its answer cannot be used
     ///   (`actNotFound` for an inner transaction's account that does not
     ///   exist).
-    async fn autofill_batch(
+    fn autofill_batch(
         &self,
         tx: &mut Value,
         outer: &str,
         open_ledger_fee: Option<u64>,
         outer_signers: u32,
-    ) -> Result<(), ClientError> {
-        let prices = match open_ledger_fee {
-            Some(open) => {
-                // An inner transaction that costs an owner reserve needs it,
-                // scaled as the open-ledger fee is.
-                let reserves =
-                    xrpl_core::transaction::cost::transaction_cost(tx, 0)?.owner_reserves;
-                let (base, reserve) = if reserves > 0 {
-                    let (fee, reserve) =
-                        futures::future::try_join(self.fee(), owner_reserve_drops(self)).await?;
-                    (
-                        Some(parse_drops("base_fee", &fee.drops.base_fee)?),
-                        Some(reserve),
-                    )
-                } else {
-                    (None, None)
-                };
-                Some(Prices::from_parts(open, base, reserve, 0)?)
-            }
-            None => None,
-        };
-        fill_batch(self, tx, outer, prices, outer_signers).await
+    ) -> impl Future<Output = Result<(), ClientError>> + MaybeSend {
+        async move {
+            let prices = match open_ledger_fee {
+                Some(open) => {
+                    // An inner transaction that costs an owner reserve needs it,
+                    // scaled as the open-ledger fee is.
+                    let reserves =
+                        xrpl_core::transaction::cost::transaction_cost(tx, 0)?.owner_reserves;
+                    let (base, reserve) = if reserves > 0 {
+                        let (fee, reserve) =
+                            futures::future::try_join(self.fee(), owner_reserve_drops(self))
+                                .await?;
+                        (
+                            Some(parse_drops("base_fee", &fee.drops.base_fee)?),
+                            Some(reserve),
+                        )
+                    } else {
+                        (None, None)
+                    };
+                    Some(Prices::from_parts(open, base, reserve, 0)?)
+                }
+                None => None,
+            };
+            fill_batch(self, tx, outer, prices, outer_signers).await
+        }
     }
 
     /// Submit a signed blob and wait for its final outcome: the result of the
@@ -946,95 +1172,104 @@ pub trait Client {
     /// `LastLedgerSequence`, and a [`ClientError`] when the validated ledger
     /// index cannot be read. A [`ClientError::RpcError`] for the submit
     /// itself (the server refused the request) is returned as it is.
-    async fn submit_and_wait(&self, tx_blob: &str) -> Result<TxResult, ClientError> {
-        let tx = xrpl_core::codec::decode_transaction_binary(
-            &hex::decode(tx_blob).map_err(|e| xrpl_core::CoreError::InvalidHex(e.to_string()))?,
-        )?;
-        let hash = xrpl_core::hashes::hash_signed_tx(&tx)?.to_string();
-        let last_ledger_sequence = tx
-            .get("LastLedgerSequence")
-            .and_then(Value::as_u64)
-            .and_then(|n| u32::try_from(n).ok())
-            .ok_or_else(|| {
-                ClientError::Core(xrpl_core::CoreError::ValidationError(
-                    "submit_and_wait needs a LastLedgerSequence, or it could wait forever".into(),
-                ))
-            })?;
-        // Ledgers before this one were validated before the blob was sent.
-        let first_ledger = self.validated_ledger_index().await?;
-        let unknown = |reason: String| ClientError::OutcomeUnknown {
-            hash: hash.clone(),
-            last_ledger_sequence,
-            reason,
-        };
+    fn submit_and_wait(
+        &self,
+        tx_blob: &str,
+    ) -> impl Future<Output = Result<TxResult, ClientError>> + MaybeSend {
+        async move {
+            let tx = xrpl_core::codec::decode_transaction_binary(
+                &hex::decode(tx_blob)
+                    .map_err(|e| xrpl_core::CoreError::InvalidHex(e.to_string()))?,
+            )?;
+            let hash = xrpl_core::hashes::hash_signed_tx(&tx)?.to_string();
+            let last_ledger_sequence = tx
+                .get("LastLedgerSequence")
+                .and_then(Value::as_u64)
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or_else(|| {
+                    ClientError::Core(xrpl_core::CoreError::ValidationError(
+                        "submit_and_wait needs a LastLedgerSequence, or it could wait forever"
+                            .into(),
+                    ))
+                })?;
+            // Ledgers before this one were validated before the blob was sent.
+            let first_ledger = self.validated_ledger_index().await?;
+            let unknown = |reason: String| ClientError::OutcomeUnknown {
+                hash: hash.clone(),
+                last_ledger_sequence,
+                reason,
+            };
 
-        let resubmit = match self.request(&SubmitRequest::new(tx_blob)).await {
-            Ok(sr) => {
-                let r = sr.engine_result.as_str();
-                let failed = || ClientError::TransactionFailed {
-                    engine_result: sr.engine_result.clone(),
-                    message: sr.engine_result_message.clone(),
-                };
-                if r.starts_with("tem") {
-                    return Err(failed());
-                }
-                let dropped = is_dropped(r);
-                if (r.starts_with("tef") || r.starts_with("tel")) && !dropped {
-                    // Not applied and not relayed, unless an earlier submit of
-                    // this same blob already put it in a ledger.
-                    match self.tx(&hash).await {
-                        Err(ClientError::RpcError { ref code, .. }) if code == "txnNotFound" => {
-                            return Err(failed())
-                        }
-                        Err(e) => return Err(unknown(e.to_string())),
-                        Ok(_) => {}
-                    }
-                }
-                dropped
-            }
-            // The server read the request and refused it: nothing was sent on.
-            Err(e @ ClientError::RpcError { .. }) => return Err(e),
-            // It may or may not have reached the server.
-            Err(e) => {
-                tracing::warn!(%hash, error = %e, "submit failed; looking the transaction up");
-                true
-            }
-        };
-
-        let mut failures = 0;
-        loop {
-            sleep_secs(POLL_SECS).await;
-            match poll_outcome(self, &hash, first_ledger, last_ledger_sequence).await {
-                Ok(Poll::Validated(result)) => {
-                    let result = *result;
-                    return match result.transaction_result() {
-                        Some("tesSUCCESS") => Ok(result),
-                        Some(code) => Err(ClientError::TransactionClaimed {
-                            engine_result: code.to_string(),
-                            result: Some(Box::new(result)),
-                        }),
-                        None => Err(unknown("the validated transaction has no result".into())),
+            let resubmit = match self.request(&SubmitRequest::new(tx_blob)).await {
+                Ok(sr) => {
+                    let r = sr.engine_result.as_str();
+                    let failed = || ClientError::TransactionFailed {
+                        engine_result: sr.engine_result.clone(),
+                        message: sr.engine_result_message.clone(),
                     };
-                }
-                Ok(Poll::Pending { found }) => {
-                    failures = 0;
-                    if resubmit && !found {
-                        let _ = self.request(&SubmitRequest::new(tx_blob)).await;
+                    if r.starts_with("tem") {
+                        return Err(failed());
                     }
+                    let dropped = is_dropped(r);
+                    if (r.starts_with("tef") || r.starts_with("tel")) && !dropped {
+                        // Not applied and not relayed, unless an earlier submit of
+                        // this same blob already put it in a ledger.
+                        match self.tx(&hash).await {
+                            Err(ClientError::RpcError { ref code, .. })
+                                if code == "txnNotFound" =>
+                            {
+                                return Err(failed())
+                            }
+                            Err(e) => return Err(unknown(e.to_string())),
+                            Ok(_) => {}
+                        }
+                    }
+                    dropped
                 }
-                Ok(Poll::Expired) => {
-                    return Err(ClientError::TransactionExpired(last_ledger_sequence))
-                }
-                Ok(Poll::Unprovable) => {
-                    return Err(unknown(format!(
-                        "the server lacks some of ledgers {first_ledger}..={last_ledger_sequence}, \
-                         so it cannot show the transaction is in none"
-                    )))
-                }
+                // The server read the request and refused it: nothing was sent on.
+                Err(e @ ClientError::RpcError { .. }) => return Err(e),
+                // It may or may not have reached the server.
                 Err(e) => {
-                    failures += 1;
-                    if failures >= MAX_POLL_FAILURES {
-                        return Err(unknown(e.to_string()));
+                    tracing::warn!(%hash, error = %e, "submit failed; looking the transaction up");
+                    true
+                }
+            };
+
+            let mut failures = 0;
+            loop {
+                sleep_secs(POLL_SECS).await;
+                match poll_outcome(self, &hash, first_ledger, last_ledger_sequence).await {
+                    Ok(Poll::Validated(result)) => {
+                        let result = *result;
+                        return match result.transaction_result() {
+                            Some("tesSUCCESS") => Ok(result),
+                            Some(code) => Err(ClientError::TransactionClaimed {
+                                engine_result: code.to_string(),
+                                result: Some(Box::new(result)),
+                            }),
+                            None => Err(unknown("the validated transaction has no result".into())),
+                        };
+                    }
+                    Ok(Poll::Pending { found }) => {
+                        failures = 0;
+                        if resubmit && !found {
+                            let _ = self.request(&SubmitRequest::new(tx_blob)).await;
+                        }
+                    }
+                    Ok(Poll::Expired) => {
+                        return Err(ClientError::TransactionExpired(last_ledger_sequence))
+                    }
+                    Ok(Poll::Unprovable) => {
+                        return Err(unknown(format!(
+                            "the server lacks some of ledgers {first_ledger}..={last_ledger_sequence}, \
+                             so it cannot show the transaction is in none"
+                        )))
+                    }
+                    Err(e) => {
+                        failures += 1;
+                        if failures >= MAX_POLL_FAILURES {
+                            return Err(unknown(e.to_string()));
+                        }
                     }
                 }
             }
@@ -1048,11 +1283,13 @@ pub trait Client {
     /// The errors of [`Client::ledger`], and
     /// [`ClientError::UnexpectedResponse`] for an answer with no
     /// `ledger_index`.
-    async fn validated_ledger_index(&self) -> Result<u32, ClientError> {
-        self.ledger(&LedgerIndex::Validated)
-            .await?
-            .ledger_index
-            .ok_or_else(|| ClientError::UnexpectedResponse("ledger has no ledger_index".into()))
+    fn validated_ledger_index(&self) -> impl Future<Output = Result<u32, ClientError>> + MaybeSend {
+        async move {
+            self.ledger(LedgerIndex::Validated)
+                .await?
+                .ledger_index
+                .ok_or_else(|| ClientError::UnexpectedResponse("ledger has no ledger_index".into()))
+        }
     }
 
     /// Everything `account` holds, as typed amounts read from one ledger:
@@ -1065,7 +1302,7 @@ pub trait Client {
     /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::error::ClientError> {
     /// use xrpl_client::types::LedgerIndex;
     ///
-    /// for amount in client.balances("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", &LedgerIndex::Validated).await? {
+    /// for amount in client.balances("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await? {
     ///     println!("{amount}");
     /// }
     /// # Ok(())
@@ -1077,42 +1314,43 @@ pub trait Client {
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist, and a [`ClientError`] when a request fails or an answer
     /// holds an amount that does not parse.
-    async fn balances(
+    fn balances(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<xrpl_core::types::Amount>, ClientError> {
-        use xrpl_core::types::Amount;
-        let info = self.account_info(account, ledger).await?;
-        let pinned = info
-            .ledger_index
-            .or(info.ledger_current_index)
-            .map_or(*ledger, LedgerIndex::Index);
-        let drops = info.account_data.balance.parse::<u64>().map_err(|_| {
-            ClientError::UnexpectedResponse(format!(
-                "Balance {:?} is not a whole number of drops",
-                info.account_data.balance
-            ))
-        })?;
-        let (lines, objects) = futures::future::try_join(
-            self.account_lines_all(account, &pinned),
-            self.account_objects_all(account, Some("mptoken"), &pinned),
-        )
-        .await?;
-        let mut amounts = vec![Amount::xrp(drops)?];
-        for line in lines {
-            amounts.push(Amount::token(&line.balance, &line.currency, &line.account)?);
-        }
-        for object in objects {
-            if let LedgerObject::MPToken(token) = object {
-                let raw = token.mpt_amount.as_deref().unwrap_or("0");
-                let value = raw.parse::<i64>().map_err(|_| {
-                    ClientError::UnexpectedResponse(format!("MPTAmount {raw:?} is not a number"))
-                })?;
-                amounts.push(Amount::mpt(value, &token.mp_token_issuance_id.to_string())?);
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<Vec<xrpl_core::types::Amount>, ClientError>> + MaybeSend {
+        async move {
+            use xrpl_core::types::Amount;
+            let info = self.account_info(account, ledger).await?;
+            let pinned = info
+                .ledger_index
+                .or(info.ledger_current_index)
+                .map_or(ledger, LedgerIndex::Index);
+            let drops = info.account_data.balance_drops().ok_or_else(|| {
+                ClientError::UnexpectedResponse("an account balance that is not XRP".into())
+            })?;
+            let (lines, objects) = futures::future::try_join(
+                self.account_lines_all(account, pinned),
+                self.account_objects_all(account, Some("mptoken"), pinned),
+            )
+            .await?;
+            let mut amounts = vec![Amount::xrp(drops)?];
+            for line in lines {
+                amounts.push(Amount::token(&line.balance, &line.currency, &line.account)?);
             }
+            for object in objects {
+                if let LedgerObject::MPToken(token) = object {
+                    let raw = token.mpt_amount.as_deref().unwrap_or("0");
+                    let value = raw.parse::<i64>().map_err(|_| {
+                        ClientError::UnexpectedResponse(format!(
+                            "MPTAmount {raw:?} is not a number"
+                        ))
+                    })?;
+                    amounts.push(Amount::mpt(value, &token.mp_token_issuance_id.to_string())?);
+                }
+            }
+            Ok(amounts)
         }
-        Ok(amounts)
     }
 
     /// A ledger with its transactions, checked against its hash: the header
@@ -1126,7 +1364,7 @@ pub trait Client {
     /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
     /// use xrpl_client::types::LedgerIndex;
     ///
-    /// let ledger = client.verified_ledger(&LedgerIndex::Validated).await?;
+    /// let ledger = client.verified_ledger(LedgerIndex::Validated).await?;
     /// println!("ledger {} ({}): {} transactions", ledger.header.ledger_index, ledger.hash, ledger.transactions.len());
     /// # Ok(())
     /// # }
@@ -1138,17 +1376,20 @@ pub trait Client {
     /// not check out (a transaction missing, added or changed, or a header
     /// that does not hash to the named ledger hash), and a [`ClientError`]
     /// when the request fails.
-    async fn verified_ledger(
+    fn verified_ledger(
         &self,
-        ledger: &LedgerIndex,
-    ) -> Result<xrpl_core::ledger::VerifiedLedger, ClientError> {
-        let result = self
-            .raw_request(
-                "ledger",
-                json!({"ledger_index": ledger, "transactions": true, "expand": true, "binary": true}),
-            )
-            .await?;
-        Ok(xrpl_core::ledger::verify_ledger_response(&result)?)
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<xrpl_core::ledger::VerifiedLedger, ClientError>> + MaybeSend
+    {
+        async move {
+            let result = self
+                .raw_request(
+                    "ledger",
+                    json!({"ledger_index": ledger, "transactions": true, "expand": true, "binary": true}),
+                )
+                .await?;
+            Ok(xrpl_core::ledger::verify_ledger_response(&result)?)
+        }
     }
 
     /// All trust lines of an account, following the marker.
@@ -1157,13 +1398,15 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request_all`].
-    async fn account_lines_all(
+    fn account_lines_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<TrustLine>, ClientError> {
-        self.request_all(account_lines_request(account, ledger))
-            .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<Vec<TrustLine>, ClientError>> + MaybeSend {
+        async move {
+            self.request_all(account_lines_request(account, ledger))
+                .await
+        }
     }
 
     /// All offers of an account, following the marker.
@@ -1172,13 +1415,15 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request_all`].
-    async fn account_offers_all(
+    fn account_offers_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<AccountOffer>, ClientError> {
-        self.request_all(account_offers_request(account, ledger))
-            .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<Vec<AccountOffer>, ClientError>> + MaybeSend {
+        async move {
+            self.request_all(account_offers_request(account, ledger))
+                .await
+        }
     }
 
     /// All NFTs of an account, following the marker.
@@ -1187,13 +1432,15 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request_all`].
-    async fn account_nfts_all(
+    fn account_nfts_all(
         &self,
         account: &str,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<NFToken>, ClientError> {
-        self.request_all(account_nfts_request(account, ledger))
-            .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<Vec<NFToken>, ClientError>> + MaybeSend {
+        async move {
+            self.request_all(account_nfts_request(account, ledger))
+                .await
+        }
     }
 
     /// All objects of an account, following the marker.
@@ -1202,61 +1449,61 @@ pub trait Client {
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
     /// not exist in that ledger, and the errors of [`Client::request_all`].
-    async fn account_objects_all(
+    fn account_objects_all(
         &self,
         account: &str,
         object_type: Option<&str>,
-        ledger: &LedgerIndex,
-    ) -> Result<Vec<LedgerObject>, ClientError> {
-        self.request_all(account_objects_request(account, object_type, ledger))
-            .await
+        ledger: LedgerIndex,
+    ) -> impl Future<Output = Result<Vec<LedgerObject>, ClientError>> + MaybeSend {
+        async move {
+            self.request_all(account_objects_request(account, object_type, ledger))
+                .await
+        }
     }
 
-    /// All transactions of an account, newest first, following the marker.
+    /// All transactions of an account in every validated ledger, newest
+    /// first, following the marker. For a range of ledgers, pass
+    /// [`Client::request_all`] an [`AccountTxRequest`] with
+    /// `with_ledger_index_min` / `with_ledger_index_max`; for a long history,
+    /// [`Client::pages`] reads it page by page.
     ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] when the server refuses the request
     /// (`actMalformed` for an address that is not valid), and the errors of
     /// [`Client::request_all`].
-    async fn account_tx_all(
+    fn account_tx_all(
         &self,
         account: &str,
-        ledger_index_min: Option<i32>,
-        ledger_index_max: Option<i32>,
-    ) -> Result<Vec<AccountTxEntry>, ClientError> {
-        self.request_all(AccountTxRequest {
-            account: account.into(),
-            ledger_index_min: ledger_index_min.unwrap_or(-1),
-            ledger_index_max: ledger_index_max.unwrap_or(-1),
-            limit: Some(200),
-            marker: None,
-            forward: false,
-            binary: None,
-        })
-        .await
+    ) -> impl Future<Output = Result<Vec<TxResult>, ClientError>> + MaybeSend {
+        async move {
+            self.request_all(AccountTxRequest::new(account).with_limit(200u32))
+                .await
+        }
     }
 }
 
-fn account_lines_request(account: &str, ledger: &LedgerIndex) -> AccountLinesRequest {
+impl<T: Transport + ?Sized> Client for T {}
+
+fn account_lines_request(account: &str, ledger: LedgerIndex) -> AccountLinesRequest {
     AccountLinesRequest {
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(400),
         ..AccountLinesRequest::new(account)
     }
 }
 
-fn account_offers_request(account: &str, ledger: &LedgerIndex) -> AccountOffersRequest {
+fn account_offers_request(account: &str, ledger: LedgerIndex) -> AccountOffersRequest {
     AccountOffersRequest {
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(400),
         ..AccountOffersRequest::new(account)
     }
 }
 
-fn account_nfts_request(account: &str, ledger: &LedgerIndex) -> AccountNftsRequest {
+fn account_nfts_request(account: &str, ledger: LedgerIndex) -> AccountNftsRequest {
     AccountNftsRequest {
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(400),
         ..AccountNftsRequest::new(account)
     }
@@ -1265,11 +1512,11 @@ fn account_nfts_request(account: &str, ledger: &LedgerIndex) -> AccountNftsReque
 fn account_objects_request(
     account: &str,
     object_type: Option<&str>,
-    ledger: &LedgerIndex,
+    ledger: LedgerIndex,
 ) -> AccountObjectsRequest {
     AccountObjectsRequest {
         object_type: object_type.map(Into::into),
-        ledger_index: *ledger,
+        ledger_index: ledger,
         limit: Some(200),
         ..AccountObjectsRequest::new(account)
     }
@@ -1376,6 +1623,7 @@ fn classify_submit(sr: SubmitResult) -> Result<SubmitResult, ClientError> {
 
 /// rippled's error, from the object that carries it (an HTTP response's
 /// `result`, or a WebSocket message), with the whole object kept.
+#[cfg(any(feature = "http", feature = "ws", test))]
 pub(crate) fn rpc_error(obj: &Value) -> ClientError {
     let text = |k: &str| obj.get(k).and_then(Value::as_str).map(str::to_string);
     ClientError::RpcError {
@@ -1387,6 +1635,7 @@ pub(crate) fn rpc_error(obj: &Value) -> ClientError {
 
 /// A WebSocket response's `result`, or the error it carries (`rippled` puts
 /// a WebSocket error's fields at the top of the message).
+#[cfg(feature = "ws")]
 pub(crate) fn ws_response(message: &Value) -> Result<Value, ClientError> {
     if message.get("status").and_then(Value::as_str) == Some("error")
         || message.get("error").is_some()
@@ -1486,22 +1735,25 @@ mod tests {
         }
     }
 
-    impl Client for Mock {
-        async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
-            self.calls.lock().unwrap().push((method.into(), params));
-            let reply = self
-                .replies
-                .lock()
-                .unwrap()
-                .get_mut(method)
-                .and_then(VecDeque::pop_front);
-            let reply = reply
-                .ok_or_else(|| ClientError::UnexpectedResponse(format!("no reply for {method}")))?;
-            // A rippled error, as the HTTP transport reads one.
-            if reply.get("status").and_then(Value::as_str) == Some("error") {
-                return Err(rpc_error(&reply));
-            }
-            Ok(reply)
+    impl Transport for Mock {
+        fn send_raw<'a>(&'a self, method: &'a str, params: Value) -> TransportFuture<'a> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push((method.into(), params));
+                let reply = self
+                    .replies
+                    .lock()
+                    .unwrap()
+                    .get_mut(method)
+                    .and_then(VecDeque::pop_front);
+                let reply = reply.ok_or_else(|| {
+                    ClientError::UnexpectedResponse(format!("no reply for {method}"))
+                })?;
+                // A rippled error, as the HTTP transport reads one.
+                if reply.get("status").and_then(Value::as_str) == Some("error") {
+                    return Err(rpc_error(&reply));
+                }
+                Ok(reply)
+            })
         }
     }
 
@@ -1509,14 +1761,14 @@ mod tests {
     fn requests_carry_the_params_the_methods_always_sent() {
         let p = |r: &dyn erased::Params| r.params();
         assert_eq!(
-            p(&account_lines_request("rA", &LedgerIndex::Validated)),
+            p(&account_lines_request("rA", LedgerIndex::Validated)),
             json!({"account": "rA", "ledger_index": "validated", "limit": 400})
         );
         assert_eq!(
             p(&account_objects_request(
                 "rA",
                 Some("offer"),
-                &LedgerIndex::Index(7)
+                LedgerIndex::Index(7)
             )),
             json!({"account": "rA", "type": "offer", "ledger_index": 7, "limit": 200})
         );
@@ -1558,7 +1810,7 @@ mod tests {
                 json!({"account": "rA", "lines": [line("EUR")]}),
             );
         let lines = mock
-            .account_lines_all("rA", &LedgerIndex::Validated)
+            .account_lines_all("rA", LedgerIndex::Validated)
             .await
             .unwrap();
         assert_eq!(
@@ -1608,7 +1860,7 @@ mod tests {
             );
         }
         let err = mock
-            .account_offers_all("rA", &LedgerIndex::Validated)
+            .account_offers_all("rA", LedgerIndex::Validated)
             .await
             .unwrap_err();
         assert!(
@@ -1700,6 +1952,28 @@ mod tests {
         assert_eq!(tx["Fee"], "72");
     }
 
+    /// A Batch sent with a Ticket uses no sequence of its account: its inner
+    /// transactions start at the account's next sequence, not at 1.
+    #[tokio::test]
+    async fn a_ticketed_batch_numbers_its_inner_transactions_from_the_account() {
+        let (ra, rc) = (
+            "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+            "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+        );
+        let mock = Mock::default()
+            .reply("fee", json!({"drops": {"base_fee": "10", "median_fee": "10", "minimum_fee": "10", "open_ledger_fee": "12"}}))
+            .reply("ledger_current", json!({"ledger_current_index": 100}))
+            .reply("server_info", json!({"info": {"network_id": 1}}))
+            .reply("account_info", json!({"account_data": {"Account": ra, "Balance": "1", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}));
+        let pay = json!({"RawTransaction": {"TransactionType": "Payment", "Account": ra, "Destination": rc, "Amount": "1"}});
+        let mut tx = json!({"TransactionType": "Batch", "Account": ra, "Flags": 0x0001_0000,
+            "TicketSequence": 7, "RawTransactions": [pay.clone(), pay]});
+        mock.autofill(&mut tx).await.unwrap();
+        assert_eq!(tx["Sequence"], 0);
+        assert_eq!(tx["RawTransactions"][0]["RawTransaction"]["Sequence"], 5);
+        assert_eq!(tx["RawTransactions"][1]["RawTransaction"]["Sequence"], 6);
+    }
+
     #[tokio::test]
     async fn autofill_fills_only_what_is_missing() {
         let mock = Mock::default()
@@ -1719,17 +1993,18 @@ mod tests {
 
     /// The trait's futures stay Send for the real clients (tokio::spawn needs it).
     #[allow(dead_code)]
+    #[cfg(all(feature = "http", feature = "ws"))]
     fn client_futures_are_send(
         http: &crate::XrplHttpClient,
         ws: &crate::XrplWsClient,
         tx: &mut Value,
     ) {
         fn send<T: Send>(_: T) {}
-        send(http.account_info("rA", &LedgerIndex::Current));
-        send(http.account_lines_all("rA", &LedgerIndex::Current));
+        send(http.account_info("rA", LedgerIndex::Current));
+        send(http.account_lines_all("rA", LedgerIndex::Current));
         send(http.submit_and_wait("00"));
-        send(ws.account_info("rA", &LedgerIndex::Current));
-        send(ws.account_tx_all("rA", None, None));
+        send(ws.account_info("rA", LedgerIndex::Current));
+        send(ws.account_tx_all("rA"));
         send(ws.autofill(tx));
     }
 
@@ -1747,12 +2022,56 @@ mod tests {
             tx["LastLedgerSequence"] = json!(l);
         }
         let signed = sign_transaction(&tx, &keypair).unwrap();
-        let blob =
-            hex::encode_upper(xrpl_core::codec::encode_transaction_json(&signed, false).unwrap());
+        let blob = hex::encode_upper(xrpl_core::codec::encode_transaction_json(&signed).unwrap());
         let hash = xrpl_core::hashes::hash_signed_tx_blob(&blob)
             .unwrap()
             .to_string();
         (blob, hash)
+    }
+
+    /// An order book's two sides come from one ledger, asks lowest first
+    /// and bids highest first, priced in the quote per base.
+    #[tokio::test]
+    async fn an_order_book_is_both_sides_of_one_ledger() {
+        let usd =
+            xrpl_core::types::Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").unwrap();
+        let offer = |gets: Value, pays: Value| {
+            json!({"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+                "TakerGets": gets, "TakerPays": pays})
+        };
+        let usd_amount = |v: &str| json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": v});
+        let mock = Mock::default()
+            .reply(
+                "book_offers",
+                json!({"ledger_index": 77, "validated": true, "offers": [
+                    // Selling 10 XRP for 5 USD: 0.5 USD per XRP.
+                    offer(json!("10000000"), usd_amount("5")),
+                    offer(json!("10000000"), usd_amount("6")),
+                ]}),
+            )
+            .reply(
+                "book_offers",
+                json!({"ledger_index": 77, "validated": true, "offers": [
+                    // Paying 4.5 USD for 10 XRP: 0.45 USD per XRP.
+                    offer(usd_amount("4.5"), json!("10000000")),
+                ]}),
+            );
+        let book = mock
+            .order_book(&xrpl_core::types::Asset::xrp(), &usd, 10)
+            .await
+            .unwrap();
+        assert_eq!((book.asks.len(), book.bids.len()), (2, 1));
+        assert_eq!(book.best_ask(), Some(0.5));
+        assert_eq!(book.best_bid(), Some(0.45));
+        assert!((book.spread().unwrap() - 0.05).abs() < 1e-12);
+        assert!(book.validated);
+        let calls = mock.calls();
+        assert_eq!(calls[0].1["ledger_index"], "validated");
+        assert_eq!(calls[0].1["taker_gets"], json!({"currency": "XRP"}));
+        // Every request names the API version, whatever the transport.
+        assert!(calls.iter().all(|(_, p)| p["api_version"] == API_VERSION));
+        assert_eq!(calls[1].1["ledger_index"], 77);
+        assert_eq!(calls[1].1["taker_pays"], json!({"currency": "XRP"}));
     }
 
     fn validated(mock: Mock, indexes: &[u32]) -> Mock {
@@ -1766,7 +2085,8 @@ mod tests {
             "tx_json": {"hash": "NOT_THE_HASH"}})
     }
     fn found(validated: bool, result: &str) -> Value {
-        json!({"validated": validated, "ledger_index": 95, "meta": {"TransactionResult": result}})
+        json!({"validated": validated, "ledger_index": 95,
+            "meta": {"TransactionResult": result, "TransactionIndex": 0, "AffectedNodes": []}})
     }
     fn not_found(searched_all: bool) -> Value {
         json!({"status": "error", "error": "txnNotFound", "error_message": "Transaction not found.",
@@ -1961,6 +2281,36 @@ mod tests {
         assert!(fee("lots").autofill(&mut t).await.is_err());
     }
 
+    /// Generic code over any `Client` can spawn its futures: each is `Send`.
+    /// (A compile-time check: it fails to build if one is not.)
+    #[allow(dead_code)]
+    fn every_future_is_send<C: Client>(client: &C, tx: &mut Value) {
+        fn send<T: Send>(_: T) {}
+        send(client.raw_request("fee", json!({})));
+        send(client.fee());
+        send(client.account_info("rA", LedgerIndex::Validated));
+        send(client.request(&FeeRequest {}));
+        send(client.request_all(AccountLinesRequest::new("rA")));
+        send(client.pages(AccountTxRequest::new("rA")));
+        send(client.autofill(tx));
+        send(client.submit_and_wait("00"));
+        send(client.balances("rA", LedgerIndex::Validated));
+        send(client.verified_ledger(LedgerIndex::Validated));
+    }
+
+    /// `Arc<dyn Transport>` is a client: a transport chosen at run time.
+    #[tokio::test]
+    async fn a_dyn_transport_is_a_client() {
+        let mock = Mock::default().reply("ledger_current", json!({"ledger_current_index": 7}));
+        let client: std::sync::Arc<dyn Transport> = std::sync::Arc::new(mock);
+        assert_eq!(client.ledger_current().await.unwrap(), 7);
+        let spawned = tokio::spawn({
+            let client = client.clone();
+            async move { client.max_fee_drops() }
+        });
+        assert_eq!(spawned.await.unwrap(), DEFAULT_MAX_FEE_DROPS);
+    }
+
     /// `balances` reads XRP, trust lines and MPTs from the one ledger the
     /// first answer came from.
     #[tokio::test]
@@ -1972,7 +2322,7 @@ mod tests {
                 {"account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "balance": "-12.5", "currency": "USD", "limit": "0", "limit_peer": "100"}]}))
             .reply("account_objects", json!({"account": "rA", "account_objects": [
                 {"LedgerEntryType": "MPToken", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "MPTokenIssuanceID": issuance, "MPTAmount": "750", "Flags": 0, "OwnerNode": "0", "PreviousTxnID": "0000000000000000000000000000000000000000000000000000000000000000", "PreviousTxnLgrSeq": 1, "index": "0000000000000000000000000000000000000000000000000000000000000000"}]}));
-        let amounts = mock.balances("rA", &LedgerIndex::Validated).await.unwrap();
+        let amounts = mock.balances("rA", LedgerIndex::Validated).await.unwrap();
         assert_eq!(
             amounts,
             vec![

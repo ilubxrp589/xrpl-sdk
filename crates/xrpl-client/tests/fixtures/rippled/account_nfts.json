@@ -3,7 +3,8 @@
  "params": {
   "account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
   "ledger_index": 107831520,
-  "limit": 2
+  "limit": 2,
+  "api_version": 2
  },
  "result": {
   "account_nfts": [

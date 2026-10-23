@@ -30,8 +30,8 @@ fn real_transactions_round_trip_through_their_types() {
         let back = typed.to_value().unwrap();
         assert_eq!(back, original, "{hash}: the typed JSON differs");
         assert_eq!(
-            encode_transaction_json(&back, false).unwrap(),
-            encode_transaction_json(&original, false).unwrap(),
+            encode_transaction_json(&back).unwrap(),
+            encode_transaction_json(&original).unwrap(),
             "{hash}: the bytes differ"
         );
         assert_eq!(
@@ -118,7 +118,7 @@ fn every_type_encodes_as_rippled_signs_it() {
         let back = typed.to_value().unwrap();
         assert_eq!(back, tx_json, "{name}: the typed JSON differs");
         assert_eq!(
-            hex::encode_upper(encode_transaction_json(&back, false).unwrap()),
+            hex::encode_upper(encode_transaction_json(&back).unwrap()),
             row["tx_blob"].as_str().unwrap(),
             "{name}: our bytes differ from rippled's"
         );

@@ -15,10 +15,10 @@
 //! Each event type is checked against messages recorded from `rippled` 3.4.1
 //! on mainnet (`tests/stream_events.rs`): it must parse, and keep every field.
 
-use crate::types::{count_as_string, BookChange, BookOffer};
+use crate::types::{count_as_string, BookChange, BookOffer, PathFindResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use xrpl_core::transaction::models::Tx;
+use xrpl_core::transaction::{models::Tx, TransactionMetadata};
 
 /// One message from a subscription, or a connection event.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,8 +40,9 @@ pub enum WsEvent {
     Manifest(ManifestEvent),
     /// A peer's ledger state changed (`peer_status` stream, admin).
     PeerStatus(PeerStatusEvent),
-    /// An update of an open `path_find` request.
-    PathFind(Value),
+    /// An update of the connection's `path_find` search: the paths as the
+    /// latest ledger has them.
+    PathFind(Box<PathFindResult>),
     /// A message of a type this crate does not know, as JSON.
     Other(Value),
     /// A message of a type this crate knows that did not parse (a field a
@@ -115,7 +116,7 @@ impl WsEvent {
                     transaction_type,
                     error,
                     ..
-                } = &t.transaction
+                } = &t.tx_json
                 {
                     tracing::warn!(%transaction_type, %error, "a streamed transaction did not parse as its type");
                 }
@@ -127,7 +128,7 @@ impl WsEvent {
             "bookChanges" => typed(&message, WsEvent::BookChanges),
             "manifestReceived" => typed(&message, WsEvent::Manifest),
             "peerStatusChange" => typed(&message, WsEvent::PeerStatus),
-            "path_find" => WsEvent::PathFind(message),
+            "path_find" => typed(&message, |p: PathFindResult| WsEvent::PathFind(Box::new(p))),
             _ => WsEvent::Other(message),
         })
     }
@@ -135,6 +136,7 @@ impl WsEvent {
 
 /// `ledgerClosed`: a ledger was closed and validated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LedgerEvent {
     /// The ledger the answer is from.
     pub ledger_index: u32,
@@ -167,10 +169,14 @@ pub struct LedgerEvent {
 /// `transaction`: a transaction, typed, with its result. A proposed one
 /// (`validated: false`) is only a preliminary result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransactionEvent {
     /// The transaction, typed by its `TransactionType` (see
-    /// `xrpl_core::transaction::models`).
-    pub transaction: Tx,
+    /// `xrpl_core::transaction::models`) (`tx_json`).
+    pub tx_json: Tx,
+    /// The transaction's ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
     /// The engine result (`tesSUCCESS`, `tecPATH_DRY`, …).
     pub engine_result: String,
     /// The engine result as a number.
@@ -182,9 +188,9 @@ pub struct TransactionEvent {
     pub status: Option<String>,
     /// Whether the data is from a validated ledger (final).
     pub validated: bool,
-    /// The metadata, once validated.
+    /// What it did, once validated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub meta: Option<Value>,
+    pub meta: Option<TransactionMetadata>,
     /// The ledger the answer is from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index: Option<u32>,
@@ -232,15 +238,18 @@ impl TransactionEvent {
                 _ => false,
             }
         }
-        self.transaction
-            .to_value()
-            .is_ok_and(|tx| names(&tx, account))
-            || self.meta.as_ref().is_some_and(|m| names(m, account))
+        self.tx_json.to_value().is_ok_and(|tx| names(&tx, account))
+            || self
+                .meta
+                .as_ref()
+                .and_then(|m| serde_json::to_value(m).ok())
+                .is_some_and(|m| names(&m, account))
     }
 }
 
 /// `validationReceived`: a validator signed a ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ValidationEvent {
     /// That ledger's hash.
     pub ledger_hash: String,
@@ -298,6 +307,7 @@ pub struct ValidationEvent {
 
 /// `serverStatus`: the server's load or fee changed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerStatusEvent {
     /// `full`, `syncing`, …
     pub server_status: String,
@@ -327,6 +337,7 @@ pub struct ServerStatusEvent {
 
 /// `consensusPhase`: `"open"`, `"establish"` or `"accepted"`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ConsensusEvent {
     /// The consensus phase (`open`, `establish`, `accepted`).
     pub consensus: String,
@@ -335,6 +346,7 @@ pub struct ConsensusEvent {
 /// `bookChanges`: each order book's open, high, low, close and volume in a
 /// validated ledger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BookChangesEvent {
     /// Each book's trading.
     pub changes: Vec<BookChange>,
@@ -351,6 +363,7 @@ pub struct BookChangesEvent {
 
 /// `manifestReceived`: a validator's new manifest (key rotation).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ManifestEvent {
     /// The validator's master key.
     pub master_key: String,
@@ -369,6 +382,7 @@ pub struct ManifestEvent {
 
 /// `peerStatusChange`: a peer's ledger or state changed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PeerStatusEvent {
     /// `CLOSING_LEDGER`, `ACCEPTED_LEDGER`, `SWITCHED_LEDGER` or `LOST_SYNC`.
     pub action: String,
@@ -391,6 +405,7 @@ pub struct PeerStatusEvent {
 /// The offers of a book when subscribing with `snapshot` (`asks` and `bids`
 /// with `both`, otherwise `offers`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OrderBookSnapshot {
     /// The offers.
     #[serde(default, skip_serializing_if = "Option::is_none")]

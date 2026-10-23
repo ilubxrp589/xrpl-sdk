@@ -2,7 +2,8 @@
  "method": "account_currencies",
  "params": {
   "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
-  "ledger_index": 107831520
+  "ledger_index": 107831520,
+  "api_version": 2
  },
  "result": {
   "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",

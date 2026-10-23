@@ -380,14 +380,8 @@ fn currency_code(code: &str) -> Res<String> {
 }
 
 /// `XRP` → `{"currency":"XRP"}`; `USD.rIssuer` → `{"currency":"USD","issuer":"rIssuer"}`.
-fn asset(spec: &str) -> Res<Value> {
-    match spec.split_once('.') {
-        None if spec.eq_ignore_ascii_case("XRP") => Ok(json!({"currency": "XRP"})),
-        Some((currency, issuer)) => {
-            Ok(json!({"currency": currency_code(currency)?, "issuer": issuer}))
-        }
-        None => Err(format!("{spec}: expected XRP or CURRENCY.rIssuer").into()),
-    }
+fn asset(spec: &str) -> Res<Asset> {
+    Ok(spec.parse::<Asset>()?)
 }
 
 fn ledger_index(s: &str) -> Res<LedgerIndex> {
@@ -488,24 +482,22 @@ async fn run(cli: Cli) -> Res {
         Command::Account(cmd) => {
             let c = client()?;
             match cmd {
-                AccountCmd::Info { address } => print(&c.account_info(&address, &v).await?)?,
-                AccountCmd::Lines { address } => print(&c.account_lines_all(&address, &v).await?)?,
-                AccountCmd::Offers { address } => {
-                    print(&c.account_offers_all(&address, &v).await?)?
-                }
+                AccountCmd::Info { address } => print(&c.account_info(&address, v).await?)?,
+                AccountCmd::Lines { address } => print(&c.account_lines_all(&address, v).await?)?,
+                AccountCmd::Offers { address } => print(&c.account_offers_all(&address, v).await?)?,
                 AccountCmd::Objects { address, kind } => {
-                    print(&c.account_objects_all(&address, kind.as_deref(), &v).await?)?
+                    print(&c.account_objects_all(&address, kind.as_deref(), v).await?)?
                 }
-                AccountCmd::Nfts { address } => print(&c.account_nfts_all(&address, &v).await?)?,
+                AccountCmd::Nfts { address } => print(&c.account_nfts_all(&address, v).await?)?,
                 AccountCmd::Tx { address, limit } => print(
-                    &c.account_tx(&address, None, None, Some(limit), None, None)
+                    &c.request(&requests::AccountTxRequest::new(address).with_limit(limit))
                         .await?,
                 )?,
                 AccountCmd::Currencies { address } => {
-                    print(&c.account_currencies(&address, &v).await?)?
+                    print(&c.account_currencies(&address, v).await?)?
                 }
                 AccountCmd::Channels { address } => {
-                    print(&c.account_channels(&address, None, &v).await?)?
+                    print(&c.account_channels(&address, None, v).await?)?
                 }
             }
         }
@@ -524,7 +516,7 @@ async fn run(cli: Cli) -> Res {
             }
             TxCmd::Encode { json } => println!(
                 "{}",
-                hex::encode_upper(encode_transaction_json(&read_json(&json)?, false)?)
+                hex::encode_upper(encode_transaction_json(&read_json(&json)?)?)
             ),
             TxCmd::Sign {
                 json,
@@ -536,8 +528,8 @@ async fn run(cli: Cli) -> Res {
                 if autofill {
                     client()?.autofill(&mut tx).await?;
                 }
-                let blob = wallet.sign_and_encode(&tx)?;
-                print(&json!({"tx_blob": blob, "hash": hash_signed_tx_blob(&blob)?.to_string()}))?;
+                let signed = wallet.sign(&tx)?;
+                print(&json!({"tx_blob": signed.tx_blob, "hash": signed.hash.to_string()}))?;
             }
             TxCmd::Simulate { json } => print(&client()?.simulate(&read_json(&json)?).await?)?,
             TxCmd::Submit { blob, wait, yes } => {
@@ -576,15 +568,15 @@ async fn run(cli: Cli) -> Res {
                     tx.get("Fee").and_then(Value::as_str).unwrap_or("?"),
                 );
                 needs_yes_unless_test_network(&c, cli.network, yes).await?;
-                let blob = wallet.sign_and_encode(&tx)?;
+                let blob = wallet.sign(&tx)?.tx_blob;
                 let result = outcome(c.submit_and_wait(&blob).await)?;
                 print(
                     &json!({"hash": result.hash(), "result": result.transaction_result(), "ledger_index": result.ledger_index}),
                 )?;
             }
         },
-        Command::Ledger { ledger } => print(&client()?.ledger(&ledger_index(&ledger)?).await?)?,
-        Command::Entry { id } => print(&client()?.ledger_entry(&id, &v).await?)?,
+        Command::Ledger { ledger } => print(&client()?.ledger(ledger_index(&ledger)?).await?)?,
+        Command::Entry { id } => print(&client()?.ledger_entry(&id, v).await?)?,
         Command::Id(cmd) => {
             let id = match cmd {
                 IdCmd::Account { address } => keylet::account(&address)?,
@@ -614,10 +606,8 @@ async fn run(cli: Cli) -> Res {
             taker_pays,
             limit,
         } => {
-            let req = requests::BookOffersRequest {
-                limit: Some(limit),
-                ..requests::BookOffersRequest::new(asset(&taker_gets)?, asset(&taker_pays)?)
-            };
+            let req = requests::BookOffersRequest::new(asset(&taker_gets)?, asset(&taker_pays)?)
+                .with_limit(limit);
             print(&client()?.request(&req).await?)?;
         }
         Command::Watch { stream, count } => {

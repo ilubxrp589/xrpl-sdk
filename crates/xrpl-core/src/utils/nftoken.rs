@@ -1,8 +1,9 @@
 //! NFTokenIDs: what the 32 bytes hold, and which token a transaction minted.
 
 use crate::address::encode_account_id;
+use crate::transaction::metadata::{AffectedNode, TransactionMetadata};
 use crate::CoreError;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::HashSet;
 
 /// `tfBurnable`: the issuer may burn the token.
@@ -101,25 +102,14 @@ fn taxon_cipher(sequence: u32) -> u32 {
 /// rippled adds the answer to the metadata as `nftoken_id`; when it is absent
 /// (older servers, or metadata decoded from binary) it is worked out the way
 /// xrpl.js's `getNFTokenID` does: the token in an `NFTokenPage` after the
-/// transaction that was not in it before. `Ok(None)` if no token was added.
-///
-/// # Errors
-///
-/// [`CoreError::ValidationError`] if `meta` has no `AffectedNodes` array.
-pub fn get_nftoken_id(meta: &Value) -> Result<Option<String>, CoreError> {
-    let nodes = meta
-        .get("AffectedNodes")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            CoreError::ValidationError(
-                "expected transaction metadata (an object with AffectedNodes)".into(),
-            )
-        })?;
-    if let Some(id) = meta.get("nftoken_id").and_then(Value::as_str) {
-        return Ok(Some(id.to_string()));
+/// transaction that was not in it before. `None` if no token was added.
+pub fn get_nftoken_id(meta: &TransactionMetadata) -> Option<String> {
+    if let Some(id) = &meta.nftoken_id {
+        return Some(id.clone());
     }
-    let token_ids = |tokens: Option<&Value>| -> Vec<String> {
-        tokens
+    let token_ids = |fields: Option<&Map<String, Value>>| -> Vec<String> {
+        fields
+            .and_then(|f| f.get("NFTokens"))
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
@@ -129,22 +119,25 @@ pub fn get_nftoken_id(meta: &Value) -> Result<Option<String>, CoreError> {
     };
     let mut before = HashSet::new();
     let mut after = Vec::new();
-    for node in nodes {
-        if let Some(created) = node.get("CreatedNode") {
-            if created.get("LedgerEntryType").and_then(Value::as_str) == Some("NFTokenPage") {
-                after.extend(token_ids(created.pointer("/NewFields/NFTokens")));
-            }
-        } else if let Some(modified) = node.get("ModifiedNode") {
-            let previous = modified.pointer("/PreviousFields/NFTokens");
-            if modified.get("LedgerEntryType").and_then(Value::as_str) == Some("NFTokenPage")
-                && previous.is_some()
+    for node in &meta.affected_nodes {
+        if node.ledger_entry_type() != "NFTokenPage" {
+            continue;
+        }
+        match node {
+            AffectedNode::CreatedNode(_) => after.extend(token_ids(node.new_fields())),
+            // A page whose tokens changed (not one whose links did).
+            AffectedNode::ModifiedNode(_)
+                if node
+                    .previous_fields()
+                    .is_some_and(|p| p.contains_key("NFTokens")) =>
             {
-                before.extend(token_ids(previous));
-                after.extend(token_ids(modified.pointer("/FinalFields/NFTokens")));
+                before.extend(token_ids(node.previous_fields()));
+                after.extend(token_ids(node.final_fields()));
             }
+            _ => {}
         }
     }
-    Ok(after.into_iter().find(|id| !before.contains(id)))
+    after.into_iter().find(|id| !before.contains(id))
 }
 
 #[cfg(test)]
@@ -203,17 +196,17 @@ mod tests {
     // xrpl.js getNFTokenID.test.ts (fixtures/rippled/tx/NFTokenMint*.json).
     #[test]
     fn get_matches_xrpl_js() {
-        let mint = fixture("xrpljs/NFTokenMint.json");
+        let meta = |name: &str| -> TransactionMetadata {
+            serde_json::from_value(fixture(name)["meta"].clone()).unwrap()
+        };
         assert_eq!(
-            get_nftoken_id(&mint["meta"]).unwrap().as_deref(),
+            get_nftoken_id(&meta("xrpljs/NFTokenMint.json")).as_deref(),
             Some("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")
         );
-        let mint2 = fixture("xrpljs/NFTokenMint2.json");
         assert_eq!(
-            get_nftoken_id(&mint2["meta"]).unwrap().as_deref(),
+            get_nftoken_id(&meta("xrpljs/NFTokenMint2.json")).as_deref(),
             Some("0008125CBE4B401B2F62ED35CC67362165AA813CCA06316FFA766254000003EE")
         );
-        assert!(get_nftoken_id(&mint).is_err(), "a whole tx is not metadata");
     }
 
     // A mainnet NFTokenMint (ledger 107830973): rippled's own nftoken_id must equal
@@ -221,14 +214,24 @@ mod tests {
     #[test]
     fn mainnet_mint_agrees_with_rippled() {
         let tx = fixture("mainnet_nftoken_mint.json");
-        let mut meta = tx["meta"].clone();
-        let rippled_id = meta["nftoken_id"].as_str().unwrap().to_string();
-        assert_eq!(
-            get_nftoken_id(&meta).unwrap().as_deref(),
-            Some(rippled_id.as_str())
-        );
-        meta.as_object_mut().unwrap().remove("nftoken_id");
-        assert_eq!(get_nftoken_id(&meta).unwrap(), Some(rippled_id.clone()));
+        let mut meta: TransactionMetadata = serde_json::from_value(tx["meta"].clone()).unwrap();
+        let rippled_id = meta.nftoken_id.clone().unwrap();
+        assert_eq!(get_nftoken_id(&meta), Some(rippled_id.clone()));
+        meta.nftoken_id = None;
+        assert_eq!(get_nftoken_id(&meta), Some(rippled_id.clone()));
+        // A page whose only change is a link (a split moved NextPageMin)
+        // holds no new token, whatever it holds.
+        let mut linked = meta.clone();
+        let page = serde_json::json!({"ModifiedNode": {
+            "LedgerEntryType": "NFTokenPage",
+            "LedgerIndex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "PreviousFields": {"NextPageMin": "00"},
+            "FinalFields": {"NFTokens": [{"NFToken": {"NFTokenID": "00".repeat(32)}}]}
+        }});
+        linked
+            .affected_nodes
+            .insert(0, serde_json::from_value(page).unwrap());
+        assert_eq!(get_nftoken_id(&linked), Some(rippled_id.clone()));
         let p = parse_nftoken_id(&rippled_id).unwrap();
         let issuer = tx.get("Issuer").unwrap_or(&tx["Account"]).as_str().unwrap();
         assert_eq!(p.issuer, issuer);

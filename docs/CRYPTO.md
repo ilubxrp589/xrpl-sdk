@@ -81,8 +81,49 @@ The raw primitives are below them:
   first 32 bytes of a longer input, so a signature over one long message
   would verify for every message starting with the same 32 bytes.)
 
-`Keypair::sign` / `Keypair::verify` are deprecated: for secp256k1 they take
-a 32-byte hash, for Ed25519 a message, which is easy to get wrong.
+(`Keypair::sign` / `Keypair::verify`, which took a 32-byte hash for
+secp256k1 and a message for Ed25519, were removed in 0.8: too easy to get
+wrong.)
+
+## Keys held elsewhere: HSM, KMS, hardware wallet
+
+A key does not have to be a `Keypair` in memory. Anything that signs the
+signing data as above can sign, through one of two traits:
+
+| Trait | For | Implement |
+|---|---|---|
+| `crypto::SigningKey` | a key reached synchronously: an HSM, a hardware wallet | `public_key()`, `sign_signing_data(data)` |
+| `crypto::AsyncSigningKey` | a remote key: a cloud KMS, a signing service | `public_key()`, `async fn sign_signing_data(data)` |
+
+`Keypair` and `Wallet` implement both (every `SigningKey` is an
+`AsyncSigningKey`), and every signing function takes either:
+`sign_transaction` / `sign_transaction_async`, `sign_for_multisigning` /
+`_async`, the batch and channel-claim signers, and the SDK's `sign`,
+`sign_async` and `sign_and_submit`.
+
+What the functions do with a key's answer:
+
+- **The public key must be one the ledger takes**: 33 bytes, `0xED` and the
+  key (Ed25519), or compressed (`0x02`/`0x03` and X, secp256k1). A KMS
+  usually gives the uncompressed point (65 bytes, `0x04`, X, Y; the last 65
+  bytes of AWS KMS's `GetPublicKey` answer): `secp256k1::compressed_public_key`
+  turns it into the form the ledger takes. `AccountId::from_public_key` gives
+  the key's address.
+- **A high-S secp256k1 signature is made low-S.** ECDSA signatures come in
+  pairs (`S` and `n − S`), and `rippled` takes only the low one. A KMS that
+  signs with a random nonce returns the high one about half the time; it is
+  replaced by its low twin, which verifies the same.
+- **A remote key's signature is checked** against its public key before it
+  is used (`AsyncSigningKey` only: a check costs nothing next to a network
+  call). The usual integration mistake, signing the data where the digest
+  should be signed (secp256k1 signs SHA-512Half(data): a KMS `Sign` with
+  message type `DIGEST`), fails here with `CoreError::SigningKeyFailed`, not
+  as a refusal from the network. A `SigningKey` is not checked, so that
+  signing with a `Keypair` costs no more than before; check one of your own
+  once with `verify_signing_data`.
+
+`examples/remote_signer.rs` (in the SDK crate) signs and submits on Testnet
+through a stand-in signing service that holds the key.
 
 ## Verification
 

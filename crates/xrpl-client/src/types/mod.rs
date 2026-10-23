@@ -4,8 +4,9 @@
 //! Every response type here is checked against a response recorded from
 //! `rippled` 3.4.1 (or Clio): it must parse, and serializing it back must
 //! keep every field the server sent (`tests/rippled_responses.rs`).
-//! Responses are read as `rippled`'s API version 1, the default when a
-//! request does not name one.
+//! Responses are read as `rippled`'s API version 2, which every request asks
+//! for ([`API_VERSION`](crate::API_VERSION)). A transaction with its
+//! metadata, from any method, is a [`TxResult`].
 
 mod account;
 mod clio;
@@ -46,13 +47,13 @@ pub enum LedgerIndex {
 }
 
 impl LedgerIndex {
-    /// The JSON `rippled` takes for this ledger.
-    pub fn as_value(&self) -> serde_json::Value {
+    /// The JSON `rippled` takes for this ledger (what it serializes as).
+    pub fn to_value(self) -> serde_json::Value {
         match self {
             LedgerIndex::Validated => serde_json::Value::String("validated".into()),
             LedgerIndex::Current => serde_json::Value::String("current".into()),
             LedgerIndex::Closed => serde_json::Value::String("closed".into()),
-            LedgerIndex::Index(n) => serde_json::Value::Number((*n).into()),
+            LedgerIndex::Index(n) => serde_json::Value::Number(n.into()),
         }
     }
 }

@@ -3,7 +3,8 @@
  "params": {
   "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
   "ledger_index": 107831520,
-  "signer_lists": true
+  "signer_lists": true,
+  "api_version": 2
  },
  "result": {
   "account_data": {
@@ -16,178 +17,7 @@
    "PreviousTxnID": "677DE150B130A24586B00006F16A0B146B1D5C80B196ADDD35047555F2E1B05E",
    "PreviousTxnLgrSeq": 107831359,
    "Sequence": 89926490,
-   "index": "383BB05FBB110F9BE530B75C44DF100F86C5600F0F146593D3E7133FD1C99FF2",
-   "signer_lists": [
-    {
-     "Flags": 65536,
-     "LedgerEntryType": "SignerList",
-     "Owner": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
-     "OwnerNode": "ea1",
-     "PreviousTxnID": "539383B26FA8DA4EACC3A1A6990203A68B252F7871FD4CE9DEEB2865A35B1C95",
-     "PreviousTxnLgrSeq": 106089384,
-     "SignerEntries": [
-      {
-       "SignerEntry": {
-        "Account": "r4atrYAjm91GTB4qsDARjQQJPTi5svSEm",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rkRFoAFGRGBsarkzhiA8kGzvyVHnZR1Co",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rhogmBAzXLHhYvqn6iwZZdukbMwj1m6k36",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rnw4p9U352SWuMquc9MxgoRD319THHQaWY",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rnGL7M29kbXv4h2Lbnx87uxrTbD762gXug",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "raVEUzHFjwAy4HHH4ig6JmHB65SHL5nRe2",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rfwUW9ff6zxcUdeDgY25aYWVHgYqhwCpTP",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rfExtNyAg5gsmKakzZPQaowS8kPWmX4f1Z",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "r3DucgFuQDSRyJ66hUpFx6W9s6wQnCdiUf",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "r3WdRnCjsnNpHct8Tims5cimLMKVD34fcb",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "r9mGCUy43pxfstc24yd4Mq8hS6eHQS9631",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rwJ7arqSfCLPqFyv63hk1xDfYyfNQ8S5FA",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rwFESSqngExPayH5HN9DQ6QKjgsfUujkHv",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rBpzqzJrNxthrBfLcGfJrkkCNq1tz6XKup",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rUyCpgTR9HLrTQ4ss2aVspF3rV5vSfSytt",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rNRkUBZGPKZxF23BcVUhw99UB9445QZFau",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rGHNvJHHHQAqTxCGJi829E6teKRZrVMx7N",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rH3GmSoCFgTMk4pMgLmjdA14ti5iY37D22",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rJpKdQU6D6ZHuNXgQaEwcBDbdTaTpHEwAc",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rJ2YSzpuNnT9QgBzesPt5KwYbyCNRwd9Zd",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rKWvpdUUGgoRiFf7b7rQKyngjpXSqsh6RG",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rMMqCGdLevMMX1rr31AV2zcCn878SzG2k3",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "r48mivRxDNerUcjqs3sdLixL2fEzgrGgxB",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rPi8fRYg8HyXGBiMsagsQLZoBo91TdAqQE",
-        "SignerWeight": 24
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rQNbmpvaaFjPULxWZTNz5hLaPDmJvhtCJS",
-        "SignerWeight": 1
-       }
-      },
-      {
-       "SignerEntry": {
-        "Account": "rQLhRtSztTCptVjEyAb4ZSckQDkbhBHJ8v",
-        "SignerWeight": 1
-       }
-      }
-     ],
-     "SignerListID": 0,
-     "SignerQuorum": 25,
-     "index": "3AEA3BEAA0ADEEC451EA8DB52C561F20CA01DC97452A5419A57F57316B5536E5"
-    }
-   ]
+   "index": "383BB05FBB110F9BE530B75C44DF100F86C5600F0F146593D3E7133FD1C99FF2"
   },
   "account_flags": {
    "allowTrustLineClawback": true,
@@ -208,6 +38,177 @@
   },
   "ledger_hash": "DECB05A6C02067FF57770846FD1E86F9199F294738148C3F5D1875AF14BBF9DA",
   "ledger_index": 107831520,
+  "signer_lists": [
+   {
+    "Flags": 65536,
+    "LedgerEntryType": "SignerList",
+    "Owner": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+    "OwnerNode": "ea1",
+    "PreviousTxnID": "539383B26FA8DA4EACC3A1A6990203A68B252F7871FD4CE9DEEB2865A35B1C95",
+    "PreviousTxnLgrSeq": 106089384,
+    "SignerEntries": [
+     {
+      "SignerEntry": {
+       "Account": "r4atrYAjm91GTB4qsDARjQQJPTi5svSEm",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rkRFoAFGRGBsarkzhiA8kGzvyVHnZR1Co",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rhogmBAzXLHhYvqn6iwZZdukbMwj1m6k36",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rnw4p9U352SWuMquc9MxgoRD319THHQaWY",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rnGL7M29kbXv4h2Lbnx87uxrTbD762gXug",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "raVEUzHFjwAy4HHH4ig6JmHB65SHL5nRe2",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rfwUW9ff6zxcUdeDgY25aYWVHgYqhwCpTP",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rfExtNyAg5gsmKakzZPQaowS8kPWmX4f1Z",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "r3DucgFuQDSRyJ66hUpFx6W9s6wQnCdiUf",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "r3WdRnCjsnNpHct8Tims5cimLMKVD34fcb",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "r9mGCUy43pxfstc24yd4Mq8hS6eHQS9631",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rwJ7arqSfCLPqFyv63hk1xDfYyfNQ8S5FA",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rwFESSqngExPayH5HN9DQ6QKjgsfUujkHv",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rBpzqzJrNxthrBfLcGfJrkkCNq1tz6XKup",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rUyCpgTR9HLrTQ4ss2aVspF3rV5vSfSytt",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rNRkUBZGPKZxF23BcVUhw99UB9445QZFau",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rGHNvJHHHQAqTxCGJi829E6teKRZrVMx7N",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rH3GmSoCFgTMk4pMgLmjdA14ti5iY37D22",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rJpKdQU6D6ZHuNXgQaEwcBDbdTaTpHEwAc",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rJ2YSzpuNnT9QgBzesPt5KwYbyCNRwd9Zd",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rKWvpdUUGgoRiFf7b7rQKyngjpXSqsh6RG",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rMMqCGdLevMMX1rr31AV2zcCn878SzG2k3",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "r48mivRxDNerUcjqs3sdLixL2fEzgrGgxB",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rPi8fRYg8HyXGBiMsagsQLZoBo91TdAqQE",
+       "SignerWeight": 24
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rQNbmpvaaFjPULxWZTNz5hLaPDmJvhtCJS",
+       "SignerWeight": 1
+      }
+     },
+     {
+      "SignerEntry": {
+       "Account": "rQLhRtSztTCptVjEyAb4ZSckQDkbhBHJ8v",
+       "SignerWeight": 1
+      }
+     }
+    ],
+    "SignerListID": 0,
+    "SignerQuorum": 25,
+    "index": "3AEA3BEAA0ADEEC451EA8DB52C561F20CA01DC97452A5419A57F57316B5536E5"
+   }
+  ],
   "status": "success",
   "validated": true
  }

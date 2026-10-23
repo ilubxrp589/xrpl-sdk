@@ -10,8 +10,9 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use serde_json::json;
-use xrpl_sdk::models::{AMMCreate, AccountSet, OfferCreate, Payment, TrustSet};
+use xrpl_sdk::models::{
+    AMMCreate, AccountSet, AccountSetFlag, OfferCreate, OfferCreateFlags, Payment, TrustSet,
+};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -26,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The issuer's token must ripple (DefaultRipple) to sit in a pool.
     let mut settings = AccountSet::new(issuer.classic_address());
-    settings.set_flag = Some(AccountSet::ASF_DEFAULT_RIPPLE);
+    settings.set_flag = Some(u32::from(AccountSetFlag::DefaultRipple));
     send(&client, &issuer, settings.to_json()?).await?;
     for holder in [&provider, &trader] {
         let mut line = TrustSet::new(holder.classic_address());
@@ -57,10 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .to_json()?;
     send(&client, &provider, tx).await?;
 
-    let (xrp, token) = (
-        json!({"currency": "XRP"}),
-        json!({"currency": "USD", "issuer": issuer.classic_address()}),
-    );
+    let (xrp, token) = (Asset::xrp(), Asset::token("USD", issuer.classic_address())?);
     let before = client.amm_info(&xrp, &token).await?.amm;
     println!(
         "  pool: {} and {}, fee {}",
@@ -71,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. The trader buys 10 USD for at most 5 XRP; the pool fills it.
     let mut buy = OfferCreate::new(trader.classic_address(), usd("10")?, Amount::Xrp(5_000_000));
-    buy.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
+    buy.common.flags = Some(u32::from(OfferCreateFlags::IMMEDIATE_OR_CANCEL));
     let trade = send(&client, &trader, buy.to_json()?).await?;
     for account in utils::get_balance_changes(trade.meta.as_ref().ok_or("no metadata")?)? {
         if account.account == trader.classic_address() {
@@ -100,9 +98,9 @@ fn show(amount: &Option<Amount>) -> String {
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

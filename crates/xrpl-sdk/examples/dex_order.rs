@@ -9,8 +9,7 @@
     reason = "reading serde_json values with [] gives Null, never a panic"
 )]
 
-use serde_json::json;
-use xrpl_sdk::models::{OfferCancel, OfferCreate, Payment, TrustSet};
+use xrpl_sdk::models::{OfferCancel, OfferCreate, OfferCreateFlags, Payment, TrustSet};
 use xrpl_sdk::*;
 
 #[tokio::main]
@@ -45,26 +44,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let order = OfferCreate::new(maker.classic_address(), Amount::Xrp(25_000_000), usd("50")?);
     send(&client, &maker, order.to_json()?).await?;
 
-    // 2. The order book: offers selling USD for XRP, best first.
-    let book = client
-        .book_offers(
-            &json!({"currency": "XRP"}),
-            &json!({"currency": "USD", "issuer": issuer.classic_address()}),
-        )
-        .await?;
-    for offer in &book.offers {
+    // 2. The USD/XRP order book, both sides from one ledger, best first.
+    let usd_asset = Asset::token("USD", issuer.classic_address())?;
+    let book = client.order_book(&usd_asset, &Asset::xrp(), 10).await?;
+    for offer in &book.asks {
         println!(
-            "  book: {} sells {} for {} (quality {})",
+            "  ask: {} sells {} for {} ({} XRP per USD)",
             offer.account,
             offer.taker_gets,
             offer.taker_pays,
-            offer.quality.as_deref().unwrap_or("?")
+            OrderBook::ask_price(offer)
         );
     }
+    println!(
+        "  best ask {:?}, best bid {:?} (XRP per USD), ledger {}",
+        book.best_ask(),
+        book.best_bid(),
+        book.ledger_index
+    );
 
     // 3. The taker buys 20 USD for 10 XRP, now or not at all.
     let mut buy = OfferCreate::new(taker.classic_address(), usd("20")?, Amount::Xrp(10_000_000));
-    buy.common.flags = Some(OfferCreate::TF_IMMEDIATE_OR_CANCEL);
+    buy.common.flags = Some(u32::from(OfferCreateFlags::IMMEDIATE_OR_CANCEL));
     let trade = send(&client, &taker, buy.to_json()?).await?;
     for account in utils::get_balance_changes(trade.meta.as_ref().ok_or("no metadata")?)? {
         let changes: Vec<String> = account
@@ -77,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. The maker cancels the 30 USD left.
     let open = client
-        .account_offers(maker.classic_address(), &LedgerIndex::Validated)
+        .account_offers(maker.classic_address(), LedgerIndex::Validated)
         .await?;
     println!(
         "  the maker's offer still sells {}",
@@ -96,9 +97,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

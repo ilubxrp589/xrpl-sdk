@@ -1,8 +1,8 @@
 #![no_main]
 //! The string utilities and the exact-decimal arithmetic never panic.
 use libfuzzer_sys::fuzz_target;
-use serde_json::Value;
-use xrpl_core::address::{decode_x_address, x_address_to_classic};
+use xrpl_core::address::decode_x_address;
+use xrpl_core::transaction::TransactionMetadata;
 use xrpl_core::types::Amount;
 use xrpl_core::utils;
 
@@ -16,8 +16,10 @@ fuzz_target!(|data: &[u8]| {
         let _ = utils::rates::decimal_to_transfer_rate(s);
         let _ = utils::rates::percent_to_quality(s);
         let _ = utils::rates::decimal_to_quality(s);
-        let _ = decode_x_address(s);
-        let _ = x_address_to_classic(s);
+        if let Ok(decoded) = decode_x_address(s) {
+            let _ = decoded.classic_address();
+            assert_eq!(decode_x_address(&decoded.to_string()).ok(), Some(decoded));
+        }
         let mut parts = s.splitn(3, '|');
         if let (Some(v), Some(c), Some(i)) = (parts.next(), parts.next(), parts.next()) {
             if let Ok(a) = Amount::token(v, c, i) {
@@ -25,9 +27,10 @@ fuzz_target!(|data: &[u8]| {
             }
         }
     }
-    if let Ok(meta) = serde_json::from_slice::<Value>(data) {
+    if let Ok(meta) = serde_json::from_slice::<TransactionMetadata>(data) {
         let _ = utils::get_balance_changes(&meta);
         let _ = utils::get_nftoken_id(&meta);
+        let _ = utils::delivered_amount(&meta);
     }
     if data.len() >= 8 {
         let n = u64::from_le_bytes([

@@ -27,6 +27,23 @@ impl AccountId {
         Self(bytes)
     }
 
+    /// The account a public key is the master key of: RIPEMD-160 of
+    /// SHA-256 of the key (33 bytes, as `SigningPubKey` holds it). For a key
+    /// that lives in a KMS or HSM, this is its address.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed};
+    /// use xrpl_core::types::AccountId;
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// let account = AccountId::from_public_key(keys.public_key());
+    /// assert_eq!(account.to_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    pub fn from_public_key(public_key: &[u8]) -> Self {
+        Self(crate::crypto::signing::public_key_to_account_id(public_key))
+    }
+
     /// The 20 bytes.
     pub fn as_bytes(&self) -> &[u8; 20] {
         &self.0

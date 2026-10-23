@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-sdk"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.88"
 description = "Rust SDK for the XRP Ledger (XRPL): wallets, signing, multisign, autofill and submit, HTTP and WebSocket clients, typed ledger objects, hashes, faucet; checked against rippled"
@@ -16,25 +16,108 @@ categories = ["cryptography::cryptocurrencies", "api-bindings", "network-program
 name = "xrpl_sdk"
 
 [dependencies]
-xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.7" }
-xrpl-client = { package = "halcyon-xrpl-client", path = "../xrpl-client", version = "0.7" }
-serde = { workspace = true }
+xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.8" }
+xrpl-client = { package = "halcyon-xrpl-client", path = "../xrpl-client", version = "0.8", default-features = false }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
 hex = { workspace = true }
 zeroize = { workspace = true }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
 [features]
-default = ["http"]
+default = ["http", "ws"]
+# The HTTP client, the faucet and BlockingClient (halcyon-xrpl-client's `http`).
 http = ["xrpl-client/http"]
+# The WebSocket client (halcyon-xrpl-client's `ws`).
 ws = ["xrpl-client/ws"]
-full = ["http", "ws"]
-live-tests = ["xrpl-client/live-tests"]
+# The browser / Node.js build (wasm32-unknown-unknown).
+wasm = ["xrpl-core/wasm", "xrpl-client/wasm"]
 
 [lints]
 workspace = true
 
 [package.metadata.docs.rs]
-features = ["full"]
+features = ["http", "ws"]
 rustdoc-args = ["--cfg", "docsrs"]
+
+# The cookbook talks to Testnet (or mainnet) over HTTP, two over WebSocket.
+[[example]]
+name = "watch_streams"
+required-features = ["ws"]
+
+[[example]]
+name = "subscribe_ledger"
+required-features = ["ws"]
+
+[[example]]
+name = "amm"
+required-features = ["http"]
+
+[[example]]
+name = "batch"
+required-features = ["http"]
+
+[[example]]
+name = "blocking"
+required-features = ["http"]
+
+[[example]]
+name = "check_balance"
+required-features = ["http"]
+
+[[example]]
+name = "checks"
+required-features = ["http"]
+
+[[example]]
+name = "dex_order"
+required-features = ["http"]
+
+[[example]]
+name = "escrow"
+required-features = ["http"]
+
+[[example]]
+name = "issue_token"
+required-features = ["http"]
+
+[[example]]
+name = "mint_nft"
+required-features = ["http"]
+
+[[example]]
+name = "mpt"
+required-features = ["http"]
+
+[[example]]
+name = "multisign"
+required-features = ["http"]
+
+[[example]]
+name = "nft_marketplace"
+required-features = ["http"]
+
+[[example]]
+name = "payment_channel"
+required-features = ["http"]
+
+[[example]]
+name = "place_offer"
+required-features = ["http"]
+
+[[example]]
+name = "remote_signer"
+required-features = ["http"]
+
+[[example]]
+name = "send_payment"
+required-features = ["http"]
+
+[[example]]
+name = "testnet_quickstart"
+required-features = ["http"]
+
+[[test]]
+name = "live_testnet"
+required-features = ["http"]

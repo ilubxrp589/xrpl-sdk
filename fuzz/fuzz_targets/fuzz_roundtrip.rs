@@ -5,7 +5,7 @@ use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(json) = decode_transaction_binary(data) {
-        let bytes = encode_transaction_json(&json, false)
+        let bytes = encode_transaction_json(&json)
             .unwrap_or_else(|e| panic!("decoded but does not encode: {e}\n{json}"));
         let again = decode_transaction_binary(&bytes)
             .unwrap_or_else(|e| panic!("re-encoded bytes do not decode: {e}\n{json}"));

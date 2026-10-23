@@ -221,17 +221,19 @@ refused without the sequence).
   fewest-field and most-field sample of each of 15 types) parse into their
   typed variant and serialize back to exactly `rippled`'s JSON.
 - **Responses.** Every typed response is checked against a response recorded
-  from a real server: 44 methods from `rippled` 3.4.1 on mainnet, and Clio
-  (`s2.ripple.com`) for the Clio-only methods. Each must parse into its
+  from a real server in `rippled`'s API version 2 (the version every request
+  asks for): 44 methods from `rippled` 3.4.1 on mainnet, and Clio
+  (`s2.ripple.com`) for the Clio-only methods, re-recorded with
+  `crates/xrpl-client/scripts/record_fixtures.py`. Each must parse into its
   request's response type and serialize back with every field the server
   sent. A field the types do not model fails the test instead of vanishing.
-- **Streams.** 9 recorded stream messages (ledger, transactions, proposed
+- **Streams.** 9 recorded stream kinds, API version 2 (ledger, transactions, proposed
   transactions, validations, book changes, order books, server, peer status,
   consensus) each become their own typed event and keep every field.
 
 ## 5. Live, on the XRPL Testnet
 
-`cargo test -p halcyon-xrpl-sdk --features live-tests` funds two wallets from
+`RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet` funds two wallets from
 the Testnet faucet and submits one transaction of each kind that creates a
 ledger entry. The following are checked against what the network did:
 
@@ -261,24 +263,27 @@ be refreshed from a live network.
 
 ## 6. Fuzzing
 
-Eight libFuzzer targets (`fuzz/`) run with AddressSanitizer, from a corpus
+Nine libFuzzer targets (`fuzz/`) run with AddressSanitizer, from a corpus
 seeded with all the real data above (`fuzz/seed_corpus.py`). They require:
 
-- the decoder, encoder, amount codec, address and seed parsers, hashes, Batch
-  helpers, typed models and utilities never panic on any input;
+- the decoder, encoder, amount codec, address and seed parsers, key backup
+  readers (secret numbers, RFC 1751 words, BIP-39 phrases, derivation
+  paths), hashes, Batch helpers, typed models and utilities never panic on
+  any input;
 - a typed transaction writes back what it read;
 - whatever decodes encodes again, and decoding that gives the same JSON.
 
-| Target | Inputs in the final run (2026-10-22, 2 minutes each) |
+| Target | Inputs in the final run before 0.8.0 (2026-10-23, 2 minutes each) |
 |---|---|
-| `fuzz_decode` | 2,554,663 |
-| `fuzz_roundtrip` | 1,984,477, after 13,976,235 in a 15-minute run |
-| `fuzz_encode` | 4,559,482 |
-| `fuzz_models` | 743,248 |
-| `fuzz_hashes` | 1,088,519 |
-| `fuzz_utils` | 1,681,292 |
-| `fuzz_amount` | 58,048,086 |
-| `fuzz_address` | 1,245,231 |
+| `fuzz_decode` | 2,309,283 |
+| `fuzz_roundtrip` | 2,460,102 (13,976,235 in a 15-minute run on 2026-10-22) |
+| `fuzz_encode` | 6,050,744 |
+| `fuzz_models` | 1,056,847 |
+| `fuzz_hashes` | 1,009,642 |
+| `fuzz_utils` | 2,427,346 |
+| `fuzz_amount` | 54,556,683 |
+| `fuzz_address` | 19,365,226 |
+| `fuzz_keys` | 562,380 |
 
 None of them found anything in that run, with AddressSanitizer on. Earlier
 runs found the six issues below, each fixed before the next run.
@@ -344,8 +349,6 @@ The rest are places this report makes no claim.
   precision.
 - **Server-side computation.** Path finding, fee escalation and consensus are
   answered by the server, not computed by the SDK.
-- **API version 2.** Responses are typed for `rippled`'s API version 1, the
-  default when a request names none.
 - **XRP above 10^17 drops (deliberate difference).** `rippled`'s JSON parser refuses XRP amounts
   above the total supply. The codec writes them, up to 2^61 - 1 drops,
   because mainnet ledger entries hold such amounts (an offer asking ten times
@@ -386,7 +389,7 @@ The rest are places this report makes no claim.
 ```bash
 cargo test --workspace                                    # all offline checks
 cargo test -p halcyon-xrpl-core --test codec_fixtures -- --nocapture   # with counts
-cargo test -p halcyon-xrpl-sdk --features live-tests -- --nocapture    # Testnet, ~2 minutes
+RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet -- --nocapture    # Testnet, ~2 minutes
 
 python3 fuzz/seed_corpus.py                               # fuzzing (nightly Rust)
 cargo +nightly fuzz run fuzz_roundtrip -- -max_total_time=120

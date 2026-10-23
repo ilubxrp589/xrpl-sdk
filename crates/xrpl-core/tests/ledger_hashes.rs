@@ -1,6 +1,6 @@
 //! Ledger hashes against a real ledger: mainnet ledger 107852951 (34
-//! transactions), recorded from `rippled` 3.4.1's `ledger` method, both as
-//! binary with the transactions expanded and as JSON.
+//! transactions), recorded from `rippled` 3.4.1's `ledger` method (API
+//! version 2), both as binary with the transactions expanded and as JSON.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
@@ -53,14 +53,22 @@ fn a_missing_or_changed_transaction_is_caught() {
 
     // Changed metadata changes the tree too.
     let mut answer = fixture()["binary"].clone();
-    let meta = answer["ledger"]["transactions"][0]["meta"]
+    let meta = answer["ledger"]["transactions"][0]["meta_blob"]
         .as_str()
         .unwrap()
         .to_string();
     let last = if meta.ends_with('0') { "1" } else { "0" };
-    answer["ledger"]["transactions"][0]["meta"] =
+    answer["ledger"]["transactions"][0]["meta_blob"] =
         Value::from(format!("{}{last}", &meta[..meta.len() - 1]));
     assert!(verify_ledger_response(&answer).is_err());
+
+    // A transaction that is not the one its hash names.
+    let mut answer = fixture()["binary"].clone();
+    answer["ledger"]["transactions"][0]["hash"] = Value::from("11".repeat(32));
+    assert!(verify_ledger_response(&answer)
+        .unwrap_err()
+        .to_string()
+        .contains("written beside it"));
 
     // A header that does not hash to the ledger_hash named.
     let mut answer = fixture()["binary"].clone();

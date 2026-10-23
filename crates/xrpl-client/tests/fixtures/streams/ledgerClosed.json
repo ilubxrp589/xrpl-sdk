@@ -1,26 +1,26 @@
 [
  {
   "fee_base": 10,
-  "ledger_hash": "48F4DCD40C5BC8AE9B3982C585780CB44D62AFC98718BE24C7323DB57E277D34",
-  "ledger_index": 107832394,
-  "ledger_time": 846007770,
+  "ledger_hash": "5514A59D56A2BD2E8EC70C4229586AD1866C189B6945C371DF06AAB8FF6C83D5",
+  "ledger_index": 107856091,
+  "ledger_time": 846100681,
   "network_id": 0,
   "reserve_base": 1000000,
   "reserve_inc": 200000,
-  "txn_count": 437,
+  "txn_count": 377,
   "type": "ledgerClosed",
-  "validated_ledgers": "107436647-107832394"
+  "validated_ledgers": "107436647-107856091"
  },
  {
   "fee_base": 10,
-  "ledger_hash": "F16D64C8708238082670E3D1782FF3F79FADE82C2BE1A5C7DC35E107984F9CA4",
-  "ledger_index": 107832395,
-  "ledger_time": 846007771,
+  "ledger_hash": "4A98DEE7F8D18C9865761A37D28B14E18C7856BB5E31623C7BBAA879793F0B7C",
+  "ledger_index": 107856092,
+  "ledger_time": 846100690,
   "network_id": 0,
   "reserve_base": 1000000,
   "reserve_inc": 200000,
-  "txn_count": 72,
+  "txn_count": 143,
   "type": "ledgerClosed",
-  "validated_ledgers": "107436647-107832395"
+  "validated_ledgers": "107436647-107856092"
  }
 ]

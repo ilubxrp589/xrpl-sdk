@@ -2,7 +2,8 @@
 //! redeem XRP from it later (rippled's `channel_authorize`), and how anyone
 //! checks one (`channel_verify`, or PaymentChannelClaim's `Signature`).
 
-use super::signing::{verify_signing_data, Keypair};
+use super::signing::verify_signing_data;
+use super::signing_key::SigningKey;
 use crate::types::Hash256;
 use crate::CoreError;
 
@@ -20,19 +21,39 @@ fn claim_data(channel_id: &str, amount_drops: u64) -> Result<Vec<u8>, CoreError>
 }
 
 /// Sign a claim for `amount_drops` (the total the destination may have taken
-/// from the channel, not an increment) with the channel's public key's pair.
-/// Returns the signature in hex, for PaymentChannelClaim's `Signature`.
+/// from the channel, not an increment) with `key`, the channel's key (a
+/// [`Keypair`](super::Keypair) or any [`SigningKey`]). Returns the signature
+/// in hex, for PaymentChannelClaim's `Signature`.
 ///
 /// # Errors
 ///
 /// [`CoreError::InvalidHex`] if `channel_id` is not 32 bytes in hex;
-/// otherwise only as [`Keypair::sign_signing_data`].
-pub fn sign_payment_channel_claim(
+/// otherwise only the key's own errors ([`CoreError::SigningKeyFailed`] for
+/// a public key the XRP Ledger does not take).
+pub fn sign_payment_channel_claim<K: SigningKey + ?Sized>(
     channel_id: &str,
     amount_drops: u64,
-    keypair: &Keypair,
+    key: &K,
 ) -> Result<String, CoreError> {
-    let signature = keypair.sign_signing_data(&claim_data(channel_id, amount_drops)?)?;
+    let signature = super::signing_key::sign_with(key, &claim_data(channel_id, amount_drops)?)?;
+    Ok(hex::encode_upper(signature))
+}
+
+/// [`sign_payment_channel_claim`] with an
+/// [`AsyncSigningKey`](super::AsyncSigningKey) (a remote key), whose
+/// signature is checked against its public key.
+///
+/// # Errors
+///
+/// As [`sign_payment_channel_claim`], and [`CoreError::SigningKeyFailed`]
+/// for a signature that does not verify.
+pub async fn sign_payment_channel_claim_async<K: super::AsyncSigningKey + ?Sized>(
+    channel_id: &str,
+    amount_drops: u64,
+    key: &K,
+) -> Result<String, CoreError> {
+    let data = claim_data(channel_id, amount_drops)?;
+    let signature = super::signing_key::sign_with_async(key, &data).await?;
     Ok(hex::encode_upper(signature))
 }
 
@@ -61,6 +82,7 @@ pub fn verify_payment_channel_claim(
 mod tests {
     use super::*;
     use crate::address::KeyType;
+    use crate::crypto::Keypair;
     use crate::crypto::Seed;
 
     const CHANNEL: &str = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";

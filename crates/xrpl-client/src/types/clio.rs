@@ -4,12 +4,13 @@
 //! `s2.ripple.com` (mainnet) and `clio.altnet.rippletest.net` (Testnet); a
 //! `rippled` server answers these with an `unknownCmd` error.
 
-use super::AccountTxEntry;
+use super::TxResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// One NFT as Clio describes it (`nft_info`, and each entry of `nfts_by_issuer`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NftInfo {
     /// The NFT's ID.
     pub nft_id: String,
@@ -38,6 +39,7 @@ pub struct NftInfo {
 /// [`nft_info`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nft_info):
 /// an NFT, including burned ones.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NftInfoResult {
     /// The NFT.
     #[serde(flatten)]
@@ -50,11 +52,12 @@ pub struct NftInfoResult {
 /// [`nft_history`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nft_history):
 /// every transaction that touched an NFT.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NftHistoryResult {
     /// The NFT's ID.
     pub nft_id: String,
     /// The transactions.
-    pub transactions: Vec<AccountTxEntry>,
+    pub transactions: Vec<TxResult>,
     /// The earliest ledger searched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger_index_min: Option<i64>,
@@ -75,6 +78,7 @@ pub struct NftHistoryResult {
 /// [`nfts_by_issuer`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nfts_by_issuer):
 /// every NFT an account issued.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NftsByIssuerResult {
     /// The issuer (`Issuer`).
     pub issuer: String,
@@ -100,6 +104,7 @@ pub struct NftsByIssuerResult {
 /// [`mpt_holders`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/mpt_holders):
 /// the holders of an MPT issuance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MptHoldersResult {
     /// The MPT issuance's ID.
     pub mpt_issuance_id: String,
@@ -121,6 +126,7 @@ pub struct MptHoldersResult {
 
 /// One holder's `MPToken`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MptHolder {
     /// The holder.
     pub account: String,

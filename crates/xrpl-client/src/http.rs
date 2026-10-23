@@ -3,7 +3,7 @@
 //! headers (an API key), the user agent, the fee cap and the
 //! [`RetryPolicy`] with [`XrplHttpClient::builder`].
 
-use crate::client::Client;
+use crate::client::Transport;
 use crate::error::ClientError;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -136,7 +136,7 @@ impl HttpClientBuilder {
         self
     }
 
-    /// The most [`Client::autofill`] sets as a `Fee` (default
+    /// The most [`Client::autofill`](crate::Client::autofill) sets as a `Fee` (default
     /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     #[must_use]
     pub fn max_fee_drops(mut self, drops: u64) -> Self {
@@ -156,13 +156,13 @@ impl HttpClientBuilder {
     ///
     /// # Errors
     ///
-    /// [`ClientError::UnexpectedResponse`] for a header name or value HTTP
-    /// does not allow; [`ClientError::Http`] if the HTTP stack cannot start.
+    /// [`ClientError::InvalidRequest`] for a header name or value HTTP does
+    /// not allow; [`ClientError::Transport`] (`Setup`) if the HTTP stack
+    /// cannot start.
     pub fn build(self) -> Result<XrplHttpClient, ClientError> {
         let mut headers = reqwest::header::HeaderMap::new();
         for (name, value) in &self.headers {
-            let bad =
-                || ClientError::UnexpectedResponse(format!("header {name:?} is not valid HTTP"));
+            let bad = || ClientError::InvalidRequest(format!("header {name:?} is not valid HTTP"));
             let header_name =
                 reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|_| bad())?;
             let mut header_value =
@@ -176,12 +176,14 @@ impl HttpClientBuilder {
             .timeout(self.timeout)
             .connect_timeout(self.connect_timeout)
             .user_agent(self.user_agent.clone());
-        let inner = builder.build().map_err(http_error)?;
+        let timeout = self.timeout;
+        let inner = builder.build().map_err(|e| http_error(e, timeout))?;
         Ok(XrplHttpClient {
             base_url: self.url.trim_end_matches('/').to_string(),
             inner,
             max_fee_drops: self.max_fee_drops,
             retry: self.retry,
+            timeout: self.timeout,
         })
     }
 }
@@ -203,15 +205,49 @@ pub(crate) fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Durati
         .map(Duration::from_secs)
 }
 
-/// A transport error without the request URL, which may carry an API key.
-pub(crate) fn http_error(e: reqwest::Error) -> ClientError {
-    ClientError::Http(e.without_url())
+/// A transport error without the request URL, which may carry an API key: a
+/// timeout is [`ClientError::Timeout`] of `timeout`, the rest
+/// [`ClientError::Transport`].
+pub(crate) fn http_error(e: reqwest::Error, timeout: Duration) -> ClientError {
+    use crate::error::TransportErrorKind as Kind;
+    if e.is_timeout() {
+        return ClientError::Timeout(timeout);
+    }
+    // The browser's fetch does not say whether connecting failed.
+    #[cfg(not(target_arch = "wasm32"))]
+    let connect = e.is_connect();
+    #[cfg(target_arch = "wasm32")]
+    let connect = false;
+    let kind = if connect {
+        Kind::Connect
+    } else if e.is_body() || e.is_decode() {
+        Kind::Body
+    } else if e.is_redirect() {
+        Kind::Redirect
+    } else if e.is_builder() {
+        Kind::Setup
+    } else if e.is_request() {
+        Kind::Request
+    } else {
+        Kind::Other
+    };
+    let e = e.without_url();
+    // The whole chain: reqwest's own message is short ("error sending request").
+    let mut message = e.to_string();
+    let mut cause = std::error::Error::source(&e);
+    while let Some(c) = cause {
+        message.push_str(": ");
+        message.push_str(&c.to_string());
+        cause = c.source();
+    }
+    ClientError::transport(kind, message)
 }
 
 /// The body, as text, refused past `max` bytes.
 pub(crate) async fn read_capped(
     response: reqwest::Response,
     max: usize,
+    timeout: Duration,
 ) -> Result<String, ClientError> {
     let too_big = || ClientError::UnexpectedResponse(format!("a response over {max} bytes"));
     if response
@@ -224,7 +260,7 @@ pub(crate) async fn read_capped(
     let body = {
         let mut response = response;
         let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(http_error)? {
+        while let Some(chunk) = response.chunk().await.map_err(|e| http_error(e, timeout))? {
             if body.len() + chunk.len() > max {
                 return Err(too_big());
             }
@@ -235,7 +271,11 @@ pub(crate) async fn read_capped(
     // The browser's fetch has already read the body; refuse it all the same.
     #[cfg(target_arch = "wasm32")]
     let body = {
-        let body = response.bytes().await.map_err(http_error)?.to_vec();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| http_error(e, timeout))?
+            .to_vec();
         if body.len() > max {
             return Err(too_big());
         }
@@ -253,6 +293,7 @@ pub struct XrplHttpClient {
     inner: reqwest::Client,
     max_fee_drops: u64,
     retry: RetryPolicy,
+    timeout: Duration,
 }
 
 impl std::fmt::Debug for XrplHttpClient {
@@ -273,8 +314,8 @@ impl XrplHttpClient {
     ///
     /// # Errors
     ///
-    /// [`ClientError::Http`] if the HTTP stack cannot start. The URL is not
-    /// checked here: a bad one fails the first request.
+    /// [`ClientError::Transport`] (`Setup`) if the HTTP stack cannot start.
+    /// The URL is not checked here: a bad one fails the first request.
     pub fn new(url: &str) -> Result<Self, ClientError> {
         Self::builder(url).build()
     }
@@ -293,7 +334,7 @@ impl XrplHttpClient {
         }
     }
 
-    /// The same client with `drops` as the most [`Client::autofill`] sets as
+    /// The same client with `drops` as the most [`Client::autofill`](crate::Client::autofill) sets as
     /// a `Fee` (default [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
     pub fn with_max_fee_drops(mut self, drops: u64) -> Self {
         self.max_fee_drops = drops;
@@ -301,42 +342,48 @@ impl XrplHttpClient {
     }
 }
 
-impl Client for XrplHttpClient {
+impl Transport for XrplHttpClient {
     fn max_fee_drops(&self) -> u64 {
         self.max_fee_drops
     }
 
-    async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
-        let body = json!({
-            "method": method,
-            "params": [params]
-        });
-        let mut attempt = 0;
-        loop {
-            let outcome = self.send_once(method, &body).await;
-            let busy = match &outcome {
-                Err(ClientError::HttpStatus {
-                    status: 429 | 503,
-                    retry_after,
-                    ..
-                }) => Some(*retry_after),
-                Err(ClientError::RpcError { code, .. })
-                    if code == "slowDown" || code == "tooBusy" =>
-                {
-                    Some(None)
+    fn send_raw<'a>(
+        &'a self,
+        method: &'a str,
+        params: Value,
+    ) -> crate::client::TransportFuture<'a> {
+        Box::pin(async move {
+            let body = json!({
+                "method": method,
+                "params": [crate::client::with_api_version(params)]
+            });
+            let mut attempt = 0;
+            loop {
+                let outcome = self.send_once(method, &body).await;
+                let busy = match &outcome {
+                    Err(ClientError::HttpStatus {
+                        status: 429 | 503,
+                        retry_after,
+                        ..
+                    }) => Some(*retry_after),
+                    Err(ClientError::RpcError { code, .. })
+                        if code == "slowDown" || code == "tooBusy" =>
+                    {
+                        Some(None)
+                    }
+                    _ => None,
+                };
+                match busy {
+                    Some(retry_after) if attempt < self.retry.max_retries => {
+                        let wait = self.retry.delay(attempt, retry_after);
+                        tracing::warn!(method, ?wait, attempt, "server busy; retrying");
+                        crate::client::sleep_for(wait).await;
+                        attempt += 1;
+                    }
+                    _ => return outcome,
                 }
-                _ => None,
-            };
-            match busy {
-                Some(retry_after) if attempt < self.retry.max_retries => {
-                    let wait = self.retry.delay(attempt, retry_after);
-                    tracing::warn!(method, ?wait, attempt, "server busy; retrying");
-                    crate::client::sleep_for(wait).await;
-                    attempt += 1;
-                }
-                _ => return outcome,
             }
-        }
+        })
     }
 }
 
@@ -351,11 +398,11 @@ impl XrplHttpClient {
             .json(body)
             .send()
             .await
-            .map_err(http_error)?;
+            .map_err(|e| http_error(e, self.timeout))?;
 
         let status = response.status();
         let retry_after = retry_after(response.headers());
-        let text = read_capped(response, MAX_RESPONSE_BYTES).await?;
+        let text = read_capped(response, MAX_RESPONSE_BYTES, self.timeout).await?;
 
         if !status.is_success() {
             // At most 200 characters of the body (a char boundary, never mid-UTF-8).
@@ -451,8 +498,9 @@ mod tests {
             "account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
             "transactions": [
                 {
-                    "tx": {"TransactionType": "Payment", "Amount": "1000000"},
-                    "meta": {"TransactionResult": "tesSUCCESS"},
+                    "tx_json": {"TransactionType": "Payment", "DeliverMax": "1000000"},
+                    "hash": "2E16765077A9A061C449CE91FE7C909A7B85DC98AA8ED1EE7FFBA1D7A11A5D7D",
+                    "meta": {"TransactionResult": "tesSUCCESS", "TransactionIndex": 0, "AffectedNodes": []},
                     "validated": true
                 }
             ],
@@ -562,11 +610,12 @@ mod tests {
     }
 }
 
-// Live testnet tests — only run with `cargo test --features live-tests`
+// Live testnet tests — only run with `RUSTFLAGS="--cfg xrpl_live_tests" cargo test`
 #[cfg(all(test, not(target_arch = "wasm32")))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod transport_tests {
     use super::*;
+    use crate::client::Client;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// A one-request HTTP server answering with `body` (and a
@@ -601,14 +650,18 @@ mod transport_tests {
             let url = serve(vec![b'x'; 5000], declare).await;
             let response = reqwest::Client::new().get(&url).send().await.unwrap();
             assert!(
-                read_capped(response, 1000).await.is_err(),
+                read_capped(response, 1000, Duration::from_secs(1))
+                    .await
+                    .is_err(),
                 "declared: {declare}"
             );
         }
         let url = serve(b"{\"result\":{}}".to_vec(), true).await;
         let response = reqwest::Client::new().get(&url).send().await.unwrap();
         assert_eq!(
-            read_capped(response, 1000).await.unwrap(),
+            read_capped(response, 1000, Duration::from_secs(1))
+                .await
+                .unwrap(),
             "{\"result\":{}}"
         );
     }
@@ -623,15 +676,27 @@ mod transport_tests {
             "http://user:secret-token@{addr}/?key=secret-token"
         ))
         .unwrap();
-        let error = client.fee().await.unwrap_err().to_string();
+        let error = client.fee().await.unwrap_err();
+        assert!(
+            matches!(
+                error,
+                ClientError::Transport {
+                    kind: crate::error::TransportErrorKind::Connect,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+        let error = error.to_string();
         assert!(!error.contains("secret-token"), "{error}");
     }
 }
 
-#[cfg(all(test, feature = "live-tests"))]
+#[cfg(all(test, xrpl_live_tests))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod live_tests {
     use super::*;
+    use crate::client::Client;
     use crate::types::*;
 
     const TESTNET_URL: &str = "https://s.altnet.rippletest.net:51234";
@@ -656,10 +721,7 @@ mod live_tests {
         let client = XrplHttpClient::new(TESTNET_URL).unwrap();
         // Use the testnet faucet's known account
         let result = client
-            .account_info(
-                "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
-                &LedgerIndex::Validated,
-            )
+            .account_info("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)
             .await;
         // Account may or may not exist on testnet, but the request should succeed
         assert!(result.is_ok() || matches!(result, Err(ClientError::RpcError { .. })));
@@ -671,6 +733,7 @@ mod live_tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod retry_tests {
     use super::*;
+    use crate::client::Client;
 
     /// A local HTTP server that answers each connection with the next of
     /// `replies` (status line, extra headers, body) and records the
@@ -788,6 +851,28 @@ mod retry_tests {
         let request = seen.lock().unwrap()[0].to_ascii_lowercase();
         assert!(request.contains("x-api-key: k3y-v4lue"), "{request}");
         assert!(request.contains("user-agent: tests/1"), "{request}");
+    }
+
+    /// A server that never answers is a `Timeout` of the configured length,
+    /// as on the WebSocket client (it was a reqwest error).
+    #[tokio::test]
+    async fn a_timeout_is_a_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let timeout = Duration::from_millis(300);
+        let client = XrplHttpClient::builder(&url)
+            .timeout(timeout)
+            .build()
+            .unwrap();
+        let err = client.ledger_current().await.unwrap_err();
+        assert!(
+            matches!(err, ClientError::Timeout(t) if t == timeout),
+            "{err:?}"
+        );
     }
 
     #[test]

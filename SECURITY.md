@@ -4,9 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.7.x   | Yes: security fixes are released as 0.7.x |
-| 0.6.x   | No: upgrade to 0.7, which breaks nothing (checked with cargo-semver-checks) |
-| 0.5.x and older | No: upgrade to 0.7 (0.6.0 fixed the issues listed in its CHANGELOG under "Security") |
+| 0.8.x   | Yes: security fixes are released as 0.8.x |
+| 0.7.x   | No: upgrade to 0.8 (the CHANGELOG says how to update for each change) |
+| 0.6.x and older | No: upgrade to 0.8 (0.6.0 fixed the issues listed in its CHANGELOG under "Security") |
 
 ## Reporting a vulnerability
 

@@ -17,11 +17,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = XrplHttpClient::new(&url)?;
 
     let info = client
-        .account_info(&account, &LedgerIndex::Validated)
+        .account_info(&account, LedgerIndex::Validated)
         .await?;
     let server = client.server_info().await?;
 
-    let balance_drops: u64 = info.account_data.balance.parse()?;
+    let balance_drops = info.account_data.balance_drops().ok_or("no XRP balance")?;
     let balance_xrp = utils::drops_to_xrp(balance_drops);
 
     println!("Account:      {}", info.account_data.account);

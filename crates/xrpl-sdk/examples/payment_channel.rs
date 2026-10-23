@@ -31,10 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let opened = send(&client, &alice, open.to_json()?).await?;
     let sequence = opened
-        .tx_fields
-        .get("Sequence")
-        .and_then(|s| s.as_u64())
-        .and_then(|s| u32::try_from(s).ok())
+        .transaction()?
+        .common()
+        .and_then(|c| c.sequence)
         .ok_or("no Sequence")?;
     let channel =
         keylet::payment_channel(alice.classic_address(), bob.classic_address(), sequence)?
@@ -68,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     send(&client, &bob, redeem.to_json()?).await?;
 
     let channels = client
-        .account_channels(alice.classic_address(), None, &LedgerIndex::Validated)
+        .account_channels(alice.classic_address(), None, LedgerIndex::Validated)
         .await?;
     let c = &channels.channels[0];
     println!(
@@ -83,9 +82,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn send(
     client: &XrplHttpClient,
     wallet: &Wallet,
-    mut tx: serde_json::Value,
+    tx: serde_json::Value,
 ) -> Result<TxResult, Box<dyn std::error::Error>> {
-    let result = submit_transaction(client, &mut tx, wallet).await?;
+    let result = sign_and_submit(client, &tx, wallet).await?;
     let outcome = result.transaction_result().unwrap_or("unknown").to_string();
     println!(
         "  {:<24} {outcome}",

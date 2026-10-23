@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 /// the transaction cost now, and how full the open ledger and queue are.
 /// `rippled` writes the sizes as strings; they are read as numbers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FeeResult {
     /// The costs, in drops.
     pub drops: FeeDrops,
@@ -52,6 +53,7 @@ pub struct FeeResult {
 
 /// Transaction costs, in drops.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FeeDrops {
     /// The cost of a reference transaction with no load.
     pub base_fee: String,
@@ -66,6 +68,7 @@ pub struct FeeDrops {
 
 /// The same costs as fee levels (256 = the reference transaction cost).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FeeLevels {
     /// The median fee level in the last ledger.
     pub median_level: String,
@@ -80,6 +83,7 @@ pub struct FeeLevels {
 /// [`server_info`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/server-info-methods/server_info):
 /// the server's state, in human units (XRP, seconds).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerInfoResult {
     /// What the server reports.
     pub info: ServerInfo,
@@ -88,6 +92,7 @@ pub struct ServerInfoResult {
 /// What `server_info` reports. Which fields appear depends on the server's
 /// state, its role and whether the request is from an admin.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerInfo {
     /// Whether the server lacks an enabled amendment and so cannot follow the network.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -201,6 +206,7 @@ pub struct ServerInfo {
 
 /// The latest validated (or closed) ledger, in `server_info`'s XRP units.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ValidatedLedger {
     /// Seconds since it closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -224,6 +230,7 @@ pub struct ValidatedLedger {
 
 /// The build's git branch and commit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GitInfo {
     /// The git branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -235,6 +242,7 @@ pub struct GitInfo {
 
 /// How the last consensus round went.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LastClose {
     /// Seconds (`server_info`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -248,6 +256,7 @@ pub struct LastClose {
 
 /// A port the server listens on.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Port {
     /// The port number.
     pub port: String,
@@ -257,6 +266,7 @@ pub struct Port {
 
 /// Time in one server state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StateAccounting {
     /// Microseconds in this state.
     pub duration_us: String,
@@ -266,6 +276,7 @@ pub struct StateAccounting {
 
 /// The validator list the server uses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ValidatorListInfo {
     /// How many.
     pub count: u32,
@@ -278,6 +289,7 @@ pub struct ValidatorListInfo {
 /// [`server_state`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/server-info-methods/server_state):
 /// `server_info` in machine units (drops, fee levels, milliseconds).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerStateResult {
     /// What the server reports.
     pub state: ServerState,
@@ -285,6 +297,7 @@ pub struct ServerStateResult {
 
 /// What `server_state` reports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerState {
     /// Whether the server lacks an enabled amendment and so cannot follow the network.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -386,6 +399,7 @@ pub struct ServerState {
 
 /// The latest validated (or closed) ledger, in `server_state`'s units (drops).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StateLedger {
     /// The reference transaction cost, in drops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -413,6 +427,7 @@ pub struct StateLedger {
 /// server has new fields or types).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[non_exhaustive]
 pub struct ServerDefinitionsResult {
     /// `[name, { nth, type, isVLEncoded, isSerialized, isSigningField }]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -452,6 +467,7 @@ pub struct ServerDefinitionsResult {
 /// One field's definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct FieldInfo {
     /// The field's code within its type.
     pub nth: i32,
@@ -470,6 +486,7 @@ pub struct FieldInfo {
 /// [`feature`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/server-info-methods/feature):
 /// amendments the server knows, by ID.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FeatureResult {
     /// Amendments, by ID.
     pub features: BTreeMap<String, Amendment>,
@@ -477,6 +494,7 @@ pub struct FeatureResult {
 
 /// One amendment.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Amendment {
     /// The name.
     pub name: String,
@@ -504,6 +522,7 @@ pub struct Amendment {
 /// [`manifest`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/server-info-methods/manifest):
 /// a validator's current manifest.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ManifestResult {
     /// The key asked about.
     pub requested: String,
@@ -517,6 +536,7 @@ pub struct ManifestResult {
 
 /// What a validator's manifest says.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ManifestDetails {
     /// A domain the account claims, hex (ASCII, lower case) (`Domain`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -532,25 +552,26 @@ pub struct ManifestDetails {
 /// [`version`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/server-info-methods/version):
 /// the API versions the server supports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct VersionResult {
     /// The API versions.
     pub version: ApiVersions,
 }
 
-/// Lowest, default and highest API versions.
+/// The lowest and highest API versions the server takes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ApiVersions {
     /// The lowest supported API version.
-    pub first: String,
-    /// The default API version.
-    pub good: String,
+    pub first: u32,
     /// The highest supported API version.
-    pub last: String,
+    pub last: u32,
 }
 
 /// [`ping`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/utility-methods/ping):
 /// the server is up; and how it sees the caller.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PingResult {
     /// `admin`, `identified`, `proxied` or `user`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -570,6 +591,7 @@ pub struct PingResult {
 /// 256 random bits from the server, in hex. Do not use them for keys: they
 /// come from someone else's machine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RandomResult {
     /// 256 random bits, hex.
     pub random: String,
@@ -579,6 +601,7 @@ pub struct RandomResult {
 /// whether a claim's signature is valid. `xrpl_core::crypto::verify_payment_channel_claim`
 /// does the same offline.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ChannelVerifyResult {
     /// Whether the signature is valid.
     pub signature_verified: bool,
