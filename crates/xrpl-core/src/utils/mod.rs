@@ -32,7 +32,7 @@ pub mod time;
 pub mod xrp;
 
 #[cfg(feature = "std")]
-pub use balance_changes::{get_balance_changes, AccountBalanceChanges, Balance};
+pub use balance_changes::{delivered_amount, get_balance_changes, AccountBalanceChanges, Balance};
 #[cfg(feature = "std")]
 pub use nftoken::{get_nftoken_id, parse_nftoken_id, NFTokenIdParts};
 #[cfg(feature = "std")]

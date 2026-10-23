@@ -79,14 +79,24 @@ pub trait Client {
 
     /// Send a paginated request and follow its `marker` to the last page
     /// (at most [`MAX_PAGES`] pages, else [`ClientError::PaginationLimitReached`]).
+    /// Every page after the first asks for the ledger the first came from,
+    /// so the result is one ledger's state, never a mix of two.
     async fn request_all<R: Paginated>(&self, req: R) -> Result<Vec<R::Item>, ClientError> {
         let mut all = Vec::new();
         let mut req = req;
         for _ in 0..MAX_PAGES {
-            let (items, marker) = R::page(self.request(&req).await?);
+            let response = self.request(&req).await?;
+            let ledger = R::ledger_of(&response);
+            let (items, marker) = R::page(response);
             all.extend(items);
             match marker {
-                Some(marker) => req = req.with_marker(marker),
+                Some(marker) => {
+                    req = req.with_marker(marker);
+                    // A marker is only good for the ledger it came from.
+                    if let Some(index) = ledger {
+                        req = req.at_ledger(index);
+                    }
+                }
                 None => return Ok(all),
             }
         }
@@ -967,7 +977,7 @@ mod tests {
         let mock = Mock::default()
             .reply(
                 "account_lines",
-                json!({"account": "rA", "lines": [line("USD")], "marker": "M1"}),
+                json!({"account": "rA", "lines": [line("USD")], "marker": "M1", "ledger_index": 100}),
             )
             .reply(
                 "account_lines",
@@ -986,7 +996,10 @@ mod tests {
         );
         let calls = mock.calls();
         assert_eq!(calls[0].1.get("marker"), None);
+        assert_eq!(calls[0].1["ledger_index"], "validated");
         assert_eq!(calls[1].1["marker"], "M1");
+        // The second page is from the first page's ledger.
+        assert_eq!(calls[1].1["ledger_index"], 100);
     }
 
     #[tokio::test]

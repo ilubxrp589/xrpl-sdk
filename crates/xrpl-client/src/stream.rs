@@ -210,6 +210,13 @@ pub struct TransactionEvent {
 }
 
 impl TransactionEvent {
+    /// What the transaction delivered (`delivered_amount`), once validated:
+    /// check this, not a Payment's `Amount`, which a partial payment does
+    /// not reach.
+    pub fn delivered_amount(&self) -> Option<xrpl_core::types::Amount> {
+        xrpl_core::utils::delivered_amount(self.meta.as_ref()?)
+    }
+
     /// Whether `account` (a classic address) appears in the transaction or
     /// its metadata (the accounts `rippled` sends an `accounts` subscriber
     /// the transaction for: sender, destination, issuers, every account

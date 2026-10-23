@@ -55,6 +55,16 @@ pub trait Paginated: Request + Clone {
     fn with_marker(self, marker: Value) -> Self;
     /// A page's entries and the marker of the next page, if any.
     fn page(response: Self::Response) -> (Vec<Self::Item>, Option<Value>);
+    /// The ledger a page is from, when the request names a ledger: a
+    /// marker is only good for the ledger it came from, so the pages after
+    /// the first ask for that same ledger.
+    fn ledger_of(_response: &Self::Response) -> Option<u32> {
+        None
+    }
+    /// This request, at ledger `index`.
+    fn at_ledger(self, _index: u32) -> Self {
+        self
+    }
 }
 
 macro_rules! request {
@@ -78,6 +88,29 @@ macro_rules! paginated {
             }
             fn page(response: Self::Response) -> (Vec<$item>, Option<Value>) {
                 (response.$field, response.marker)
+            }
+        }
+    };
+    ($req:ident, $item:ty, $field:ident, pinned $(, $current:ident)?) => {
+        impl Paginated for $req {
+            type Item = $item;
+            fn with_marker(self, marker: Value) -> Self {
+                Self {
+                    marker: Some(marker),
+                    ..self
+                }
+            }
+            fn page(response: Self::Response) -> (Vec<$item>, Option<Value>) {
+                (response.$field, response.marker)
+            }
+            fn ledger_of(response: &Self::Response) -> Option<u32> {
+                response.ledger_index $(.or(response.$current))?
+            }
+            fn at_ledger(self, index: u32) -> Self {
+                Self {
+                    ledger_index: LedgerIndex::Index(index),
+                    ..self
+                }
             }
         }
     };
@@ -122,7 +155,13 @@ impl AccountChannelsRequest {
     }
 }
 request!(AccountChannelsRequest => "account_channels", AccountChannelsResult);
-paginated!(AccountChannelsRequest, PaymentChannel, channels);
+paginated!(
+    AccountChannelsRequest,
+    PaymentChannel,
+    channels,
+    pinned,
+    ledger_current_index
+);
 
 /// [`account_currencies`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_currencies):
 /// currencies the account can send and receive.
@@ -198,7 +237,13 @@ impl AccountLinesRequest {
     }
 }
 request!(AccountLinesRequest => "account_lines", AccountLinesResult);
-paginated!(AccountLinesRequest, TrustLine, lines);
+paginated!(
+    AccountLinesRequest,
+    TrustLine,
+    lines,
+    pinned,
+    ledger_current_index
+);
 
 /// [`account_nfts`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_nfts):
 /// the NFTs an account holds.
@@ -225,7 +270,13 @@ impl AccountNftsRequest {
     }
 }
 request!(AccountNftsRequest => "account_nfts", AccountNftsResult);
-paginated!(AccountNftsRequest, NFToken, account_nfts);
+paginated!(
+    AccountNftsRequest,
+    NFToken,
+    account_nfts,
+    pinned,
+    ledger_current_index
+);
 
 /// [`account_objects`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_objects):
 /// the ledger entries an account owns.
@@ -259,7 +310,13 @@ impl AccountObjectsRequest {
     }
 }
 request!(AccountObjectsRequest => "account_objects", AccountObjectsResult);
-paginated!(AccountObjectsRequest, LedgerObject, account_objects);
+paginated!(
+    AccountObjectsRequest,
+    LedgerObject,
+    account_objects,
+    pinned,
+    ledger_current_index
+);
 
 /// [`account_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_offers):
 /// an account's open DEX offers.
@@ -286,7 +343,13 @@ impl AccountOffersRequest {
     }
 }
 request!(AccountOffersRequest => "account_offers", AccountOffersResult);
-paginated!(AccountOffersRequest, AccountOffer, offers);
+paginated!(
+    AccountOffersRequest,
+    AccountOffer,
+    offers,
+    pinned,
+    ledger_current_index
+);
 
 /// [`account_tx`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_tx):
 /// transactions that affected an account. `-1` bounds mean the earliest /
@@ -473,7 +536,7 @@ impl LedgerDataRequest {
     }
 }
 request!(LedgerDataRequest => "ledger_data", LedgerDataResult);
-paginated!(LedgerDataRequest, LedgerObject, state);
+paginated!(LedgerDataRequest, LedgerObject, state, pinned);
 
 /// [`ledger_entry`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_entry):
 /// one ledger entry by ID. `xrpl_core::hashes::keylet` computes the ID of any
@@ -801,7 +864,13 @@ impl NftBuyOffersRequest {
     }
 }
 request!(NftBuyOffersRequest => "nft_buy_offers", NftOffersResult);
-paginated!(NftBuyOffersRequest, NftOffer, offers);
+paginated!(
+    NftBuyOffersRequest,
+    NftOffer,
+    offers,
+    pinned,
+    ledger_current_index
+);
 
 /// [`nft_sell_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/nft_sell_offers):
 /// offers to sell one NFT.
@@ -828,7 +897,13 @@ impl NftSellOffersRequest {
     }
 }
 request!(NftSellOffersRequest => "nft_sell_offers", NftOffersResult);
-paginated!(NftSellOffersRequest, NftOffer, offers);
+paginated!(
+    NftSellOffersRequest,
+    NftOffer,
+    offers,
+    pinned,
+    ledger_current_index
+);
 
 /// [`ripple_path_find`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/ripple_path_find):
 /// paths that deliver `destination_amount`, and what each costs.
@@ -1102,7 +1177,7 @@ impl NftsByIssuerRequest {
     }
 }
 request!(NftsByIssuerRequest => "nfts_by_issuer", NftsByIssuerResult);
-paginated!(NftsByIssuerRequest, NftInfo, nfts);
+paginated!(NftsByIssuerRequest, NftInfo, nfts, pinned);
 
 /// [`mpt_holders`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/mpt_holders)
 /// (Clio): the holders of an MPT issuance.
@@ -1129,4 +1204,4 @@ impl MptHoldersRequest {
     }
 }
 request!(MptHoldersRequest => "mpt_holders", MptHoldersResult);
-paginated!(MptHoldersRequest, MptHolder, mptokens);
+paginated!(MptHoldersRequest, MptHolder, mptokens, pinned);
