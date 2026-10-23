@@ -16,6 +16,12 @@
   size, or one). A `Batch` is priced from each inner transaction's own cost.
   The boundaries are checked with `rippled`'s `simulate`
   (`scripts/probe_cost.py`). The fee cap still applies.
+- **wasm: waiting works outside a browser window.** The wait between
+  `submit_and_wait`'s and `fund_and_wait`'s polls, and the browser WebSocket
+  client's request timeout, set their timer on `window`, which a Web Worker,
+  a Service Worker, Node.js and Cloudflare Workers do not have: there they
+  waited forever. The timer is now the JavaScript global's `setTimeout`. A
+  CI job runs the client's wasm tests in Node.js to keep it so.
 
 ### Added
 - `transaction::cost::transaction_cost`: a transaction's base cost (base

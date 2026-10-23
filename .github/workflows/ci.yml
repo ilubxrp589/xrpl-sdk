@@ -73,6 +73,14 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --target wasm32-unknown-unknown -p halcyon-xrpl-core -p halcyon-xrpl-client --features wasm -- -D warnings
+      # The client's unit tests in Node.js: no browser window, as in a worker.
+      - name: Install wasm-bindgen-test-runner (the version Cargo.lock pins)
+        run: |
+          V=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
+          cargo install wasm-bindgen-cli --version "$V" --locked
+      - run: cargo test --locked --target wasm32-unknown-unknown -p halcyon-xrpl-client --lib --features wasm
+        env:
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
 
   docs:
     name: Docs

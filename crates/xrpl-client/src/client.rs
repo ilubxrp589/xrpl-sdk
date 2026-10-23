@@ -1068,17 +1068,44 @@ pub(crate) async fn sleep_secs(secs: u64) {
     tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
 }
 
+/// Wait `secs` seconds with the JavaScript global's `setTimeout`, which a
+/// browser window, a Web Worker, a Service Worker, Node.js and Cloudflare
+/// Workers all have (`web_sys::window()` exists only in a window: a worker
+/// waited forever). In a runtime without `setTimeout` it returns at once.
 #[cfg(target_arch = "wasm32")]
 pub(crate) async fn sleep_secs(secs: u64) {
-    let promise = js_sys::Promise::new(&mut |resolve, _| {
-        if let Some(window) = web_sys::window() {
-            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-                &resolve,
-                i32::try_from(secs.saturating_mul(1000)).unwrap_or(i32::MAX),
-            );
+    use wasm_bindgen::{JsCast, JsValue};
+    let millis = i32::try_from(secs.saturating_mul(1000)).unwrap_or(i32::MAX);
+    let promise = js_sys::Promise::new(&mut |resolve, reject| {
+        let global = js_sys::global();
+        let set_timeout = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))
+            .ok()
+            .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+        let started = set_timeout
+            .map(|f| f.call2(&global, &resolve, &JsValue::from(millis)).is_ok())
+            .unwrap_or(false);
+        if !started {
+            let _ = reject.call1(&JsValue::NULL, &JsValue::from_str("no setTimeout"));
         }
     });
     let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+}
+
+/// The timer works outside a browser window: these run in Node.js, which,
+/// like a Web Worker, has `setTimeout` but no `window`.
+#[cfg(all(test, target_arch = "wasm32"))]
+mod wasm_tests {
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    #[wasm_bindgen_test]
+    async fn sleep_returns_without_a_window() {
+        let has_window = js_sys::Reflect::has(&js_sys::global(), &"window".into()).unwrap_or(true);
+        assert!(!has_window, "this test must run outside a browser window");
+        let started = js_sys::Date::now();
+        super::sleep_secs(1).await;
+        let waited = js_sys::Date::now() - started;
+        assert!((900.0..5_000.0).contains(&waited), "waited {waited} ms");
+    }
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
