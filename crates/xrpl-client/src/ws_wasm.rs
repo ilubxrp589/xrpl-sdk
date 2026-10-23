@@ -133,8 +133,13 @@ impl XrplWsClient {
     /// WebSocket (a malformed URL, for one) or the connection fails before
     /// it opens.
     pub async fn connect(url: &str) -> Result<Self, ClientError> {
-        let ws = WebSocket::new(url).map_err(|e| {
-            ClientError::UnexpectedResponse(format!("WebSocket creation failed: {:?}", e))
+        // The browser's error may name the URL, which may carry a token: only
+        // the host is reported.
+        let ws = WebSocket::new(url).map_err(|_| {
+            ClientError::transport(
+                crate::error::TransportErrorKind::Connect,
+                format!("the browser refused a WebSocket to {}", crate::host_of(url)),
+            )
         })?;
 
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -162,8 +167,9 @@ impl XrplWsClient {
         let on_open_error = Closure::once(move |_e: ErrorEvent| {
             if let Ok(mut guard) = open_tx_clone2.lock() {
                 if let Some(tx) = guard.take() {
-                    let _ = tx.send(Err(ClientError::UnexpectedResponse(
-                        "WebSocket open error".into(),
+                    let _ = tx.send(Err(ClientError::transport(
+                        crate::error::TransportErrorKind::Connect,
+                        "the WebSocket did not open",
                     )));
                 }
             }

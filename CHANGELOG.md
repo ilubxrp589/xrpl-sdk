@@ -7,6 +7,28 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+0.8 is the one deliberate set of breaking changes before 1.0. Each change
+below says how to update.
+
+### Changed (breaking)
+- **Client errors.**
+  - `ClientError::Http(reqwest::Error)` is gone: reqwest is no longer part
+    of the public API, so a reqwest upgrade cannot break your code. A
+    connection or exchange that fails is `ClientError::Transport { kind,
+    message }` (`TransportErrorKind::Connect`, `Request`, `Body`, …; the
+    message never holds the URL), and **a timeout is
+    `ClientError::Timeout(duration)` on HTTP as on WebSocket** (it was a
+    reqwest error). *Update:* match `Transport { .. }` and `Timeout(_)` where
+    you matched `Http(_)`.
+  - The caller's own mistakes are `ClientError::InvalidRequest` (a
+    transaction with no `Account` or that is not an object, a `Batch` without
+    its inner transactions, a header HTTP does not allow); they were
+    `UnexpectedResponse`, which now means only a server's answer.
+  - `ClientError::Json` holds the `serde_json::Error` and shows its message,
+    but no longer returns it as `source()`; `ClientError::Core` shows the
+    core error as itself. So a chain printed with its sources (`anyhow`'s
+    `{:#}`) no longer repeats each message.
+
 ### Changed
 - **Licence: Apache-2.0.** The crates are now licensed under the Apache
   License 2.0 (`license = "Apache-2.0"` on crates.io, a standard SPDX

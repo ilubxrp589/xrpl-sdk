@@ -6,9 +6,17 @@
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ClientError {
-    /// The HTTP request failed.
-    #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
+    /// The server could not be reached, or the exchange with it broke off
+    /// before an answer: what went wrong is [`ClientError::Transport::kind`],
+    /// and the message says why (never the URL, which may carry a token).
+    /// A timeout is [`ClientError::Timeout`].
+    #[error("{kind}: {message}")]
+    Transport {
+        /// What part of the exchange failed.
+        kind: TransportErrorKind,
+        /// What the network stack said (with no URL).
+        message: String,
+    },
 
     /// The server answered with an HTTP error status, after any retries the
     /// client's [`RetryPolicy`](crate::http::RetryPolicy) allows.
@@ -22,9 +30,9 @@ pub enum ClientError {
         excerpt: String,
     },
 
-    /// A response was not the JSON expected.
-    #[error("JSON error: {0}")]
-    Json(#[from] serde_json::Error),
+    /// An answer, or a typed request, was not the JSON expected.
+    #[error("unexpected JSON: {0}")]
+    Json(serde_json::Error),
 
     /// `rippled` answered with an error: `code` is its token (e.g. `actNotFound`).
     #[error("RPC error: {code} — {message}")]
@@ -109,9 +117,17 @@ pub enum ClientError {
     #[error("request timeout after {0:?}")]
     Timeout(std::time::Duration),
 
-    /// A response, or an input, was not as expected.
+    /// The server's answer was not as `rippled` answers (a missing field, a
+    /// number that does not parse, a body too large): the server's fault, or a
+    /// server this crate does not know.
     #[error("unexpected response: {0}")]
     UnexpectedResponse(String),
+
+    /// The request cannot be sent as given: the caller's mistake (a
+    /// transaction with no `Account`, a `Batch` without its inner
+    /// transactions, a header HTTP does not allow, …). Nothing was sent.
+    #[error("invalid request: {0}")]
+    InvalidRequest(String),
 
     /// Its `LastLedgerSequence` passed, and the server holds every ledger up
     /// to it: the transaction is in none and never will be.
@@ -130,7 +146,58 @@ pub enum ClientError {
     #[error("BlockingClient used inside an async runtime; use the async client there")]
     InsideAsyncRuntime,
 
-    /// A core error (codec, keys, amounts, …).
-    #[error("core error: {0}")]
+    /// A core error (codec, keys, amounts, …), shown as itself.
+    #[error(transparent)]
     Core(#[from] xrpl_core::CoreError),
+}
+
+/// Not `#[from]`: the message is in the variant's `Display`, so `source`
+/// does not repeat it.
+impl From<serde_json::Error> for ClientError {
+    fn from(e: serde_json::Error) -> Self {
+        ClientError::Json(e)
+    }
+}
+
+/// What part of an exchange with the server failed: see
+/// [`ClientError::Transport`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum TransportErrorKind {
+    /// Connecting failed (no route, refused, DNS, TLS).
+    Connect,
+    /// Sending the request failed.
+    Request,
+    /// Reading the answer's body failed.
+    Body,
+    /// The server redirected too often, or somewhere not allowed.
+    Redirect,
+    /// The client could not start (its HTTP stack, or the blocking client's
+    /// runtime).
+    Setup,
+    /// Anything else the network stack reported.
+    Other,
+}
+
+impl std::fmt::Display for TransportErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            TransportErrorKind::Connect => "could not connect",
+            TransportErrorKind::Request => "could not send the request",
+            TransportErrorKind::Body => "could not read the answer",
+            TransportErrorKind::Redirect => "redirected",
+            TransportErrorKind::Setup => "could not start the client",
+            TransportErrorKind::Other => "transport error",
+        })
+    }
+}
+
+impl ClientError {
+    /// A [`ClientError::Transport`] of `kind` with `message`.
+    pub(crate) fn transport(kind: TransportErrorKind, message: impl std::fmt::Display) -> Self {
+        ClientError::Transport {
+            kind,
+            message: message.to_string(),
+        }
+    }
 }

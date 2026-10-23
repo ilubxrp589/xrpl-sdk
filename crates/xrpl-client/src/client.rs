@@ -58,7 +58,7 @@ async fn fill_batch<C: Client + ?Sized>(
     prices: Option<Prices>,
     outer_signers: u32,
 ) -> Result<(), ClientError> {
-    let bad = |m: &str| ClientError::UnexpectedResponse(format!("Batch: {m}"));
+    let bad = |m: &str| ClientError::InvalidRequest(format!("Batch: {m}"));
     let outer_seq = tx
         .get("Sequence")
         .and_then(Value::as_u64)
@@ -278,10 +278,11 @@ pub trait Client {
     /// [`ClientError::RpcError`] when `rippled` answers with an error (`code`
     /// is its token, such as `actNotFound`), and
     /// [`ClientError::UnexpectedResponse`] for an answer with no `result` (or,
-    /// over HTTP, a body too large or not UTF-8). Over HTTP a request also
-    /// fails with [`ClientError::Http`] (no connection, or a timeout),
+    /// over HTTP, a body too large or not UTF-8), and [`ClientError::Timeout`]
+    /// when no answer comes in time. Over HTTP a request also fails with
+    /// [`ClientError::Transport`] (no connection, a broken exchange),
     /// [`ClientError::HttpStatus`] or [`ClientError::Json`]; over WebSocket
-    /// with [`ClientError::Disconnected`] or [`ClientError::Timeout`].
+    /// with [`ClientError::Disconnected`].
     async fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError>;
 
     /// Send a typed request and decode its `result`.
@@ -755,7 +756,7 @@ pub trait Client {
         let account = tx
             .get("Account")
             .and_then(Value::as_str)
-            .ok_or_else(|| ClientError::UnexpectedResponse("tx missing Account field".into()))?
+            .ok_or_else(|| ClientError::InvalidRequest("the transaction has no Account".into()))?
             .to_string();
         let missing = |tx: &Value, field: &str| tx.get(field).is_none_or(Value::is_null);
         let uses_ticket = !missing(tx, "TicketSequence");
@@ -836,9 +837,9 @@ pub trait Client {
             _ => None,
         };
 
-        let obj = tx
-            .as_object_mut()
-            .ok_or_else(|| ClientError::UnexpectedResponse("tx is not a JSON object".into()))?;
+        let obj = tx.as_object_mut().ok_or_else(|| {
+            ClientError::InvalidRequest("the transaction is not a JSON object".into())
+        })?;
         if need_seq && uses_ticket {
             obj.insert("Sequence".into(), json!(0));
         }

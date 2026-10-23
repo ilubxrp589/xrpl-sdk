@@ -56,8 +56,8 @@ impl BlockingClient<XrplHttpClient> {
     ///
     /// # Errors
     ///
-    /// [`ClientError::Http`] if the HTTP stack cannot start, and
-    /// [`ClientError::UnexpectedResponse`] if the runtime cannot start. The URL
+    /// [`ClientError::Transport`] (`Setup`) if the HTTP stack or the runtime
+    /// cannot start. The URL
     /// is not checked here: a bad one fails on the first request.
     pub fn new(url: &str) -> Result<Self, ClientError> {
         Self::with_client(XrplHttpClient::new(url)?)
@@ -75,7 +75,10 @@ impl<C: Client> BlockingClient<C> {
             .enable_all()
             .build()
             .map_err(|e| {
-                ClientError::UnexpectedResponse(format!("could not start a runtime: {e}"))
+                ClientError::transport(
+                    crate::error::TransportErrorKind::Setup,
+                    format!("the blocking client's runtime: {e}"),
+                )
             })?;
         Ok(Self { inner, runtime })
     }

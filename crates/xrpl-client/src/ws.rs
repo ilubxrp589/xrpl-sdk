@@ -274,10 +274,10 @@ impl Shared {
 async fn open(url: &str, timeout: Duration) -> Result<WsStream, ClientError> {
     match tokio::time::timeout(timeout, tokio_tungstenite::connect_async(url)).await {
         Ok(Ok((stream, _))) => Ok(stream),
-        Ok(Err(e)) => Err(ClientError::UnexpectedResponse(format!(
-            "WebSocket connection to {} failed: {e}",
-            host_of(url)
-        ))),
+        Ok(Err(e)) => Err(ClientError::transport(
+            crate::error::TransportErrorKind::Connect,
+            format!("WebSocket to {}: {e}", host_of(url)),
+        )),
         Err(_) => Err(ClientError::Timeout(timeout)),
     }
 }

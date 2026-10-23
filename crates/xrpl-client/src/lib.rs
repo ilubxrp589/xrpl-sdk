@@ -177,7 +177,7 @@ pub mod ws;
 pub mod ws_wasm;
 
 pub use client::Client;
-pub use error::ClientError;
+pub use error::{ClientError, TransportErrorKind};
 pub use http::XrplHttpClient;
 pub use requests::{Paginated, Request};
 

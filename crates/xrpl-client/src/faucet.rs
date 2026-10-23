@@ -60,17 +60,19 @@ pub struct FaucetFunding {
 /// # Errors
 ///
 /// [`ClientError::HttpStatus`] when the faucet refuses (429 when it limits
-/// its rate); [`ClientError::Http`] when it cannot be reached;
+/// its rate); [`ClientError::Transport`] when it cannot be reached and
+/// [`ClientError::Timeout`] when it takes over 60 s;
 /// [`ClientError::Json`] for an answer that is not JSON; and
 /// [`ClientError::UnexpectedResponse`] when it reports funding another
 /// address, or its answer is over 1 MiB or not UTF-8.
 pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding, ClientError> {
     use crate::http::{http_error, read_capped};
+    let timeout = std::time::Duration::from_secs(60);
     #[cfg(not(target_arch = "wasm32"))]
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(timeout)
         .build()
-        .map_err(http_error)?;
+        .map_err(|e| http_error(e, timeout))?;
     #[cfg(target_arch = "wasm32")]
     let client = reqwest::Client::new();
     let response = client
@@ -78,10 +80,10 @@ pub async fn fund(network: FaucetNetwork, address: &str) -> Result<FaucetFunding
         .json(&json!({ "destination": address, "userAgent": concat!("halcyon-xrpl-client/", env!("CARGO_PKG_VERSION")) }))
         .send()
         .await
-        .map_err(http_error)?;
+        .map_err(|e| http_error(e, timeout))?;
     let status = response.status();
     let retry_after = crate::http::retry_after(response.headers());
-    let text = read_capped(response, 1024 * 1024).await?;
+    let text = read_capped(response, 1024 * 1024, timeout).await?;
     if !status.is_success() {
         // A faucet that limits its rate answers 429, often with Retry-After.
         return Err(ClientError::HttpStatus {

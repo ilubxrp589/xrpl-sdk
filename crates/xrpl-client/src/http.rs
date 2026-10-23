@@ -156,13 +156,13 @@ impl HttpClientBuilder {
     ///
     /// # Errors
     ///
-    /// [`ClientError::UnexpectedResponse`] for a header name or value HTTP
-    /// does not allow; [`ClientError::Http`] if the HTTP stack cannot start.
+    /// [`ClientError::InvalidRequest`] for a header name or value HTTP does
+    /// not allow; [`ClientError::Transport`] (`Setup`) if the HTTP stack
+    /// cannot start.
     pub fn build(self) -> Result<XrplHttpClient, ClientError> {
         let mut headers = reqwest::header::HeaderMap::new();
         for (name, value) in &self.headers {
-            let bad =
-                || ClientError::UnexpectedResponse(format!("header {name:?} is not valid HTTP"));
+            let bad = || ClientError::InvalidRequest(format!("header {name:?} is not valid HTTP"));
             let header_name =
                 reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|_| bad())?;
             let mut header_value =
@@ -176,12 +176,14 @@ impl HttpClientBuilder {
             .timeout(self.timeout)
             .connect_timeout(self.connect_timeout)
             .user_agent(self.user_agent.clone());
-        let inner = builder.build().map_err(http_error)?;
+        let timeout = self.timeout;
+        let inner = builder.build().map_err(|e| http_error(e, timeout))?;
         Ok(XrplHttpClient {
             base_url: self.url.trim_end_matches('/').to_string(),
             inner,
             max_fee_drops: self.max_fee_drops,
             retry: self.retry,
+            timeout: self.timeout,
         })
     }
 }
@@ -203,15 +205,49 @@ pub(crate) fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Durati
         .map(Duration::from_secs)
 }
 
-/// A transport error without the request URL, which may carry an API key.
-pub(crate) fn http_error(e: reqwest::Error) -> ClientError {
-    ClientError::Http(e.without_url())
+/// A transport error without the request URL, which may carry an API key: a
+/// timeout is [`ClientError::Timeout`] of `timeout`, the rest
+/// [`ClientError::Transport`].
+pub(crate) fn http_error(e: reqwest::Error, timeout: Duration) -> ClientError {
+    use crate::error::TransportErrorKind as Kind;
+    if e.is_timeout() {
+        return ClientError::Timeout(timeout);
+    }
+    // The browser's fetch does not say whether connecting failed.
+    #[cfg(not(target_arch = "wasm32"))]
+    let connect = e.is_connect();
+    #[cfg(target_arch = "wasm32")]
+    let connect = false;
+    let kind = if connect {
+        Kind::Connect
+    } else if e.is_body() || e.is_decode() {
+        Kind::Body
+    } else if e.is_redirect() {
+        Kind::Redirect
+    } else if e.is_builder() {
+        Kind::Setup
+    } else if e.is_request() {
+        Kind::Request
+    } else {
+        Kind::Other
+    };
+    let e = e.without_url();
+    // The whole chain: reqwest's own message is short ("error sending request").
+    let mut message = e.to_string();
+    let mut cause = std::error::Error::source(&e);
+    while let Some(c) = cause {
+        message.push_str(": ");
+        message.push_str(&c.to_string());
+        cause = c.source();
+    }
+    ClientError::transport(kind, message)
 }
 
 /// The body, as text, refused past `max` bytes.
 pub(crate) async fn read_capped(
     response: reqwest::Response,
     max: usize,
+    timeout: Duration,
 ) -> Result<String, ClientError> {
     let too_big = || ClientError::UnexpectedResponse(format!("a response over {max} bytes"));
     if response
@@ -224,7 +260,7 @@ pub(crate) async fn read_capped(
     let body = {
         let mut response = response;
         let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(http_error)? {
+        while let Some(chunk) = response.chunk().await.map_err(|e| http_error(e, timeout))? {
             if body.len() + chunk.len() > max {
                 return Err(too_big());
             }
@@ -235,7 +271,11 @@ pub(crate) async fn read_capped(
     // The browser's fetch has already read the body; refuse it all the same.
     #[cfg(target_arch = "wasm32")]
     let body = {
-        let body = response.bytes().await.map_err(http_error)?.to_vec();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| http_error(e, timeout))?
+            .to_vec();
         if body.len() > max {
             return Err(too_big());
         }
@@ -253,6 +293,7 @@ pub struct XrplHttpClient {
     inner: reqwest::Client,
     max_fee_drops: u64,
     retry: RetryPolicy,
+    timeout: Duration,
 }
 
 impl std::fmt::Debug for XrplHttpClient {
@@ -273,8 +314,8 @@ impl XrplHttpClient {
     ///
     /// # Errors
     ///
-    /// [`ClientError::Http`] if the HTTP stack cannot start. The URL is not
-    /// checked here: a bad one fails the first request.
+    /// [`ClientError::Transport`] (`Setup`) if the HTTP stack cannot start.
+    /// The URL is not checked here: a bad one fails the first request.
     pub fn new(url: &str) -> Result<Self, ClientError> {
         Self::builder(url).build()
     }
@@ -351,11 +392,11 @@ impl XrplHttpClient {
             .json(body)
             .send()
             .await
-            .map_err(http_error)?;
+            .map_err(|e| http_error(e, self.timeout))?;
 
         let status = response.status();
         let retry_after = retry_after(response.headers());
-        let text = read_capped(response, MAX_RESPONSE_BYTES).await?;
+        let text = read_capped(response, MAX_RESPONSE_BYTES, self.timeout).await?;
 
         if !status.is_success() {
             // At most 200 characters of the body (a char boundary, never mid-UTF-8).
@@ -601,14 +642,18 @@ mod transport_tests {
             let url = serve(vec![b'x'; 5000], declare).await;
             let response = reqwest::Client::new().get(&url).send().await.unwrap();
             assert!(
-                read_capped(response, 1000).await.is_err(),
+                read_capped(response, 1000, Duration::from_secs(1))
+                    .await
+                    .is_err(),
                 "declared: {declare}"
             );
         }
         let url = serve(b"{\"result\":{}}".to_vec(), true).await;
         let response = reqwest::Client::new().get(&url).send().await.unwrap();
         assert_eq!(
-            read_capped(response, 1000).await.unwrap(),
+            read_capped(response, 1000, Duration::from_secs(1))
+                .await
+                .unwrap(),
             "{\"result\":{}}"
         );
     }
@@ -623,7 +668,18 @@ mod transport_tests {
             "http://user:secret-token@{addr}/?key=secret-token"
         ))
         .unwrap();
-        let error = client.fee().await.unwrap_err().to_string();
+        let error = client.fee().await.unwrap_err();
+        assert!(
+            matches!(
+                error,
+                ClientError::Transport {
+                    kind: crate::error::TransportErrorKind::Connect,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+        let error = error.to_string();
         assert!(!error.contains("secret-token"), "{error}");
     }
 }
@@ -788,6 +844,28 @@ mod retry_tests {
         let request = seen.lock().unwrap()[0].to_ascii_lowercase();
         assert!(request.contains("x-api-key: k3y-v4lue"), "{request}");
         assert!(request.contains("user-agent: tests/1"), "{request}");
+    }
+
+    /// A server that never answers is a `Timeout` of the configured length,
+    /// as on the WebSocket client (it was a reqwest error).
+    #[tokio::test]
+    async fn a_timeout_is_a_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let timeout = Duration::from_millis(300);
+        let client = XrplHttpClient::builder(&url)
+            .timeout(timeout)
+            .build()
+            .unwrap();
+        let err = client.ledger_current().await.unwrap_err();
+        assert!(
+            matches!(err, ClientError::Timeout(t) if t == timeout),
+            "{err:?}"
+        );
     }
 
     #[test]
