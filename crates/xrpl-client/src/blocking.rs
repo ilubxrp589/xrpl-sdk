@@ -118,6 +118,27 @@ impl<C: Client> BlockingClient<C> {
         self.call(|c| c.request_all(req))
     }
 
+    /// [`Client::pages`]: the pages of a paginated request one at a time, as
+    /// an iterator, with no page limit. Inside an async runtime it yields
+    /// one [`ClientError::InsideAsyncRuntime`] and ends.
+    pub fn pages<'a, R: Paginated + 'a>(
+        &'a self,
+        req: R,
+    ) -> impl Iterator<Item = Result<Vec<R::Item>, ClientError>> + 'a {
+        let mut stream = Box::pin(self.inner.pages(req));
+        let mut done = false;
+        std::iter::from_fn(move || {
+            if done {
+                return None;
+            }
+            if tokio::runtime::Handle::try_current().is_ok() {
+                done = true;
+                return Some(Err(ClientError::InsideAsyncRuntime));
+            }
+            self.runtime.block_on(futures::StreamExt::next(&mut stream))
+        })
+    }
+
     /// [`Client::raw_request`]: any method, JSON in and out.
     pub fn raw_request(&self, method: &str, params: Value) -> Result<Value, ClientError> {
         self.call(|c| c.raw_request(method, params))

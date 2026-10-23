@@ -49,6 +49,12 @@
   changed field.
 - `Client::balances(account, ledger)`: an account's XRP, trust-line
   balances and MPTs as typed `Amount`s, all read from one ledger.
+- **Read any number of pages.** `Client::pages(request)` streams the
+  pages of a paginated request one at a time with no page limit (an
+  account's whole history, a list longer than 50 pages), each from the first
+  page's ledger; `BlockingClient::pages` is the same as an iterator.
+  `request_all` keeps its 50-page limit, and its error now points to
+  `pages`.
 - **Standard traits.** `XrplHttpClient` is `Clone` (clones share one
   connection pool). The HTTP, WebSocket (native and wasm) and blocking
   clients are `Debug`, showing the server's host only, never a URL that may

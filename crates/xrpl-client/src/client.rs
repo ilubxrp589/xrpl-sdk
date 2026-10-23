@@ -282,8 +282,57 @@ pub trait Client {
         Ok(serde_json::from_value(result)?)
     }
 
+    /// The pages of a paginated request, one at a time: follow its `marker`
+    /// with no page limit, and stop reading when you have enough (for an
+    /// account's whole history, or a list longer than [`MAX_PAGES`] pages).
+    /// Every page after the first asks for the ledger the first came from.
+    /// The stream ends after the last page, or after an error.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use futures::{pin_mut, StreamExt};
+    /// use xrpl_client::requests::AccountTxRequest;
+    ///
+    /// let pages = client.pages(AccountTxRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"));
+    /// pin_mut!(pages);
+    /// let mut seen = 0;
+    /// while let Some(page) = pages.next().await {
+    ///     seen += page?.len();
+    ///     if seen >= 10_000 {
+    ///         break;
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn pages<R: Paginated>(
+        &self,
+        req: R,
+    ) -> impl futures::Stream<Item = Result<Vec<R::Item>, ClientError>> {
+        futures::stream::unfold(Some(req), move |state| async move {
+            let req = state?;
+            match self.request(&req).await {
+                Err(e) => Some((Err(e), None)),
+                Ok(response) => {
+                    let ledger = R::ledger_of(&response);
+                    let (items, marker) = R::page(response);
+                    // A marker is only good for the ledger it came from.
+                    let next = marker.map(|marker| {
+                        let next = req.with_marker(marker);
+                        match ledger {
+                            Some(index) => next.at_ledger(index),
+                            None => next,
+                        }
+                    });
+                    Some((Ok(items), next))
+                }
+            }
+        })
+    }
+
     /// Send a paginated request and follow its `marker` to the last page
-    /// (at most [`MAX_PAGES`] pages, else [`ClientError::PaginationLimitReached`]).
+    /// (at most [`MAX_PAGES`] pages, else [`ClientError::PaginationLimitReached`];
+    /// for more, read them with [`Client::pages`]).
     /// Every page after the first asks for the ledger the first came from,
     /// so the result is one ledger's state, never a mix of two.
     async fn request_all<R: Paginated>(&self, req: R) -> Result<Vec<R::Item>, ClientError> {
@@ -1294,6 +1343,28 @@ mod tests {
         assert_eq!(calls[1].1["marker"], "M1");
         // The second page is from the first page's ledger.
         assert_eq!(calls[1].1["ledger_index"], 100);
+    }
+
+    /// `pages` reads past `MAX_PAGES`, each page from the first one's
+    /// ledger, and ends after the last.
+    #[tokio::test]
+    async fn pages_have_no_limit_and_stay_on_one_ledger() {
+        use futures::StreamExt;
+        let mut mock = Mock::default();
+        let total = MAX_PAGES + 10;
+        for n in 0..total {
+            let mut page = json!({"account": "rA", "offers": [], "ledger_index": 100});
+            if n + 1 < total {
+                page["marker"] = json!(format!("M{n}"));
+            }
+            mock = mock.reply("account_offers", page);
+        }
+        let pages: Vec<_> = mock.pages(AccountOffersRequest::new("rA")).collect().await;
+        assert_eq!(pages.len(), total);
+        assert!(pages.iter().all(Result::is_ok));
+        let calls = mock.calls();
+        assert!(calls.iter().skip(1).all(|(_, p)| p["ledger_index"] == 100));
+        assert_eq!(calls[total - 1].1["marker"], format!("M{}", total - 2));
     }
 
     #[tokio::test]

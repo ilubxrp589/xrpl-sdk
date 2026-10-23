@@ -106,8 +106,11 @@ pub enum ClientError {
     #[error("transaction expired: LastLedgerSequence {0} passed")]
     TransactionExpired(u32),
 
-    /// `request_all` stopped after this many pages; page on with `marker`.
-    #[error("pagination limit reached: {0} pages fetched, use marker manually for more")]
+    /// `request_all` stopped after this many pages; read them one at a time
+    /// with [`crate::Client::pages`], which has no limit.
+    #[error(
+        "pagination limit reached after {0} pages; read the pages one at a time with Client::pages"
+    )]
     PaginationLimitReached(usize),
 
     /// A [`crate::blocking::BlockingClient`] method was called inside an
