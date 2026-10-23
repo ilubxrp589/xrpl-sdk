@@ -37,6 +37,7 @@ jobs:
           - fuzz_utils
           - fuzz_amount
           - fuzz_address
+          - fuzz_keys
     env:
       FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '900' || inputs.seconds || '60' }}
     steps:

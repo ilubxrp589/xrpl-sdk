@@ -7,6 +7,15 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+## [v0.7.0] (2026-10-23)
+
+Complete and professional, with no breaking changes: code that builds
+against 0.6 builds against 0.7 (checked with cargo-semver-checks). Open a
+wallet from another wallet's backup, sign typed transactions, check a ledger
+against its hash, and configure the clients; `autofill` prices every
+transaction type as `rippled` does, and wasm waits work outside a browser
+window.
+
 ### Fixed
 - `KeyType::Ed25519`'s documentation called it `rippled`'s default for new
   keys; `wallet_propose` defaults to secp256k1. (`Wallet::generate` and
@@ -635,7 +644,8 @@ Initial release.
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
 
-[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...HEAD
+[v0.7.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.3.0...v0.4.0

@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-sdk"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.88"
 description = "Rust SDK for the XRP Ledger (XRPL): wallets, signing, multisign, autofill and submit, HTTP and WebSocket clients, typed ledger objects, hashes, faucet; checked against rippled"
@@ -16,8 +16,8 @@ categories = ["cryptography::cryptocurrencies", "api-bindings", "network-program
 name = "xrpl_sdk"
 
 [dependencies]
-xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.6" }
-xrpl-client = { package = "halcyon-xrpl-client", path = "../xrpl-client", version = "0.6" }
+xrpl-core = { package = "halcyon-xrpl-core", path = "../xrpl-core", version = "0.7" }
+xrpl-client = { package = "halcyon-xrpl-client", path = "../xrpl-client", version = "0.7" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

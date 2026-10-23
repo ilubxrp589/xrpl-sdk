@@ -42,6 +42,11 @@ for path in sorted((FIXTURES / "xrpljs").glob("*.json")):
 blobs = [bytes.fromhex(r["tx_blob"]) for r in signed] + [bytes.fromhex(e["binary"]) for e in codec_entries]
 tx_json = [compact(r["tx_json"]) for r in signed] + [compact(t) for t in transactions]
 
+# A real binary `ledger` answer cut to its first two transactions: small
+# enough to mutate quickly, and still the shape verify_ledger_response reads.
+small_ledger = json.loads((FIXTURES / "mainnet_ledger_107852951.json").read_text())["binary"]
+small_ledger["ledger"]["transactions"] = small_ledger["ledger"]["transactions"][:2]
+
 seeds = {
     "fuzz_decode": blobs,
     "fuzz_roundtrip": blobs,
@@ -68,6 +73,17 @@ seeds = {
             "sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r", "sp5fghtJtpUorTwvof1NpDXAzNwf5",
         ]
     ],
+    "fuzz_keys": [
+        s.encode()
+        for s in [v[1] for v in json.loads((FIXTURES.parent / "vectors/bip39_trezor.json").read_text())["english"]]
+        + [
+            "399150 474506 009147 088773 432160 282843 253738 605430",
+            "YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY FILE",
+            "m/44'/144'/0'/0/0", "m/0h/1/2H", "secp256k1",
+        ]
+    ]
+    + [compact(small_ledger)]
+    + [compact(r["tx_json"]) for r in signed[:20]],
     "fuzz_amount": [
         bytes.fromhex(h)
         for h in [

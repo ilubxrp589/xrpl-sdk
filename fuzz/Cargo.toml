@@ -60,3 +60,9 @@ name = "fuzz_utils"
 path = "fuzz_targets/fuzz_utils.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_keys"
+path = "fuzz_targets/fuzz_keys.rs"
+test = false
+doc = false
