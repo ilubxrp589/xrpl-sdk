@@ -451,7 +451,8 @@ pub struct AuctionSlot {
     pub expiration: String,
     /// What the slot cost.
     pub price: Amount,
-    /// Which 72-minute interval of the 24-hour slot is current (0–19).
+    /// Which 72-minute interval of the 24-hour slot is current: 0–19 while
+    /// the slot runs, 20 once it has expired.
     pub time_interval: u32,
 }
 
@@ -543,7 +544,8 @@ pub struct BookChangesResult {
 }
 
 /// One book's trading in the ledger. Currencies are `XRP_drops` or
-/// `issuer/currency`; rates are B per A.
+/// `issuer/currency`; rates (`open`, `high`, `low`, `close`) are A per B
+/// (the volume of A traded for one of B).
 ///
 /// ```
 /// use serde_json::json;

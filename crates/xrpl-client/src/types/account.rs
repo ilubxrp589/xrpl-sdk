@@ -225,7 +225,7 @@ pub struct AccountFlags {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct QueueData {
-    /// Transactions in the ledger.
+    /// How many of the account's transactions are in the queue.
     pub txn_count: u32,
     /// Whether a queued transaction changes the account's keys.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -308,7 +308,7 @@ pub struct ValidatedLedger {
     /// The reserve per owned object, in XRP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserve_inc_xrp: Option<f64>,
-    /// The sequence of the transaction that created it.
+    /// The ledger's index.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seq: Option<u32>,
 }
@@ -420,7 +420,8 @@ pub struct StateAccounting {
 pub struct ValidatorListInfo {
     /// How many.
     pub count: u32,
-    /// When it expires (ledger time: seconds since 2000-01-01) (`Expiration`).
+    /// When the list expires, as `rippled` writes it
+    /// (`2027-Apr-06 17:51:34.000000000 UTC`).
     pub expiration: String,
     /// The status.
     pub status: String,
@@ -597,7 +598,7 @@ pub struct StateLedger {
     /// The reserve per owned entry, in drops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserve_inc: Option<u64>,
-    /// The sequence of the transaction that created it.
+    /// The ledger's index.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seq: Option<u32>,
 }
@@ -809,14 +810,14 @@ pub struct ManifestResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ManifestDetails {
-    /// A domain the account claims, hex (ASCII, lower case) (`Domain`).
+    /// The domain the validator claims, as text (`ripple.ittc.ku.edu`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
     /// The validator's current signing key.
     pub ephemeral_key: String,
     /// The validator's master key.
     pub master_key: String,
-    /// The sequence of the transaction that created it.
+    /// The manifest's sequence number (it rises with each new signing key).
     pub seq: u32,
 }
 
