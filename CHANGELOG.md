@@ -7,6 +7,35 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Security
+- **secp256k1 runs on RustCrypto's constant-time fixes
+  ([RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)).**
+  Before 0.7.6, `crypto-bigint` could, depending on the compiler and CPU,
+  branch on secret values in operations meant to be constant-time, which can
+  leak them through timing (the advisory names subtraction, zero counting,
+  division and Montgomery multiplication). 0.8.1 and older derive secp256k1
+  keys and sign with `k256` 0.13, whose scalar addition, subtraction and
+  negation are `crypto-bigint` 0.5's. The SDK now uses `k256` 0.14 and
+  `ecdsa` 0.17, on `crypto-bigint` 0.7.6, which has the fixes. Ed25519, the
+  default key type, never used `crypto-bigint`.
+  - Signatures do not change: a new test signs each of the 79 transactions
+    `rippled` signed and gets `rippled`'s signature, byte for byte.
+  - No `k256` type is part of the SDK's API: code that builds against 0.8.1
+    builds against 0.8.2.
+
+### Changed
+- **`halcyon-xrpl-core` needs Rust 1.88** (was 1.85), as the other crates
+  already did: `crypto-bigint` 0.7.6 needs 1.87, and `sha2` 0.11.1, which
+  `k256` 0.14 uses, needs 1.88. A security fix is the one reason a patch
+  release raises the MSRV (README, "Minimum supported Rust version"). On an
+  older Rust, Cargo's MSRV-aware resolver stays on 0.8.1.
+- **secp256k1 is faster** with `k256` 0.14: deriving keys from a seed
+  114 µs → 57.60 µs, a signature 44.44 µs → 37.52 µs, signing a transaction
+  48.84 µs → 42.24 µs ([benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md)).
+- On `wasm32`, the `wasm` feature also turns on the JavaScript backend of
+  `getrandom` 0.4, which `k256` 0.14 brings in. (The SDK does not use its
+  random numbers: seeds come from the operating system as before.)
+
 ### Docs and project
 - The recorded `server_info` and `server_state` answers no longer carry the
   recording server's host name and node key: they are replaced, the file
@@ -18,6 +47,8 @@ may break the API, and says so under "Changed (breaking)").
   relative links from each crate's own directory, where those files are not
   (`crates/xrpl-core/docs/BENCHMARKS.md`). They are now absolute, and CI
   checks every relative README link both ways (`scripts/check_readme_links.py`).
+- `SECURITY.md` lists the advisory under "Known advisories", with the
+  versions it affects.
 
 ## [v0.8.1] (2026-10-23)
 

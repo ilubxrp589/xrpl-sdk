@@ -2,7 +2,7 @@
 name = "halcyon-xrpl-core"
 version = "0.8.1"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "XRP Ledger types, binary codec, Ed25519/secp256k1 signing, transaction hashes and ledger entry IDs, checked byte for byte against rippled"
 license = "Apache-2.0"
 repository = "https://github.com/ilubxrp589/xrpl-sdk"
@@ -19,7 +19,7 @@ crate-type = ["rlib"]
 [features]
 default = ["std"]
 std = ["serde/std", "serde_json", "hex/std", "rand", "thiserror/std", "bs58/std"]
-wasm = ["wasm-bindgen", "js-sys", "getrandom", "std", "getrandom_03"]
+wasm = ["wasm-bindgen", "js-sys", "getrandom", "std", "getrandom_03", "getrandom_04"]
 
 [dependencies]
 serde = { workspace = true }
@@ -32,6 +32,7 @@ hmac = { workspace = true }
 bs58 = { workspace = true }
 ed25519-dalek = { workspace = true }
 k256 = { workspace = true }
+ecdsa = { workspace = true }
 rand = { workspace = true, optional = true }
 zeroize = { workspace = true }
 subtle = { workspace = true }
@@ -44,6 +45,9 @@ getrandom = { version = "0.2", features = ["js"], optional = true }
 # rand 0.9 draws on getrandom 0.3, which needs its wasm_js backend on wasm32
 # (plus the getrandom_backend cfg in .cargo/config.toml).
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"], optional = true }
+# k256's std feature (0.14) draws on getrandom 0.4 (through crypto-bigint),
+# which needs its wasm_js feature on wasm32. The SDK never uses k256's RNG.
+getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"], optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

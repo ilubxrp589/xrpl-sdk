@@ -122,12 +122,14 @@ every Monday, and uploads any crashing input.
 
 ## Minimum supported Rust version
 
-`halcyon-xrpl-core` needs Rust 1.85; `halcyon-xrpl-client`,
-`halcyon-xrpl-sdk` and `halcyon-xrpl-cli` need 1.88 (for the URL handling in
-`reqwest`). Each crate declares it as `rust-version`. CI checks both, with the
-locked dependencies, so a dependency update that raises either fails there
-before it reaches a release. Raising the MSRV is a minor-version change and
-goes in the CHANGELOG.
+Every crate needs Rust 1.88: for the URL handling in `reqwest`, and for the
+RustCrypto releases with the fixes for RUSTSEC-2026-0387 (`crypto-bigint`
+0.7.6 needs 1.87, `sha2` 0.11.1 needs 1.88). Each crate declares it as
+`rust-version`. CI checks it with the locked dependencies, so a dependency
+update that raises it fails there before it reaches a release. Raising the
+MSRV is a minor-version change and goes in the CHANGELOG, except when a
+security fix needs it: then the patch release raises it and says so (0.8.2,
+`halcyon-xrpl-core` from 1.85).
 
 ## Continuous integration
 
@@ -140,7 +142,7 @@ goes in the CHANGELOG.
 | Package | `cargo package --workspace`: each crate builds from its packaged files alone |
 | Clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` |
 | Format | `cargo fmt --check` |
-| MSRV | `cargo check --locked` on Rust 1.85 (core) and 1.88 (everything) |
+| MSRV | `cargo check --locked` on Rust 1.88: every crate with all features, and core with none (`no_std`) |
 | WASM build | Clippy for `wasm32-unknown-unknown` (core, client, SDK, with `wasm`), and the client's unit tests in Node.js |
 | Features | Clippy for the client and the SDK with no features, `http` only and `ws` only |
 | Definitions | The codec's definitions are the recorded `server_definitions` answer (`check_definitions.py --offline`) |

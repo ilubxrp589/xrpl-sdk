@@ -1,9 +1,9 @@
 use crate::CoreError;
-use k256::ecdsa::hazmat::{bits2field, SignPrimitive};
+use ecdsa::hazmat::sign_prehashed_rfc6979;
 use k256::ecdsa::{Signature, VerifyingKey};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::elliptic_curve::sec1::ToSec1Point;
+use k256::sha2::Sha256;
 use k256::{Secp256k1, SecretKey};
-use sha2::Sha256;
 use zeroize::{Zeroize, Zeroizing};
 
 #[cfg(not(feature = "std"))]
@@ -44,7 +44,7 @@ fn first_valid(candidate: impl Fn(u32) -> Zeroizing<[u8; 32]>) -> Result<SecretK
 /// too, and neither has any real chance of happening.
 pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), CoreError> {
     let root = first_valid(|seq| super::secret_sha512_half(&[seed, &seq.to_be_bytes()]))?;
-    let root_public = root.public_key().to_encoded_point(true);
+    let root_public = root.public_key().to_sec1_point(true);
     let intermediate = first_valid(|sub| {
         super::secret_sha512_half(&[
             root_public.as_bytes(),
@@ -57,11 +57,7 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), 
     let account = SecretKey::from_bytes(&scalar.to_bytes());
     scalar.zeroize();
     let account = account.map_err(|_| CoreError::KeyDerivationFailed)?;
-    let public_key = account
-        .public_key()
-        .to_encoded_point(true)
-        .as_bytes()
-        .to_vec();
+    let public_key = account.public_key().to_sec1_point(true).as_bytes().to_vec();
     Ok((Zeroizing::new(account.to_bytes().to_vec()), public_key))
 }
 
@@ -83,11 +79,7 @@ pub fn derive_keypair(seed: &[u8; 16]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), 
 /// [`CoreError::SigningFailed`] if it is zero or not below the curve order.
 pub fn public_key(private_key: &[u8]) -> Result<Vec<u8>, CoreError> {
     let secret = secret_key(private_key)?;
-    Ok(secret
-        .public_key()
-        .to_encoded_point(true)
-        .as_bytes()
-        .to_vec())
+    Ok(secret.public_key().to_sec1_point(true).as_bytes().to_vec())
 }
 
 fn secret_key(private_key: &[u8]) -> Result<SecretKey, CoreError> {
@@ -142,13 +134,10 @@ pub fn sign(private_key: &[u8], prehash: &[u8]) -> Result<Vec<u8>, CoreError> {
     // From the secret scalar alone: unlike k256's SigningKey, this does not
     // first derive the public key, which would double the cost.
     let mut scalar = secret.to_nonzero_scalar();
-    let signed = bits2field::<Secp256k1>(prehash)
-        .and_then(|z| scalar.try_sign_prehashed_rfc6979::<Sha256>(&z, &[]));
+    let (signature, _) = sign_prehashed_rfc6979::<Secp256k1, Sha256>(&scalar, prehash, &[]);
     scalar.zeroize();
     // k256 already returns the low-S form; normalizing again keeps that explicit.
-    let (signature, _) = signed.map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-    let normalized: Signature = signature.normalize_s().unwrap_or(signature);
-    Ok(normalized.to_der().as_bytes().to_vec())
+    Ok(signature.normalize_s().to_der().as_bytes().to_vec())
 }
 
 /// Verify a DER secp256k1 signature over a 32-byte hash. The public key must
@@ -201,9 +190,11 @@ pub fn verify(public_key: &[u8], prehash: &[u8], signature_der: &[u8]) -> Result
 pub(crate) fn low_s(signature_der: &[u8]) -> Result<Vec<u8>, CoreError> {
     let signature =
         Signature::from_der(signature_der).map_err(|e| CoreError::SigningFailed(e.to_string()))?;
-    Ok(match signature.normalize_s() {
-        Some(low) => low.to_der().as_bytes().to_vec(),
-        None => signature_der.to_vec(),
+    let low = signature.normalize_s();
+    Ok(if low == signature {
+        signature_der.to_vec()
+    } else {
+        low.to_der().as_bytes().to_vec()
     })
 }
 
@@ -229,7 +220,7 @@ pub(crate) fn low_s(signature_der: &[u8]) -> Result<Vec<u8>, CoreError> {
 pub fn compressed_public_key(public_key: &[u8]) -> Result<Vec<u8>, CoreError> {
     let key = VerifyingKey::from_sec1_bytes(public_key)
         .map_err(|e| CoreError::SigningFailed(format!("not a secp256k1 public key: {e}")))?;
-    Ok(key.to_encoded_point(true).as_bytes().to_vec())
+    Ok(key.to_sec1_point(true).as_bytes().to_vec())
 }
 
 #[cfg(test)]
@@ -258,7 +249,7 @@ mod tests {
     fn uncompressed_public_keys_compress() {
         let (private_key, public_key) = derive_keypair(&[7u8; 16]).unwrap();
         let secret = secret_key(&private_key).unwrap();
-        let uncompressed = secret.public_key().to_encoded_point(false);
+        let uncompressed = secret.public_key().to_sec1_point(false);
         assert_eq!(uncompressed.as_bytes().len(), 65);
         assert_eq!(
             compressed_public_key(uncompressed.as_bytes()).unwrap(),

@@ -22,11 +22,11 @@ faster halcyon-xrpl-core is, or how many times slower where it is slower.
 | | NFTokenMint | 3.83 µs | 31.71 µs | 8.3× faster |
 | | AMMDeposit | 6.02 µs | 69.15 µs | 11.5× faster |
 | Derive keys from a seed | Ed25519 | 17.47 µs | 89.44 µs | 5.1× faster |
-| | secp256k1 | 114 µs | 114 µs | the same |
+| | secp256k1 | 57.60 µs | 114 µs | 2.0× faster |
 | Sign signing data | Ed25519 | 34.75 µs | 35.41 µs | the same |
-| | secp256k1 | 44.44 µs | 28.81 µs | 1.5× slower |
+| | secp256k1 | 37.52 µs | 29.06 µs | 1.3× slower |
 | Sign a transaction (JSON in, signed JSON out) | Ed25519 | 39.00 µs | 66.76 µs | 1.7× faster |
-| | secp256k1 | 48.84 µs | 60.63 µs | 1.2× faster |
+| | secp256k1 | 42.24 µs | 60.62 µs | 1.4× faster |
 | Decode a classic address | `rHb9CJAW…` | 373 ns | 376 ns | the same |
 
 ## What is measured
@@ -75,8 +75,11 @@ Both use deterministic nonces (RFC 6979), so their signatures are identical.
   builds without a C toolchain, for WebAssembly (`wasm32-unknown-unknown`)
   and for `no_std` targets, with `unsafe` code forbidden in the SDK itself.
   The C library is faster at the raw signature; signing a whole transaction,
-  which also encodes it, is still faster with halcyon-xrpl-core. Ed25519, the
-  SDK's default key type, uses `ed25519-dalek` in both libraries.
+  which also encodes it, is still faster with halcyon-xrpl-core, and so is
+  deriving keys. Moving to `k256` 0.14 in 0.8.2 (for RUSTSEC-2026-0387) made
+  secp256k1 faster: deriving keys took 114 µs before, a signature 44.44 µs
+  and a signed transaction 48.84 µs. Ed25519, the SDK's default key type,
+  uses `ed25519-dalek` in both libraries.
 - **Address decoding.** The same speed. (It was about 80 ns slower until,
   after 0.8.0, the decoder allocated its buffer once instead of growing it.)
 
@@ -94,9 +97,14 @@ Both use deterministic nonces (RFC 6979), so their signatures are identical.
   measurements agreed within 1.5%, and each of the other three was slow in
   one run only (by 6 to 22%).
 - **Versions.** halcyon-xrpl-core 0.8.0, with the encoding and address
-  changes listed under `[Unreleased]` in the changelog; xrpl-rust 1.3.0 with
+  changes that 0.8.1 released; xrpl-rust 1.3.0 with
   `default-features = false, features = ["std", "core"]`.
-- **Date.** 2026-10-23.
+- **The secp256k1 rows again for 0.8.2.** After the move to `k256` 0.14, the
+  key and signing benchmarks ran twice more, both libraries in the same runs,
+  and the three secp256k1 rows show the lower medians (their six
+  measurements agreed within 0.5% between the runs). The xrpl-rust side of
+  those rows measured within 1% of the first runs.
+- **Date.** 2026-10-23; the secp256k1 rows 2026-10-24.
 
 ## Running them yourself
 

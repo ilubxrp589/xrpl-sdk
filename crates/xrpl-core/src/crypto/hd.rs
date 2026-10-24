@@ -15,7 +15,7 @@ use crate::CoreError;
 use core::fmt;
 use core::str::FromStr;
 use hmac::{Hmac, Mac};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, Scalar, SecretKey};
 use sha2::Sha512;
@@ -237,7 +237,7 @@ pub(crate) fn derive_extended(
         let mut parent = Zeroizing::new([0u8; 32]);
         parent.copy_from_slice(&key.to_bytes());
         let i = if index & HARDENED == 0 {
-            let point = key.public_key().to_encoded_point(true);
+            let point = key.public_key().to_sec1_point(true);
             hmac_sha512(chain.as_slice(), &[point.as_bytes(), &index.to_be_bytes()])
         } else {
             hmac_sha512(

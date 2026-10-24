@@ -596,7 +596,7 @@ fn inner_hash(leaves: &[([u8; 32], [u8; 32])], depth: usize) -> [u8; 32] {
 /// is even, the low half when odd (`rippled`'s `SHAMapNodeID::selectBranch`).
 fn nibble(key: &[u8; 32], depth: usize) -> u8 {
     let byte = key.get(depth / 2).copied().unwrap_or_default();
-    if depth % 2 == 0 {
+    if depth.is_multiple_of(2) {
         byte >> 4
     } else {
         byte & 0x0F

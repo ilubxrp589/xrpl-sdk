@@ -1,12 +1,14 @@
 //! `verify_transaction` against signatures the network and `rippled` made:
 //! every signed mainnet transaction in the corpus (single and multi-signed)
 //! and every transaction `rippled` 3.4.1 signed offline verifies, and none
-//! verifies once a signed field changes.
+//! verifies once a signed field changes. `sign_transaction` signs each of
+//! `rippled`'s transactions with the same key to the same signature, byte
+//! for byte.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use serde_json::Value;
-use xrpl_core::crypto::verify_transaction;
+use xrpl_core::crypto::{sign_transaction, verify_transaction, Keypair, Seed};
 
 fn corpus() -> Vec<Value> {
     let mut txs = Vec::new();
@@ -36,6 +38,32 @@ fn every_real_signature_verifies() {
         }
     }
     assert_eq!((single, multi), (179 + 79, 2));
+}
+
+/// secp256k1 signing is deterministic (RFC 6979 nonces, low S), in `rippled`
+/// and here, so the same key signing the same transaction must give the same
+/// `TxnSignature`. `rippled` signed these with `sp5fghtJtpUorTwvof1NpDXAzNwf5`.
+#[test]
+fn signs_every_transaction_as_rippled_does() {
+    let keys =
+        Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5").unwrap()).unwrap();
+    let mut signed = 0;
+    for line in include_str!("fixtures/rippled_signed_transactions.jsonl").lines() {
+        let record: Value = serde_json::from_str(line).unwrap();
+        let rippled = &record["tx_json"];
+        let mut unsigned = rippled.clone();
+        let fields = unsigned.as_object_mut().unwrap();
+        fields.remove("TxnSignature");
+        fields.remove("hash");
+        let ours = sign_transaction(&unsigned, &keys).unwrap();
+        assert_eq!(
+            ours["TxnSignature"], rippled["TxnSignature"],
+            "{}",
+            rippled["TransactionType"]
+        );
+        signed += 1;
+    }
+    assert_eq!(signed, 79);
 }
 
 #[test]
