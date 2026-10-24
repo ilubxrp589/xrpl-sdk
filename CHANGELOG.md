@@ -39,6 +39,16 @@ may break the API, and says so under "Changed (breaking)").
   (decoding a classic address: 476 ns → 372 ns, as fast as xrpl-rust's).
 
 ### Docs and project
+- **An example on every public item.** Every public type, trait, function,
+  method and constant of the three library crates (1,024 items) has an
+  example in its own documentation, compiled and run as a test (about 980
+  new; the generated `with_…` setters and flag constants are shown by their
+  type's example). The transaction models, ledger entries and flags types
+  get theirs from the generators. Examples that need a live server compile
+  but do not run; every other one asserts what the item does, with values
+  from `rippled` (recorded answers, `rippled`'s own tests and source) or the
+  repository's test vectors. Writing them found the bugs listed under
+  Fixed, and corrected about ten descriptions that disagreed with `rippled`.
 - **A weekly check of `rippled`'s definitions** (`.github/workflows/definitions.yml`):
   every Monday it compares the definitions on Devnet, Testnet and mainnet
   with the SDK's, and when a network's `rippled` knows a new transaction
