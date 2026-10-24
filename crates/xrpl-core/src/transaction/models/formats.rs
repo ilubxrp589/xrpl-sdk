@@ -12,6 +12,16 @@ use crate::flags::flags_type;
 
 flags_type!(
     /// The flags any transaction may carry (for the types with none of their own).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::UniversalFlags;
+    ///
+    /// let flags = UniversalFlags::INNER_BATCH_TXN;
+    /// assert!(flags.contains(UniversalFlags::INNER_BATCH_TXN));
+    /// assert!(!UniversalFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x4000_0000);
+    /// ```
     UniversalFlags {
         /// `tfFullyCanonicalSig` (any type): set on every transaction since the RequireFullyCanonicalSig amendment.
         FULLY_CANONICAL_SIG = 0x80000000,
@@ -22,6 +32,16 @@ flags_type!(
 
 /// A value of [`AccountSet`]'s `SetFlag` / `ClearFlag` (`asf…`): one account setting to turn on
 /// or off. `u32::from(flag)` is its number.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AccountSet, AccountSetFlag, TxModel};
+///
+/// let flag = AccountSetFlag::DefaultRipple;
+/// assert_eq!(u32::from(flag), 8);
+/// let tx = AccountSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh").with_clear_flag(flag);
+/// assert_eq!(tx.to_json()?["ClearFlag"], 8);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum AccountSetFlag {
@@ -67,6 +87,13 @@ impl From<AccountSetFlag> for u32 {
 
 impl AccountSetFlag {
     /// The flag with this number, if this version knows it.
+    ///
+    /// ```
+    /// use xrpl_core::transaction::models::AccountSetFlag;
+    ///
+    /// assert_eq!(AccountSetFlag::from_value(8), Some(AccountSetFlag::DefaultRipple));
+    /// assert_eq!(AccountSetFlag::from_value(0), None);
+    /// ```
     pub fn from_value(value: u32) -> Option<Self> {
         match value {
             1 => Some(Self::RequireDest),
@@ -93,6 +120,27 @@ impl AccountSetFlag {
 /// [`AMMBid`](https://xrpl.org/docs/references/protocol/transactions/types/ammbid) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMBid, AuthAccount, TxModel};
+/// use xrpl_core::types::Asset;
+///
+/// let auth_accounts = vec![AuthAccount::new("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1")];
+/// let tx = AMMBid::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+/// )
+/// .with_auth_accounts(auth_accounts);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMBid::TRANSACTION_TYPE); // "AMMBid"
+/// assert_eq!(
+///     json["AuthAccounts"][0]["AuthAccount"]["Account"],
+///     "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1"
+/// );
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMBid {
@@ -126,6 +174,19 @@ impl AMMBid {
     pub const TRANSACTION_TYPE: &'static str = "AMMBid";
 
     /// A `AMMBid` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMBid;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = AMMBid::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    /// );
+    /// assert_eq!(tx.asset, Asset::xrp());
+    /// assert!(tx.bid_min.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
         Self {
             common: Common::new(account),
@@ -181,6 +242,16 @@ impl From<AMMBid> for Tx {
 
 flags_type!(
     /// The flags of a [`AMMClawback`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::AMMClawbackFlags;
+    ///
+    /// let flags = AMMClawbackFlags::CLAW_TWO_ASSETS;
+    /// assert!(flags.contains(AMMClawbackFlags::CLAW_TWO_ASSETS));
+    /// assert!(!AMMClawbackFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0000_0001);
+    /// ```
     AMMClawbackFlags {
         /// `tfClawTwoAssets`.
         CLAW_TWO_ASSETS = 0x00000001,
@@ -194,6 +265,23 @@ flags_type!(
 /// [`AMMClawback`](https://xrpl.org/docs/references/protocol/transactions/types/ammclawback) transaction.
 ///
 /// Required: `Holder`, `Asset`, `Asset2`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMClawback, TxModel};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let tx = AMMClawback::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?,
+///     Asset::xrp(),
+/// )
+/// .with_amount(Amount::token("10", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMClawback::TRANSACTION_TYPE); // "AMMClawback"
+/// assert_eq!(json["Amount"]["value"], "10");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMClawback {
@@ -219,6 +307,20 @@ impl AMMClawback {
     pub const TRANSACTION_TYPE: &'static str = "AMMClawback";
 
     /// A `AMMClawback` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMClawback;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = AMMClawback::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?,
+    ///     Asset::xrp(),
+    /// );
+    /// assert_eq!(tx.holder, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         holder: impl Into<String>,
@@ -262,6 +364,23 @@ impl From<AMMClawback> for Tx {
 /// [`AMMCreate`](https://xrpl.org/docs/references/protocol/transactions/types/ammcreate) transaction.
 ///
 /// Required: `Amount`, `Amount2`, `TradingFee`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMCreate, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = AMMCreate::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Amount::xrp(10_000_000)?,
+///     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+///     500,
+/// );
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMCreate::TRANSACTION_TYPE); // "AMMCreate"
+/// assert_eq!(json["Amount"], "10000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMCreate {
@@ -284,6 +403,20 @@ impl AMMCreate {
     pub const TRANSACTION_TYPE: &'static str = "AMMCreate";
 
     /// A `AMMCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMCreate;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = AMMCreate::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Amount::xrp(10_000_000)?,
+    ///     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    ///     500,
+    /// );
+    /// assert_eq!(tx.amount, Amount::xrp(10_000_000)?);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         amount: Amount,
@@ -322,6 +455,21 @@ impl From<AMMCreate> for Tx {
 /// [`AMMDelete`](https://xrpl.org/docs/references/protocol/transactions/types/ammdelete) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMDelete, TxModel};
+/// use xrpl_core::types::Asset;
+///
+/// let tx = AMMDelete::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMDelete::TRANSACTION_TYPE); // "AMMDelete"
+/// assert_eq!(json["Asset"]["currency"], "XRP");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMDelete {
@@ -341,6 +489,19 @@ impl AMMDelete {
     pub const TRANSACTION_TYPE: &'static str = "AMMDelete";
 
     /// A `AMMDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMDelete;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = AMMDelete::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    /// );
+    /// assert_eq!(tx.asset, Asset::xrp());
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
         Self {
             common: Common::new(account),
@@ -369,6 +530,16 @@ impl From<AMMDelete> for Tx {
 
 flags_type!(
     /// The flags of a [`AMMDeposit`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::AMMDepositFlags;
+    ///
+    /// let flags = AMMDepositFlags::LP_TOKEN;
+    /// assert!(flags.contains(AMMDepositFlags::LP_TOKEN));
+    /// assert!(!AMMDepositFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     AMMDepositFlags {
         /// `tfLPToken`.
         LP_TOKEN = 0x00010000,
@@ -392,6 +563,24 @@ flags_type!(
 /// [`AMMDeposit`](https://xrpl.org/docs/references/protocol/transactions/types/ammdeposit) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMDeposit, AMMDepositFlags, TxModel};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let tx = AMMDeposit::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+/// )
+/// .with_amount(Amount::xrp(1_000_000)?)
+/// .with_flags(AMMDepositFlags::SINGLE_ASSET);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMDeposit::TRANSACTION_TYPE); // "AMMDeposit"
+/// assert_eq!(json["Amount"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMDeposit {
@@ -434,6 +623,19 @@ impl AMMDeposit {
     pub const TRANSACTION_TYPE: &'static str = "AMMDeposit";
 
     /// A `AMMDeposit` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMDeposit;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = AMMDeposit::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    /// );
+    /// assert_eq!(tx.asset, Asset::xrp());
+    /// assert!(tx.amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
         Self {
             common: Common::new(account),
@@ -506,6 +708,23 @@ impl From<AMMDeposit> for Tx {
 /// [`AMMVote`](https://xrpl.org/docs/references/protocol/transactions/types/ammvote) transaction.
 ///
 /// Required: `Asset`, `Asset2`, `TradingFee`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMVote, TxModel};
+/// use xrpl_core::types::Asset;
+///
+/// let tx = AMMVote::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+///     500,
+/// );
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMVote::TRANSACTION_TYPE); // "AMMVote"
+/// assert_eq!(json["Asset"]["currency"], "XRP");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMVote {
@@ -528,6 +747,20 @@ impl AMMVote {
     pub const TRANSACTION_TYPE: &'static str = "AMMVote";
 
     /// A `AMMVote` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMVote;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = AMMVote::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    ///     500,
+    /// );
+    /// assert_eq!(tx.asset, Asset::xrp());
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset, trading_fee: u16) -> Self {
         Self {
             common: Common::new(account),
@@ -560,6 +793,16 @@ impl From<AMMVote> for Tx {
 
 flags_type!(
     /// The flags of a [`AMMWithdraw`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::AMMWithdrawFlags;
+    ///
+    /// let flags = AMMWithdrawFlags::LP_TOKEN;
+    /// assert!(flags.contains(AMMWithdrawFlags::LP_TOKEN));
+    /// assert!(!AMMWithdrawFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     AMMWithdrawFlags {
         /// `tfLPToken`.
         LP_TOKEN = 0x00010000,
@@ -585,6 +828,24 @@ flags_type!(
 /// [`AMMWithdraw`](https://xrpl.org/docs/references/protocol/transactions/types/ammwithdraw) transaction.
 ///
 /// Required: `Asset`, `Asset2`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AMMWithdraw, AMMWithdrawFlags, TxModel};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let tx = AMMWithdraw::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+/// )
+/// .with_amount(Amount::xrp(1_000_000)?)
+/// .with_flags(AMMWithdrawFlags::SINGLE_ASSET);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AMMWithdraw::TRANSACTION_TYPE); // "AMMWithdraw"
+/// assert_eq!(json["Amount"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMMWithdraw {
@@ -616,6 +877,19 @@ impl AMMWithdraw {
     pub const TRANSACTION_TYPE: &'static str = "AMMWithdraw";
 
     /// A `AMMWithdraw` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AMMWithdraw;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = AMMWithdraw::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    ///     Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    /// );
+    /// assert_eq!(tx.asset, Asset::xrp());
+    /// assert!(tx.amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, asset: Asset, asset2: Asset) -> Self {
         Self {
             common: Common::new(account),
@@ -680,6 +954,20 @@ impl From<AMMWithdraw> for Tx {
 /// [`AccountDelete`](https://xrpl.org/docs/references/protocol/transactions/types/accountdelete) transaction.
 ///
 /// Required: `Destination`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AccountDelete, TxModel};
+///
+/// let tx = AccountDelete::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+/// )
+/// .with_destination_tag(12345u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AccountDelete::TRANSACTION_TYPE); // "AccountDelete"
+/// assert_eq!(json["DestinationTag"], 12345);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountDelete {
@@ -710,6 +998,16 @@ impl AccountDelete {
     pub const TRANSACTION_TYPE: &'static str = "AccountDelete";
 
     /// A `AccountDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AccountDelete;
+    /// let tx = AccountDelete::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    /// );
+    /// assert_eq!(tx.destination, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.destination_tag.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, destination: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -753,6 +1051,15 @@ impl From<AccountDelete> for Tx {
 
 flags_type!(
     /// The flags of a [`AccountSet`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::AccountSetFlags;
+    ///
+    /// let flags = AccountSetFlags::REQUIRE_DEST_TAG | AccountSetFlags::REQUIRE_AUTH;
+    /// assert!(flags.contains(AccountSetFlags::REQUIRE_AUTH));
+    /// assert_eq!(u32::from(flags), 0x0005_0000);
+    /// ```
     AccountSetFlags {
         /// `tfRequireDestTag`.
         REQUIRE_DEST_TAG = 0x00010000,
@@ -776,6 +1083,18 @@ flags_type!(
 /// [`AccountSet`](https://xrpl.org/docs/references/protocol/transactions/types/accountset) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{AccountSet, AccountSetFlag, TxModel};
+///
+/// let tx = AccountSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_set_flag(AccountSetFlag::DefaultRipple);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], AccountSet::TRANSACTION_TYPE); // "AccountSet"
+/// assert_eq!(json["SetFlag"], 8);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountSet {
@@ -839,6 +1158,13 @@ impl AccountSet {
     pub const TRANSACTION_TYPE: &'static str = "AccountSet";
 
     /// A `AccountSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::AccountSet;
+    /// let tx = AccountSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.email_hash.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -948,6 +1274,16 @@ impl From<AccountSet> for Tx {
 
 flags_type!(
     /// The flags of a [`Batch`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::BatchFlags;
+    ///
+    /// let flags = BatchFlags::ALL_OR_NOTHING;
+    /// assert!(flags.contains(BatchFlags::ALL_OR_NOTHING));
+    /// assert!(!BatchFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     BatchFlags {
         /// `tfAllOrNothing`.
         ALL_OR_NOTHING = 0x00010000,
@@ -967,6 +1303,29 @@ flags_type!(
 /// [`Batch`](https://xrpl.org/docs/references/protocol/transactions/types/batch) transaction.
 ///
 /// Required: `RawTransactions`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{Batch, BatchFlags, Payment, PaymentFlags, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// // Inner transactions carry tfInnerBatchTxn and no fee (see `transaction::batch`).
+/// let pay = Payment::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_flags(PaymentFlags::INNER_BATCH_TXN)
+/// .with_fee(0);
+/// let tx = Batch::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     vec![pay.clone().with_sequence(6).into(), pay.with_sequence(7).into()],
+/// )
+/// .with_flags(BatchFlags::ALL_OR_NOTHING);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], Batch::TRANSACTION_TYPE); // "Batch"
+/// assert_eq!(json["RawTransactions"][1]["RawTransaction"]["Sequence"], 7);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Batch {
@@ -991,6 +1350,17 @@ impl Batch {
     pub const TRANSACTION_TYPE: &'static str = "Batch";
 
     /// A `Batch` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{Batch, OfferCancel};
+    /// let cancel = |sequence| OfferCancel::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", sequence);
+    /// let tx = Batch::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     vec![cancel(7).into(), cancel(8).into()],
+    /// );
+    /// assert_eq!(tx.raw_transactions.len(), 2);
+    /// assert!(tx.batch_signers.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, raw_transactions: Vec<Tx>) -> Self {
         Self {
             common: Common::new(account),
@@ -1027,6 +1397,19 @@ impl From<Batch> for Tx {
 /// [`CheckCancel`](https://xrpl.org/docs/references/protocol/transactions/types/checkcancel) transaction.
 ///
 /// Required: `CheckID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CheckCancel, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let check_id =
+///     Hash256::from_hex("5500034F12C4319A1D93AC2684DED262F372D24F0BFF649C34BCAB8F73C3BF6B")?;
+/// let tx = CheckCancel::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", check_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], CheckCancel::TRANSACTION_TYPE); // "CheckCancel"
+/// assert_eq!(json["CheckID"], check_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CheckCancel {
@@ -1043,6 +1426,17 @@ impl CheckCancel {
     pub const TRANSACTION_TYPE: &'static str = "CheckCancel";
 
     /// A `CheckCancel` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::CheckCancel;
+    /// # use xrpl_core::types::Hash256;
+    /// let check_id =
+    ///     Hash256::from_hex("5500034F12C4319A1D93AC2684DED262F372D24F0BFF649C34BCAB8F73C3BF6B")?;
+    /// let tx = CheckCancel::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", check_id);
+    /// assert_eq!(tx.check_id, check_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, check_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -1071,6 +1465,20 @@ impl From<CheckCancel> for Tx {
 /// [`CheckCash`](https://xrpl.org/docs/references/protocol/transactions/types/checkcash) transaction.
 ///
 /// Required: `CheckID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CheckCash, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let check_id =
+///     Hash256::from_hex("5500034F12C4319A1D93AC2684DED262F372D24F0BFF649C34BCAB8F73C3BF6B")?;
+/// let tx = CheckCash::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", check_id)
+///     .with_amount(Amount::xrp(1_000_000)?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], CheckCash::TRANSACTION_TYPE); // "CheckCash"
+/// assert_eq!(json["Amount"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CheckCash {
@@ -1097,6 +1505,17 @@ impl CheckCash {
     pub const TRANSACTION_TYPE: &'static str = "CheckCash";
 
     /// A `CheckCash` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::CheckCash;
+    /// # use xrpl_core::types::Hash256;
+    /// let check_id =
+    ///     Hash256::from_hex("5500034F12C4319A1D93AC2684DED262F372D24F0BFF649C34BCAB8F73C3BF6B")?;
+    /// let tx = CheckCash::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", check_id);
+    /// assert_eq!(tx.check_id, check_id);
+    /// assert!(tx.amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, check_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -1141,6 +1560,22 @@ impl From<CheckCash> for Tx {
 /// [`CheckCreate`](https://xrpl.org/docs/references/protocol/transactions/types/checkcreate) transaction.
 ///
 /// Required: `Destination`, `SendMax`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CheckCreate, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = CheckCreate::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_expiration(843_322_252u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], CheckCreate::TRANSACTION_TYPE); // "CheckCreate"
+/// assert_eq!(json["Expiration"], 843_322_252);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CheckCreate {
@@ -1177,6 +1612,19 @@ impl CheckCreate {
     pub const TRANSACTION_TYPE: &'static str = "CheckCreate";
 
     /// A `CheckCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::CheckCreate;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = CheckCreate::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.destination, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.expiration.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         destination: impl Into<String>,
@@ -1234,6 +1682,22 @@ impl From<CheckCreate> for Tx {
 /// [`Clawback`](https://xrpl.org/docs/references/protocol/transactions/types/clawback) transaction.
 ///
 /// Required: `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{Clawback, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = Clawback::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Amount::mpt(10, "000004C463C52827307480341125DA0577DEFC38405B0E3E")?,
+/// )
+/// .with_holder("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], Clawback::TRANSACTION_TYPE); // "Clawback"
+/// assert_eq!(json["Holder"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Clawback {
@@ -1253,6 +1717,18 @@ impl Clawback {
     pub const TRANSACTION_TYPE: &'static str = "Clawback";
 
     /// A `Clawback` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::Clawback;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = Clawback::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Amount::mpt(10, "000004C463C52827307480341125DA0577DEFC38405B0E3E")?,
+    /// );
+    /// assert_eq!(tx.amount, Amount::mpt(10, "000004C463C52827307480341125DA0577DEFC38405B0E3E")?);
+    /// assert!(tx.holder.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -1292,6 +1768,25 @@ impl From<Clawback> for Tx {
 /// [`ConfidentialMPTClawback`](https://xrpl.org/docs/references/protocol/transactions/types/confidentialmptclawback) transaction.
 ///
 /// Required: `MPTokenIssuanceID`, `Holder`, `MPTAmount`, `ZKProof`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{ConfidentialMPTClawback, TxModel};
+/// use xrpl_core::types::Hash192;
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+/// let tx = ConfidentialMPTClawback::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     issuance_id,
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "1000",
+///     "0A0B0C0D",
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], ConfidentialMPTClawback::TRANSACTION_TYPE);
+/// assert_eq!(json["MPTokenIssuanceID"], issuance_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ConfidentialMPTClawback {
@@ -1317,6 +1812,23 @@ impl ConfidentialMPTClawback {
     pub const TRANSACTION_TYPE: &'static str = "ConfidentialMPTClawback";
 
     /// A `ConfidentialMPTClawback` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::ConfidentialMPTClawback;
+    /// # use xrpl_core::types::Hash192;
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+    /// let tx = ConfidentialMPTClawback::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     issuance_id,
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "1000",
+    ///     "0A0B0C0D",
+    /// );
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         mp_token_issuance_id: Hash192,
@@ -1354,6 +1866,29 @@ impl From<ConfidentialMPTClawback> for Tx {
 /// [`ConfidentialMPTConvert`](https://xrpl.org/docs/references/protocol/transactions/types/confidentialmptconvert) transaction.
 ///
 /// Required: `MPTokenIssuanceID`, `MPTAmount`, `HolderEncryptedAmount`, `IssuerEncryptedAmount`, `BlindingFactor`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{ConfidentialMPTConvert, TxModel};
+/// use xrpl_core::types::{Hash192, Hash256};
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// let blinding_factor =
+///     Hash256::from_hex("218937A23DF0713D6BF560037ABF5CDBCF78F794921FE6747BED813C94ABD390")?;
+/// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+/// let tx = ConfidentialMPTConvert::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     issuance_id,
+///     "1000",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+///     blinding_factor,
+/// )
+/// .with_holder_encryption_key("0A0B0C0D");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], ConfidentialMPTConvert::TRANSACTION_TYPE);
+/// assert_eq!(json["HolderEncryptionKey"], "0A0B0C0D");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ConfidentialMPTConvert {
@@ -1399,6 +1934,26 @@ impl ConfidentialMPTConvert {
     pub const TRANSACTION_TYPE: &'static str = "ConfidentialMPTConvert";
 
     /// A `ConfidentialMPTConvert` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::ConfidentialMPTConvert;
+    /// # use xrpl_core::types::{Hash192, Hash256};
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// let blinding_factor =
+    ///     Hash256::from_hex("218937A23DF0713D6BF560037ABF5CDBCF78F794921FE6747BED813C94ABD390")?;
+    /// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+    /// let tx = ConfidentialMPTConvert::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     issuance_id,
+    ///     "1000",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    ///     blinding_factor,
+    /// );
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.holder_encryption_key.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         mp_token_issuance_id: Hash192,
@@ -1462,6 +2017,31 @@ impl From<ConfidentialMPTConvert> for Tx {
 /// [`ConfidentialMPTConvertBack`](https://xrpl.org/docs/references/protocol/transactions/types/confidentialmptconvertback) transaction.
 ///
 /// Required: `MPTokenIssuanceID`, `MPTAmount`, `HolderEncryptedAmount`, `IssuerEncryptedAmount`, `BlindingFactor`, `ZKProof`, `BalanceCommitment`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{ConfidentialMPTConvertBack, TxModel};
+/// use xrpl_core::types::{Hash192, Hash256};
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// let blinding_factor =
+///     Hash256::from_hex("218937A23DF0713D6BF560037ABF5CDBCF78F794921FE6747BED813C94ABD390")?;
+/// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+/// let tx = ConfidentialMPTConvertBack::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     issuance_id,
+///     "1000",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+///     blinding_factor,
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+/// )
+/// .with_auditor_encrypted_amount("0A0B0C0D");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], ConfidentialMPTConvertBack::TRANSACTION_TYPE);
+/// assert_eq!(json["AuditorEncryptedAmount"], "0A0B0C0D");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ConfidentialMPTConvertBack {
@@ -1503,6 +2083,28 @@ impl ConfidentialMPTConvertBack {
     pub const TRANSACTION_TYPE: &'static str = "ConfidentialMPTConvertBack";
 
     /// A `ConfidentialMPTConvertBack` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::ConfidentialMPTConvertBack;
+    /// # use xrpl_core::types::{Hash192, Hash256};
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// let blinding_factor =
+    ///     Hash256::from_hex("218937A23DF0713D6BF560037ABF5CDBCF78F794921FE6747BED813C94ABD390")?;
+    /// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+    /// let tx = ConfidentialMPTConvertBack::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     issuance_id,
+    ///     "1000",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    ///     blinding_factor,
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    /// );
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.auditor_encrypted_amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         mp_token_issuance_id: Hash192,
@@ -1554,6 +2156,18 @@ impl From<ConfidentialMPTConvertBack> for Tx {
 /// [`ConfidentialMPTMergeInbox`](https://xrpl.org/docs/references/protocol/transactions/types/confidentialmptmergeinbox) transaction.
 ///
 /// Required: `MPTokenIssuanceID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{ConfidentialMPTMergeInbox, TxModel};
+/// use xrpl_core::types::Hash192;
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// let tx = ConfidentialMPTMergeInbox::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], ConfidentialMPTMergeInbox::TRANSACTION_TYPE);
+/// assert_eq!(json["MPTokenIssuanceID"], issuance_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ConfidentialMPTMergeInbox {
@@ -1570,6 +2184,16 @@ impl ConfidentialMPTMergeInbox {
     pub const TRANSACTION_TYPE: &'static str = "ConfidentialMPTMergeInbox";
 
     /// A `ConfidentialMPTMergeInbox` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::ConfidentialMPTMergeInbox;
+    /// # use xrpl_core::types::Hash192;
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// let tx = ConfidentialMPTMergeInbox::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id);
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
         Self {
             common: Common::new(account),
@@ -1598,6 +2222,30 @@ impl From<ConfidentialMPTMergeInbox> for Tx {
 /// [`ConfidentialMPTSend`](https://xrpl.org/docs/references/protocol/transactions/types/confidentialmptsend) transaction.
 ///
 /// Required: `MPTokenIssuanceID`, `Destination`, `SenderEncryptedAmount`, `DestinationEncryptedAmount`, `IssuerEncryptedAmount`, `ZKProof`, `AmountCommitment`, `BalanceCommitment`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{ConfidentialMPTSend, TxModel};
+/// use xrpl_core::types::Hash192;
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+/// let tx = ConfidentialMPTSend::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     issuance_id,
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+///     "0A0B0C0D",
+/// )
+/// .with_destination_tag(12345u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], ConfidentialMPTSend::TRANSACTION_TYPE);
+/// assert_eq!(json["DestinationTag"], 12345);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ConfidentialMPTSend {
@@ -1656,6 +2304,27 @@ impl ConfidentialMPTSend {
     pub const TRANSACTION_TYPE: &'static str = "ConfidentialMPTSend";
 
     /// A `ConfidentialMPTSend` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::ConfidentialMPTSend;
+    /// # use xrpl_core::types::Hash192;
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+    /// let tx = ConfidentialMPTSend::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     issuance_id,
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    ///     "0A0B0C0D",
+    /// );
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.destination_tag.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         mp_token_issuance_id: Hash192,
@@ -1725,6 +2394,20 @@ impl From<ConfidentialMPTSend> for Tx {
 /// [`CredentialAccept`](https://xrpl.org/docs/references/protocol/transactions/types/credentialaccept) transaction.
 ///
 /// Required: `Issuer`, `CredentialType`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CredentialAccept, TxModel};
+///
+/// let tx = CredentialAccept::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "4B5943",
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], CredentialAccept::TRANSACTION_TYPE);
+/// assert_eq!(json["Issuer"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CredentialAccept {
@@ -1744,6 +2427,17 @@ impl CredentialAccept {
     pub const TRANSACTION_TYPE: &'static str = "CredentialAccept";
 
     /// A `CredentialAccept` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::CredentialAccept;
+    /// let tx = CredentialAccept::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "4B5943",
+    /// );
+    /// assert_eq!(tx.issuer, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(
         account: impl Into<String>,
         issuer: impl Into<String>,
@@ -1777,6 +2471,21 @@ impl From<CredentialAccept> for Tx {
 /// [`CredentialCreate`](https://xrpl.org/docs/references/protocol/transactions/types/credentialcreate) transaction.
 ///
 /// Required: `Subject`, `CredentialType`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CredentialCreate, TxModel};
+///
+/// let tx = CredentialCreate::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "4B5943",
+/// )
+/// .with_uri("68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], CredentialCreate::TRANSACTION_TYPE);
+/// assert_eq!(json["URI"], "68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CredentialCreate {
@@ -1806,6 +2515,17 @@ impl CredentialCreate {
     pub const TRANSACTION_TYPE: &'static str = "CredentialCreate";
 
     /// A `CredentialCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::CredentialCreate;
+    /// let tx = CredentialCreate::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "4B5943",
+    /// );
+    /// assert_eq!(tx.subject, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.expiration.is_none()); // optional fields start unset
+    /// ```
     pub fn new(
         account: impl Into<String>,
         subject: impl Into<String>,
@@ -1855,6 +2575,17 @@ impl From<CredentialCreate> for Tx {
 /// [`CredentialDelete`](https://xrpl.org/docs/references/protocol/transactions/types/credentialdelete) transaction.
 ///
 /// Required: `CredentialType`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CredentialDelete, TxModel};
+///
+/// let tx = CredentialDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "4B5943")
+///     .with_subject("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], CredentialDelete::TRANSACTION_TYPE);
+/// assert_eq!(json["Subject"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CredentialDelete {
@@ -1877,6 +2608,13 @@ impl CredentialDelete {
     pub const TRANSACTION_TYPE: &'static str = "CredentialDelete";
 
     /// A `CredentialDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::CredentialDelete;
+    /// let tx = CredentialDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "4B5943");
+    /// assert_eq!(tx.credential_type, "4B5943");
+    /// assert!(tx.subject.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, credential_type: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -1921,6 +2659,16 @@ impl From<CredentialDelete> for Tx {
 /// [`DIDDelete`](https://xrpl.org/docs/references/protocol/transactions/types/diddelete) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{DIDDelete, TxModel};
+///
+/// let tx = DIDDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], DIDDelete::TRANSACTION_TYPE); // "DIDDelete"
+/// assert_eq!(json["Account"], "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DIDDelete {
@@ -1934,6 +2682,13 @@ impl DIDDelete {
     pub const TRANSACTION_TYPE: &'static str = "DIDDelete";
 
     /// A `DIDDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::DIDDelete;
+    /// let tx = DIDDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -1961,6 +2716,17 @@ impl From<DIDDelete> for Tx {
 /// [`DIDSet`](https://xrpl.org/docs/references/protocol/transactions/types/didset) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{DIDSet, TxModel};
+///
+/// let tx = DIDSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_uri("68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], DIDSet::TRANSACTION_TYPE); // "DIDSet"
+/// assert_eq!(json["URI"], "68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DIDSet {
@@ -1987,6 +2753,13 @@ impl DIDSet {
     pub const TRANSACTION_TYPE: &'static str = "DIDSet";
 
     /// A `DIDSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::DIDSet;
+    /// let tx = DIDSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.did_document.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -2038,6 +2811,22 @@ impl From<DIDSet> for Tx {
 /// [`DelegateSet`](https://xrpl.org/docs/references/protocol/transactions/types/delegateset) transaction.
 ///
 /// Required: `Authorize`, `Permissions`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{DelegateSet, Permission, TxModel};
+///
+/// let permissions = vec![Permission::new("Payment")];
+/// let tx = DelegateSet::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     permissions,
+/// );
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], DelegateSet::TRANSACTION_TYPE); // "DelegateSet"
+/// assert_eq!(json["Authorize"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DelegateSet {
@@ -2057,6 +2846,18 @@ impl DelegateSet {
     pub const TRANSACTION_TYPE: &'static str = "DelegateSet";
 
     /// A `DelegateSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{DelegateSet, Permission};
+    /// let permissions = vec![Permission::new("Payment")];
+    /// let tx = DelegateSet::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     permissions,
+    /// );
+    /// assert_eq!(tx.authorize, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(
         account: impl Into<String>,
         authorize: impl Into<String>,
@@ -2093,6 +2894,17 @@ impl From<DelegateSet> for Tx {
 /// [`DepositPreauth`](https://xrpl.org/docs/references/protocol/transactions/types/depositpreauth) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{DepositPreauth, TxModel};
+///
+/// let tx = DepositPreauth::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_authorize("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], DepositPreauth::TRANSACTION_TYPE); // "DepositPreauth"
+/// assert_eq!(json["Authorize"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DepositPreauth {
@@ -2132,6 +2944,13 @@ impl DepositPreauth {
     pub const TRANSACTION_TYPE: &'static str = "DepositPreauth";
 
     /// A `DepositPreauth` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::DepositPreauth;
+    /// let tx = DepositPreauth::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.authorize.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -2190,6 +3009,16 @@ impl From<DepositPreauth> for Tx {
 
 flags_type!(
     /// The flags of a [`EnableAmendment`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::EnableAmendmentFlags;
+    ///
+    /// let flags = EnableAmendmentFlags::GOT_MAJORITY;
+    /// assert!(flags.contains(EnableAmendmentFlags::GOT_MAJORITY));
+    /// assert!(!EnableAmendmentFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     EnableAmendmentFlags {
         /// `tfGotMajority`.
         GOT_MAJORITY = 0x00010000,
@@ -2205,6 +3034,19 @@ flags_type!(
 /// [`EnableAmendment`](https://xrpl.org/docs/references/protocol/transactions/types/enableamendment) transaction.
 ///
 /// Required: `LedgerSequence`, `Amendment`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{EnableAmendment, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let amendment =
+///     Hash256::from_hex("42426C4D4F1009EE67080A9B7965B44656D7714D104A72F9B4369F97ABF044EE")?;
+/// let tx = EnableAmendment::new("rrrrrrrrrrrrrrrrrrrrrhoLvTp", 106_911_489, amendment);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], EnableAmendment::TRANSACTION_TYPE); // "EnableAmendment"
+/// assert_eq!(json["LedgerSequence"], 106_911_489);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct EnableAmendment {
@@ -2224,6 +3066,17 @@ impl EnableAmendment {
     pub const TRANSACTION_TYPE: &'static str = "EnableAmendment";
 
     /// A `EnableAmendment` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::EnableAmendment;
+    /// # use xrpl_core::types::Hash256;
+    /// let amendment =
+    ///     Hash256::from_hex("42426C4D4F1009EE67080A9B7965B44656D7714D104A72F9B4369F97ABF044EE")?;
+    /// let tx = EnableAmendment::new("rrrrrrrrrrrrrrrrrrrrrhoLvTp", 106_911_489, amendment);
+    /// assert_eq!(tx.ledger_sequence, 106_911_489);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, ledger_sequence: u32, amendment: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -2253,6 +3106,20 @@ impl From<EnableAmendment> for Tx {
 /// [`EscrowCancel`](https://xrpl.org/docs/references/protocol/transactions/types/escrowcancel) transaction.
 ///
 /// Required: `Owner`, `OfferSequence`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{EscrowCancel, TxModel};
+///
+/// let tx = EscrowCancel::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     7,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], EscrowCancel::TRANSACTION_TYPE); // "EscrowCancel"
+/// assert_eq!(json["Owner"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct EscrowCancel {
@@ -2272,6 +3139,17 @@ impl EscrowCancel {
     pub const TRANSACTION_TYPE: &'static str = "EscrowCancel";
 
     /// A `EscrowCancel` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::EscrowCancel;
+    /// let tx = EscrowCancel::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     7,
+    /// );
+    /// assert_eq!(tx.owner, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(account: impl Into<String>, owner: impl Into<String>, offer_sequence: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -2301,6 +3179,22 @@ impl From<EscrowCancel> for Tx {
 /// [`EscrowCreate`](https://xrpl.org/docs/references/protocol/transactions/types/escrowcreate) transaction.
 ///
 /// Required: `Destination`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{EscrowCreate, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = EscrowCreate::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_finish_after(843_321_657u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], EscrowCreate::TRANSACTION_TYPE); // "EscrowCreate"
+/// assert_eq!(json["FinishAfter"], 843_321_657);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct EscrowCreate {
@@ -2344,6 +3238,19 @@ impl EscrowCreate {
     pub const TRANSACTION_TYPE: &'static str = "EscrowCreate";
 
     /// A `EscrowCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::EscrowCreate;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = EscrowCreate::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.destination, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.condition.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, destination: impl Into<String>, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -2405,6 +3312,29 @@ impl From<EscrowCreate> for Tx {
 /// [`EscrowFinish`](https://xrpl.org/docs/references/protocol/transactions/types/escrowfinish) transaction.
 ///
 /// Required: `Owner`, `OfferSequence`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{EscrowFinish, TxModel};
+///
+/// let tx = EscrowFinish::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     7,
+/// )
+/// .with_condition(
+///     "A02580202029C15F227CB9472684A3A1F97FB887893E5B8F2D47319274A0DC0C4C90550C810120",
+/// )
+/// .with_fulfillment(
+///     "A0228020DABC3482FAE7764C0FACE68EDE5E45B8451176FC813AE745750F183051A58E76",
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], EscrowFinish::TRANSACTION_TYPE); // "EscrowFinish"
+/// assert_eq!(
+///     json["Condition"],
+///     "A02580202029C15F227CB9472684A3A1F97FB887893E5B8F2D47319274A0DC0C4C90550C810120"
+/// );
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct EscrowFinish {
@@ -2441,6 +3371,17 @@ impl EscrowFinish {
     pub const TRANSACTION_TYPE: &'static str = "EscrowFinish";
 
     /// A `EscrowFinish` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::EscrowFinish;
+    /// let tx = EscrowFinish::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     7,
+    /// );
+    /// assert_eq!(tx.owner, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.fulfillment.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, owner: impl Into<String>, offer_sequence: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -2494,6 +3435,17 @@ impl From<EscrowFinish> for Tx {
 /// [`LedgerStateFix`](https://xrpl.org/docs/references/protocol/transactions/types/ledgerstatefix) transaction.
 ///
 /// Required: `LedgerFixType`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LedgerStateFix, TxModel};
+///
+/// let tx = LedgerStateFix::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1)
+///     .with_owner("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LedgerStateFix::TRANSACTION_TYPE); // "LedgerStateFix"
+/// assert_eq!(json["Owner"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LedgerStateFix {
@@ -2520,6 +3472,13 @@ impl LedgerStateFix {
     pub const TRANSACTION_TYPE: &'static str = "LedgerStateFix";
 
     /// A `LedgerStateFix` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LedgerStateFix;
+    /// let tx = LedgerStateFix::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1);
+    /// assert_eq!(tx.ledger_fix_type, 1);
+    /// assert!(tx.owner.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, ledger_fix_type: u16) -> Self {
         Self {
             common: Common::new(account),
@@ -2564,6 +3523,20 @@ impl From<LedgerStateFix> for Tx {
 /// [`LoanBrokerCoverClawback`](https://xrpl.org/docs/references/protocol/transactions/types/loanbrokercoverclawback) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanBrokerCoverClawback, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let loan_broker_id =
+///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+/// let tx = LoanBrokerCoverClawback::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_loan_broker_id(loan_broker_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanBrokerCoverClawback::TRANSACTION_TYPE);
+/// assert_eq!(json["LoanBrokerID"], loan_broker_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanBrokerCoverClawback {
@@ -2587,6 +3560,13 @@ impl LoanBrokerCoverClawback {
     pub const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverClawback";
 
     /// A `LoanBrokerCoverClawback` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanBrokerCoverClawback;
+    /// let tx = LoanBrokerCoverClawback::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.loan_broker_id.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -2630,6 +3610,23 @@ impl From<LoanBrokerCoverClawback> for Tx {
 /// [`LoanBrokerCoverDeposit`](https://xrpl.org/docs/references/protocol/transactions/types/loanbrokercoverdeposit) transaction.
 ///
 /// Required: `LoanBrokerID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanBrokerCoverDeposit, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let loan_broker_id =
+///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+/// let tx = LoanBrokerCoverDeposit::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     loan_broker_id,
+///     Amount::xrp(1_000_000)?,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanBrokerCoverDeposit::TRANSACTION_TYPE);
+/// assert_eq!(json["LoanBrokerID"], loan_broker_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanBrokerCoverDeposit {
@@ -2649,6 +3646,21 @@ impl LoanBrokerCoverDeposit {
     pub const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverDeposit";
 
     /// A `LoanBrokerCoverDeposit` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanBrokerCoverDeposit;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let loan_broker_id =
+    ///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+    /// let tx = LoanBrokerCoverDeposit::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     loan_broker_id,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.loan_broker_id, loan_broker_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, loan_broker_id: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -2678,6 +3690,24 @@ impl From<LoanBrokerCoverDeposit> for Tx {
 /// [`LoanBrokerCoverWithdraw`](https://xrpl.org/docs/references/protocol/transactions/types/loanbrokercoverwithdraw) transaction.
 ///
 /// Required: `LoanBrokerID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanBrokerCoverWithdraw, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let loan_broker_id =
+///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+/// let tx = LoanBrokerCoverWithdraw::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     loan_broker_id,
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanBrokerCoverWithdraw::TRANSACTION_TYPE);
+/// assert_eq!(json["Destination"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanBrokerCoverWithdraw {
@@ -2718,6 +3748,21 @@ impl LoanBrokerCoverWithdraw {
     pub const TRANSACTION_TYPE: &'static str = "LoanBrokerCoverWithdraw";
 
     /// A `LoanBrokerCoverWithdraw` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanBrokerCoverWithdraw;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let loan_broker_id =
+    ///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+    /// let tx = LoanBrokerCoverWithdraw::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     loan_broker_id,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.loan_broker_id, loan_broker_id);
+    /// assert!(tx.destination.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, loan_broker_id: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -2771,6 +3816,19 @@ impl From<LoanBrokerCoverWithdraw> for Tx {
 /// [`LoanBrokerDelete`](https://xrpl.org/docs/references/protocol/transactions/types/loanbrokerdelete) transaction.
 ///
 /// Required: `LoanBrokerID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanBrokerDelete, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let loan_broker_id =
+///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+/// let tx = LoanBrokerDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_broker_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanBrokerDelete::TRANSACTION_TYPE);
+/// assert_eq!(json["LoanBrokerID"], loan_broker_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanBrokerDelete {
@@ -2787,6 +3845,17 @@ impl LoanBrokerDelete {
     pub const TRANSACTION_TYPE: &'static str = "LoanBrokerDelete";
 
     /// A `LoanBrokerDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanBrokerDelete;
+    /// # use xrpl_core::types::Hash256;
+    /// let loan_broker_id =
+    ///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+    /// let tx = LoanBrokerDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_broker_id);
+    /// assert_eq!(tx.loan_broker_id, loan_broker_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, loan_broker_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -2815,6 +3884,20 @@ impl From<LoanBrokerDelete> for Tx {
 /// [`LoanBrokerSet`](https://xrpl.org/docs/references/protocol/transactions/types/loanbrokerset) transaction.
 ///
 /// Required: `VaultID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanBrokerSet, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let vault_id =
+///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+/// let tx = LoanBrokerSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vault_id)
+///     .with_debt_maximum("1000000");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanBrokerSet::TRANSACTION_TYPE); // "LoanBrokerSet"
+/// assert_eq!(json["DebtMaximum"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanBrokerSet {
@@ -2869,6 +3952,17 @@ impl LoanBrokerSet {
     pub const TRANSACTION_TYPE: &'static str = "LoanBrokerSet";
 
     /// A `LoanBrokerSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanBrokerSet;
+    /// # use xrpl_core::types::Hash256;
+    /// let vault_id =
+    ///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+    /// let tx = LoanBrokerSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vault_id);
+    /// assert_eq!(tx.vault_id, vault_id);
+    /// assert!(tx.loan_broker_id.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, vault_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -2945,6 +4039,19 @@ impl From<LoanBrokerSet> for Tx {
 /// [`LoanDelete`](https://xrpl.org/docs/references/protocol/transactions/types/loandelete) transaction.
 ///
 /// Required: `LoanID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanDelete, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let loan_id =
+///     Hash256::from_hex("47B9C3D85AACF4761581C146FF4C2A60AAB9F3EFB6A70ED6DAAC99CD786810BA")?;
+/// let tx = LoanDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanDelete::TRANSACTION_TYPE); // "LoanDelete"
+/// assert_eq!(json["LoanID"], loan_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanDelete {
@@ -2961,6 +4068,17 @@ impl LoanDelete {
     pub const TRANSACTION_TYPE: &'static str = "LoanDelete";
 
     /// A `LoanDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanDelete;
+    /// # use xrpl_core::types::Hash256;
+    /// let loan_id =
+    ///     Hash256::from_hex("47B9C3D85AACF4761581C146FF4C2A60AAB9F3EFB6A70ED6DAAC99CD786810BA")?;
+    /// let tx = LoanDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_id);
+    /// assert_eq!(tx.loan_id, loan_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, loan_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -2988,6 +4106,16 @@ impl From<LoanDelete> for Tx {
 
 flags_type!(
     /// The flags of a [`LoanManage`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::LoanManageFlags;
+    ///
+    /// let flags = LoanManageFlags::LOAN_DEFAULT;
+    /// assert!(flags.contains(LoanManageFlags::LOAN_DEFAULT));
+    /// assert!(!LoanManageFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     LoanManageFlags {
         /// `tfLoanDefault`.
         LOAN_DEFAULT = 0x00010000,
@@ -3005,6 +4133,19 @@ flags_type!(
 /// [`LoanManage`](https://xrpl.org/docs/references/protocol/transactions/types/loanmanage) transaction.
 ///
 /// Required: `LoanID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanManage, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let loan_id =
+///     Hash256::from_hex("47B9C3D85AACF4761581C146FF4C2A60AAB9F3EFB6A70ED6DAAC99CD786810BA")?;
+/// let tx = LoanManage::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanManage::TRANSACTION_TYPE); // "LoanManage"
+/// assert_eq!(json["LoanID"], loan_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanManage {
@@ -3021,6 +4162,17 @@ impl LoanManage {
     pub const TRANSACTION_TYPE: &'static str = "LoanManage";
 
     /// A `LoanManage` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanManage;
+    /// # use xrpl_core::types::Hash256;
+    /// let loan_id =
+    ///     Hash256::from_hex("47B9C3D85AACF4761581C146FF4C2A60AAB9F3EFB6A70ED6DAAC99CD786810BA")?;
+    /// let tx = LoanManage::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_id);
+    /// assert_eq!(tx.loan_id, loan_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, loan_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -3048,6 +4200,16 @@ impl From<LoanManage> for Tx {
 
 flags_type!(
     /// The flags of a [`LoanPay`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::LoanPayFlags;
+    ///
+    /// let flags = LoanPayFlags::LOAN_OVERPAYMENT;
+    /// assert!(flags.contains(LoanPayFlags::LOAN_OVERPAYMENT));
+    /// assert!(!LoanPayFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     LoanPayFlags {
         /// `tfLoanOverpayment`.
         LOAN_OVERPAYMENT = 0x00010000,
@@ -3065,6 +4227,23 @@ flags_type!(
 /// [`LoanPay`](https://xrpl.org/docs/references/protocol/transactions/types/loanpay) transaction.
 ///
 /// Required: `LoanID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanPay, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let loan_id =
+///     Hash256::from_hex("47B9C3D85AACF4761581C146FF4C2A60AAB9F3EFB6A70ED6DAAC99CD786810BA")?;
+/// let tx = LoanPay::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     loan_id,
+///     Amount::xrp(1_000_000)?,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanPay::TRANSACTION_TYPE); // "LoanPay"
+/// assert_eq!(json["LoanID"], loan_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanPay {
@@ -3084,6 +4263,21 @@ impl LoanPay {
     pub const TRANSACTION_TYPE: &'static str = "LoanPay";
 
     /// A `LoanPay` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanPay;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let loan_id =
+    ///     Hash256::from_hex("47B9C3D85AACF4761581C146FF4C2A60AAB9F3EFB6A70ED6DAAC99CD786810BA")?;
+    /// let tx = LoanPay::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     loan_id,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.loan_id, loan_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, loan_id: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -3112,6 +4306,16 @@ impl From<LoanPay> for Tx {
 
 flags_type!(
     /// The flags of a [`LoanSet`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::LoanSetFlags;
+    ///
+    /// let flags = LoanSetFlags::LOAN_OVERPAYMENT;
+    /// assert!(flags.contains(LoanSetFlags::LOAN_OVERPAYMENT));
+    /// assert!(!LoanSetFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     LoanSetFlags {
         /// `tfLoanOverpayment`.
         LOAN_OVERPAYMENT = 0x00010000,
@@ -3125,6 +4329,20 @@ flags_type!(
 /// [`LoanSet`](https://xrpl.org/docs/references/protocol/transactions/types/loanset) transaction.
 ///
 /// Required: `LoanBrokerID`, `PrincipalRequested`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{LoanSet, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let loan_broker_id =
+///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+/// let tx = LoanSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_broker_id, "10000")
+///     .with_counterparty("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], LoanSet::TRANSACTION_TYPE); // "LoanSet"
+/// assert_eq!(json["Counterparty"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanSet {
@@ -3245,6 +4463,17 @@ impl LoanSet {
     pub const TRANSACTION_TYPE: &'static str = "LoanSet";
 
     /// A `LoanSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::LoanSet;
+    /// # use xrpl_core::types::Hash256;
+    /// let loan_broker_id =
+    ///     Hash256::from_hex("30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F")?;
+    /// let tx = LoanSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", loan_broker_id, "10000");
+    /// assert_eq!(tx.loan_broker_id, loan_broker_id);
+    /// assert!(tx.data.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         loan_broker_id: Hash256,
@@ -3397,6 +4626,16 @@ impl From<LoanSet> for Tx {
 
 flags_type!(
     /// The flags of a [`MPTokenAuthorize`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::MPTokenAuthorizeFlags;
+    ///
+    /// let flags = MPTokenAuthorizeFlags::MPT_UNAUTHORIZE;
+    /// assert!(flags.contains(MPTokenAuthorizeFlags::MPT_UNAUTHORIZE));
+    /// assert!(!MPTokenAuthorizeFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0000_0001);
+    /// ```
     MPTokenAuthorizeFlags {
         /// `tfMPTUnauthorize`.
         MPT_UNAUTHORIZE = 0x00000001,
@@ -3410,6 +4649,19 @@ flags_type!(
 /// [`MPTokenAuthorize`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenauthorize) transaction.
 ///
 /// Required: `MPTokenIssuanceID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{MPTokenAuthorize, TxModel};
+/// use xrpl_core::types::Hash192;
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// let tx = MPTokenAuthorize::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id)
+///     .with_holder("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], MPTokenAuthorize::TRANSACTION_TYPE);
+/// assert_eq!(json["Holder"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MPTokenAuthorize {
@@ -3429,6 +4681,16 @@ impl MPTokenAuthorize {
     pub const TRANSACTION_TYPE: &'static str = "MPTokenAuthorize";
 
     /// A `MPTokenAuthorize` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::MPTokenAuthorize;
+    /// # use xrpl_core::types::Hash192;
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// let tx = MPTokenAuthorize::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id);
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.holder.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
         Self {
             common: Common::new(account),
@@ -3464,6 +4726,16 @@ impl From<MPTokenAuthorize> for Tx {
 
 flags_type!(
     /// The flags of a [`MPTokenIssuanceCreate`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::MPTokenIssuanceCreateFlags;
+    ///
+    /// let flags = MPTokenIssuanceCreateFlags::MPT_CAN_TRADE
+    ///     | MPTokenIssuanceCreateFlags::MPT_CAN_TRANSFER;
+    /// assert!(flags.contains(MPTokenIssuanceCreateFlags::MPT_CAN_TRANSFER));
+    /// assert_eq!(u32::from(flags), 0x0000_0030);
+    /// ```
     MPTokenIssuanceCreateFlags {
         /// `tfMPTCanLock`.
         MPT_CAN_LOCK = 0x00000002,
@@ -3489,6 +4761,17 @@ flags_type!(
 /// [`MPTokenIssuanceCreate`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuancecreate) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{MPTokenIssuanceCreate, TxModel};
+///
+/// let tx = MPTokenIssuanceCreate::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_maximum_amount("1000000");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], MPTokenIssuanceCreate::TRANSACTION_TYPE);
+/// assert_eq!(json["MaximumAmount"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MPTokenIssuanceCreate {
@@ -3540,6 +4823,13 @@ impl MPTokenIssuanceCreate {
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceCreate";
 
     /// A `MPTokenIssuanceCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::MPTokenIssuanceCreate;
+    /// let tx = MPTokenIssuanceCreate::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.asset_scale.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -3615,6 +4905,18 @@ impl From<MPTokenIssuanceCreate> for Tx {
 /// [`MPTokenIssuanceDestroy`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuancedestroy) transaction.
 ///
 /// Required: `MPTokenIssuanceID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{MPTokenIssuanceDestroy, TxModel};
+/// use xrpl_core::types::Hash192;
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// let tx = MPTokenIssuanceDestroy::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], MPTokenIssuanceDestroy::TRANSACTION_TYPE);
+/// assert_eq!(json["MPTokenIssuanceID"], issuance_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MPTokenIssuanceDestroy {
@@ -3631,6 +4933,16 @@ impl MPTokenIssuanceDestroy {
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceDestroy";
 
     /// A `MPTokenIssuanceDestroy` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::MPTokenIssuanceDestroy;
+    /// # use xrpl_core::types::Hash192;
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// let tx = MPTokenIssuanceDestroy::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id);
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
         Self {
             common: Common::new(account),
@@ -3658,6 +4970,16 @@ impl From<MPTokenIssuanceDestroy> for Tx {
 
 flags_type!(
     /// The flags of a [`MPTokenIssuanceSet`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::MPTokenIssuanceSetFlags;
+    ///
+    /// let flags = MPTokenIssuanceSetFlags::MPT_LOCK;
+    /// assert!(flags.contains(MPTokenIssuanceSetFlags::MPT_LOCK));
+    /// assert!(!MPTokenIssuanceSetFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0000_0001);
+    /// ```
     MPTokenIssuanceSetFlags {
         /// `tfMPTLock`.
         MPT_LOCK = 0x00000001,
@@ -3687,6 +5009,19 @@ flags_type!(
 /// [`MPTokenIssuanceSet`](https://xrpl.org/docs/references/protocol/transactions/types/mptokenissuanceset) transaction.
 ///
 /// Required: `MPTokenIssuanceID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{MPTokenIssuanceSet, TxModel};
+/// use xrpl_core::types::Hash192;
+///
+/// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+/// let tx = MPTokenIssuanceSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id)
+///     .with_holder("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], MPTokenIssuanceSet::TRANSACTION_TYPE);
+/// assert_eq!(json["Holder"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MPTokenIssuanceSet {
@@ -3744,6 +5079,16 @@ impl MPTokenIssuanceSet {
     pub const TRANSACTION_TYPE: &'static str = "MPTokenIssuanceSet";
 
     /// A `MPTokenIssuanceSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::MPTokenIssuanceSet;
+    /// # use xrpl_core::types::Hash192;
+    /// let issuance_id = Hash192::from_hex("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// let tx = MPTokenIssuanceSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", issuance_id);
+    /// assert_eq!(tx.mp_token_issuance_id, issuance_id);
+    /// assert!(tx.holder.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, mp_token_issuance_id: Hash192) -> Self {
         Self {
             common: Common::new(account),
@@ -3828,6 +5173,21 @@ impl From<MPTokenIssuanceSet> for Tx {
 /// [`NFTokenAcceptOffer`](https://xrpl.org/docs/references/protocol/transactions/types/nftokenacceptoffer) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{NFTokenAcceptOffer, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let sell_offer =
+///     Hash256::from_hex("D50092E5B3F02AC1145272FFB88F22C8D8CF82EE330E10EBFDC29E7A0635660C")?;
+/// let tx = NFTokenAcceptOffer::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_nf_token_sell_offer(sell_offer);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], NFTokenAcceptOffer::TRANSACTION_TYPE);
+/// assert_eq!(json["NFTokenSellOffer"], sell_offer.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenAcceptOffer {
@@ -3862,6 +5222,13 @@ impl NFTokenAcceptOffer {
     pub const TRANSACTION_TYPE: &'static str = "NFTokenAcceptOffer";
 
     /// A `NFTokenAcceptOffer` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::NFTokenAcceptOffer;
+    /// let tx = NFTokenAcceptOffer::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.nf_token_buy_offer.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -3916,6 +5283,20 @@ impl From<NFTokenAcceptOffer> for Tx {
 /// [`NFTokenBurn`](https://xrpl.org/docs/references/protocol/transactions/types/nftokenburn) transaction.
 ///
 /// Required: `NFTokenID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{NFTokenBurn, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let nft_id =
+///     Hash256::from_hex("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")?;
+/// let tx = NFTokenBurn::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", nft_id)
+///     .with_owner("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], NFTokenBurn::TRANSACTION_TYPE); // "NFTokenBurn"
+/// assert_eq!(json["Owner"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenBurn {
@@ -3935,6 +5316,17 @@ impl NFTokenBurn {
     pub const TRANSACTION_TYPE: &'static str = "NFTokenBurn";
 
     /// A `NFTokenBurn` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::NFTokenBurn;
+    /// # use xrpl_core::types::Hash256;
+    /// let nft_id =
+    ///     Hash256::from_hex("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")?;
+    /// let tx = NFTokenBurn::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", nft_id);
+    /// assert_eq!(tx.nf_token_id, nft_id);
+    /// assert!(tx.owner.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, nf_token_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -3971,6 +5363,19 @@ impl From<NFTokenBurn> for Tx {
 /// [`NFTokenCancelOffer`](https://xrpl.org/docs/references/protocol/transactions/types/nftokencanceloffer) transaction.
 ///
 /// Required: `NFTokenOffers`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{NFTokenCancelOffer, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let offer =
+///     Hash256::from_hex("D50092E5B3F02AC1145272FFB88F22C8D8CF82EE330E10EBFDC29E7A0635660C")?;
+/// let tx = NFTokenCancelOffer::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vec![offer]);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], NFTokenCancelOffer::TRANSACTION_TYPE);
+/// assert_eq!(json["NFTokenOffers"][0], offer.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenCancelOffer {
@@ -3987,6 +5392,17 @@ impl NFTokenCancelOffer {
     pub const TRANSACTION_TYPE: &'static str = "NFTokenCancelOffer";
 
     /// A `NFTokenCancelOffer` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::NFTokenCancelOffer;
+    /// # use xrpl_core::types::Hash256;
+    /// let offer =
+    ///     Hash256::from_hex("D50092E5B3F02AC1145272FFB88F22C8D8CF82EE330E10EBFDC29E7A0635660C")?;
+    /// let tx = NFTokenCancelOffer::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vec![offer]);
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, nf_token_offers: Vec<Hash256>) -> Self {
         Self {
             common: Common::new(account),
@@ -4014,6 +5430,16 @@ impl From<NFTokenCancelOffer> for Tx {
 
 flags_type!(
     /// The flags of a [`NFTokenCreateOffer`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::NFTokenCreateOfferFlags;
+    ///
+    /// let flags = NFTokenCreateOfferFlags::SELL_NFTOKEN;
+    /// assert!(flags.contains(NFTokenCreateOfferFlags::SELL_NFTOKEN));
+    /// assert!(!NFTokenCreateOfferFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0000_0001);
+    /// ```
     NFTokenCreateOfferFlags {
         /// `tfSellNFToken`.
         SELL_NFTOKEN = 0x00000001,
@@ -4027,6 +5453,24 @@ flags_type!(
 /// [`NFTokenCreateOffer`](https://xrpl.org/docs/references/protocol/transactions/types/nftokencreateoffer) transaction.
 ///
 /// Required: `NFTokenID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{NFTokenCreateOffer, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let nft_id =
+///     Hash256::from_hex("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")?;
+/// let tx = NFTokenCreateOffer::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     nft_id,
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], NFTokenCreateOffer::TRANSACTION_TYPE);
+/// assert_eq!(json["Destination"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenCreateOffer {
@@ -4063,6 +5507,21 @@ impl NFTokenCreateOffer {
     pub const TRANSACTION_TYPE: &'static str = "NFTokenCreateOffer";
 
     /// A `NFTokenCreateOffer` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::NFTokenCreateOffer;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let nft_id =
+    ///     Hash256::from_hex("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")?;
+    /// let tx = NFTokenCreateOffer::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     nft_id,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.nf_token_id, nft_id);
+    /// assert!(tx.destination.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, nf_token_id: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -4115,6 +5574,15 @@ impl From<NFTokenCreateOffer> for Tx {
 
 flags_type!(
     /// The flags of a [`NFTokenMint`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::NFTokenMintFlags;
+    ///
+    /// let flags = NFTokenMintFlags::BURNABLE | NFTokenMintFlags::TRANSFERABLE;
+    /// assert!(flags.contains(NFTokenMintFlags::TRANSFERABLE));
+    /// assert_eq!(u32::from(flags), 0x0000_0009);
+    /// ```
     NFTokenMintFlags {
         /// `tfBurnable`.
         BURNABLE = 0x00000001,
@@ -4134,6 +5602,17 @@ flags_type!(
 /// [`NFTokenMint`](https://xrpl.org/docs/references/protocol/transactions/types/nftokenmint) transaction.
 ///
 /// Required: `NFTokenTaxon`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{NFTokenMint, TxModel};
+///
+/// let tx = NFTokenMint::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 0)
+///     .with_uri("68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], NFTokenMint::TRANSACTION_TYPE); // "NFTokenMint"
+/// assert_eq!(json["URI"], "68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenMint {
@@ -4180,6 +5659,13 @@ impl NFTokenMint {
     pub const TRANSACTION_TYPE: &'static str = "NFTokenMint";
 
     /// A `NFTokenMint` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::NFTokenMint;
+    /// let tx = NFTokenMint::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 0);
+    /// assert_eq!(tx.nf_token_taxon, 0);
+    /// assert!(tx.transfer_fee.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, nf_token_taxon: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -4256,6 +5742,20 @@ impl From<NFTokenMint> for Tx {
 /// [`NFTokenModify`](https://xrpl.org/docs/references/protocol/transactions/types/nftokenmodify) transaction.
 ///
 /// Required: `NFTokenID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{NFTokenModify, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let nft_id =
+///     Hash256::from_hex("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")?;
+/// let tx = NFTokenModify::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", nft_id)
+///     .with_uri("68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], NFTokenModify::TRANSACTION_TYPE); // "NFTokenModify"
+/// assert_eq!(json["URI"], "68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenModify {
@@ -4278,6 +5778,17 @@ impl NFTokenModify {
     pub const TRANSACTION_TYPE: &'static str = "NFTokenModify";
 
     /// A `NFTokenModify` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::NFTokenModify;
+    /// # use xrpl_core::types::Hash256;
+    /// let nft_id =
+    ///     Hash256::from_hex("00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228")?;
+    /// let tx = NFTokenModify::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", nft_id);
+    /// assert_eq!(tx.nf_token_id, nft_id);
+    /// assert!(tx.owner.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, nf_token_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -4322,6 +5833,16 @@ impl From<NFTokenModify> for Tx {
 /// [`OfferCancel`](https://xrpl.org/docs/references/protocol/transactions/types/offercancel) transaction.
 ///
 /// Required: `OfferSequence`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{OfferCancel, TxModel};
+///
+/// let tx = OfferCancel::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 7);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], OfferCancel::TRANSACTION_TYPE); // "OfferCancel"
+/// assert_eq!(json["OfferSequence"], 7);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OfferCancel {
@@ -4338,6 +5859,13 @@ impl OfferCancel {
     pub const TRANSACTION_TYPE: &'static str = "OfferCancel";
 
     /// A `OfferCancel` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::OfferCancel;
+    /// let tx = OfferCancel::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 7);
+    /// assert_eq!(tx.offer_sequence, 7);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(account: impl Into<String>, offer_sequence: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -4365,6 +5893,15 @@ impl From<OfferCancel> for Tx {
 
 flags_type!(
     /// The flags of a [`OfferCreate`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::OfferCreateFlags;
+    ///
+    /// let flags = OfferCreateFlags::PASSIVE | OfferCreateFlags::SELL;
+    /// assert!(flags.contains(OfferCreateFlags::SELL));
+    /// assert_eq!(u32::from(flags), 0x0009_0000);
+    /// ```
     OfferCreateFlags {
         /// `tfPassive`.
         PASSIVE = 0x00010000,
@@ -4386,6 +5923,22 @@ flags_type!(
 /// [`OfferCreate`](https://xrpl.org/docs/references/protocol/transactions/types/offercreate) transaction.
 ///
 /// Required: `TakerPays`, `TakerGets`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{OfferCreate, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = OfferCreate::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Amount::xrp(20_000_000)?,
+///     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+/// )
+/// .with_expiration(843_322_252u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], OfferCreate::TRANSACTION_TYPE); // "OfferCreate"
+/// assert_eq!(json["Expiration"], 843_322_252);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OfferCreate {
@@ -4431,6 +5984,19 @@ impl OfferCreate {
     pub const TRANSACTION_TYPE: &'static str = "OfferCreate";
 
     /// A `OfferCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::OfferCreate;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = OfferCreate::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Amount::xrp(20_000_000)?,
+    ///     Amount::token("10", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?,
+    /// );
+    /// assert_eq!(tx.taker_pays, Amount::xrp(20_000_000)?);
+    /// assert!(tx.expiration.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, taker_pays: Amount, taker_gets: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -4485,6 +6051,16 @@ impl From<OfferCreate> for Tx {
 /// [`OracleDelete`](https://xrpl.org/docs/references/protocol/transactions/types/oracledelete) transaction.
 ///
 /// Required: `OracleDocumentID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{OracleDelete, TxModel};
+///
+/// let tx = OracleDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], OracleDelete::TRANSACTION_TYPE); // "OracleDelete"
+/// assert_eq!(json["OracleDocumentID"], 1);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OracleDelete {
@@ -4501,6 +6077,13 @@ impl OracleDelete {
     pub const TRANSACTION_TYPE: &'static str = "OracleDelete";
 
     /// A `OracleDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::OracleDelete;
+    /// let tx = OracleDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1);
+    /// assert_eq!(tx.oracle_document_id, 1);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(account: impl Into<String>, oracle_document_id: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -4529,6 +6112,19 @@ impl From<OracleDelete> for Tx {
 /// [`OracleSet`](https://xrpl.org/docs/references/protocol/transactions/types/oracleset) transaction.
 ///
 /// Required: `OracleDocumentID`, `LastUpdateTime`, `PriceDataSeries`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{OracleSet, PriceData, TxModel};
+///
+/// // 2.5 USD per XRP: 25000 (hex 61A8) at scale 4.
+/// let prices = vec![PriceData::new("XRP", "USD").with_price("61A8", 4)];
+/// let tx = OracleSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1, 1_789_671_597, prices)
+///     .with_provider("70726F7669646572");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], OracleSet::TRANSACTION_TYPE); // "OracleSet"
+/// assert_eq!(json["Provider"], "70726F7669646572");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OracleSet {
@@ -4564,6 +6160,15 @@ impl OracleSet {
     pub const TRANSACTION_TYPE: &'static str = "OracleSet";
 
     /// A `OracleSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{OracleSet, PriceData};
+    /// // 2.5 USD per XRP: 25000 (hex 61A8) at scale 4.
+    /// let prices = vec![PriceData::new("XRP", "USD").with_price("61A8", 4)];
+    /// let tx = OracleSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 1, 1_789_671_597, prices);
+    /// assert_eq!(tx.oracle_document_id, 1);
+    /// assert!(tx.provider.is_none()); // optional fields start unset
+    /// ```
     pub fn new(
         account: impl Into<String>,
         oracle_document_id: u32,
@@ -4622,6 +6227,15 @@ impl From<OracleSet> for Tx {
 
 flags_type!(
     /// The flags of a [`Payment`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::PaymentFlags;
+    ///
+    /// let flags = PaymentFlags::NO_RIPPLE_DIRECT | PaymentFlags::PARTIAL_PAYMENT;
+    /// assert!(flags.contains(PaymentFlags::PARTIAL_PAYMENT));
+    /// assert_eq!(u32::from(flags), 0x0003_0000);
+    /// ```
     PaymentFlags {
         /// `tfNoRippleDirect`.
         NO_RIPPLE_DIRECT = 0x00010000,
@@ -4641,6 +6255,22 @@ flags_type!(
 /// [`Payment`](https://xrpl.org/docs/references/protocol/transactions/types/payment) transaction.
 ///
 /// Required: `Destination`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{Payment, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = Payment::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_destination_tag(12345u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], Payment::TRANSACTION_TYPE); // "Payment"
+/// assert_eq!(json["DestinationTag"], 12345);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Payment {
@@ -4705,6 +6335,19 @@ impl Payment {
     pub const TRANSACTION_TYPE: &'static str = "Payment";
 
     /// A `Payment` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::Payment;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = Payment::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.destination, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.send_max.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, destination: impl Into<String>, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -4790,6 +6433,16 @@ impl From<Payment> for Tx {
 
 flags_type!(
     /// The flags of a [`PaymentChannelClaim`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::PaymentChannelClaimFlags;
+    ///
+    /// let flags = PaymentChannelClaimFlags::RENEW;
+    /// assert!(flags.contains(PaymentChannelClaimFlags::RENEW));
+    /// assert!(!PaymentChannelClaimFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     PaymentChannelClaimFlags {
         /// `tfRenew`.
         RENEW = 0x00010000,
@@ -4805,6 +6458,20 @@ flags_type!(
 /// [`PaymentChannelClaim`](https://xrpl.org/docs/references/protocol/transactions/types/paymentchannelclaim) transaction.
 ///
 /// Required: `Channel`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{PaymentChannelClaim, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let channel =
+///     Hash256::from_hex("5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3")?;
+/// let tx = PaymentChannelClaim::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", channel)
+///     .with_balance(Amount::xrp(1_000_000)?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], PaymentChannelClaim::TRANSACTION_TYPE);
+/// assert_eq!(json["Balance"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PaymentChannelClaim {
@@ -4840,6 +6507,17 @@ impl PaymentChannelClaim {
     pub const TRANSACTION_TYPE: &'static str = "PaymentChannelClaim";
 
     /// A `PaymentChannelClaim` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::PaymentChannelClaim;
+    /// # use xrpl_core::types::Hash256;
+    /// let channel =
+    ///     Hash256::from_hex("5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3")?;
+    /// let tx = PaymentChannelClaim::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", channel);
+    /// assert_eq!(tx.channel, channel);
+    /// assert!(tx.amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, channel: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -4908,6 +6586,24 @@ impl From<PaymentChannelClaim> for Tx {
 /// [`PaymentChannelCreate`](https://xrpl.org/docs/references/protocol/transactions/types/paymentchannelcreate) transaction.
 ///
 /// Required: `Destination`, `Amount`, `SettleDelay`, `PublicKey`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{PaymentChannelCreate, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = PaymentChannelCreate::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+///     86400,
+///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+/// )
+/// .with_destination_tag(12345u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], PaymentChannelCreate::TRANSACTION_TYPE);
+/// assert_eq!(json["DestinationTag"], 12345);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PaymentChannelCreate {
@@ -4947,6 +6643,21 @@ impl PaymentChannelCreate {
     pub const TRANSACTION_TYPE: &'static str = "PaymentChannelCreate";
 
     /// A `PaymentChannelCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::PaymentChannelCreate;
+    /// # use xrpl_core::types::Amount;
+    /// let tx = PaymentChannelCreate::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    ///     86400,
+    ///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+    /// );
+    /// assert_eq!(tx.destination, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.cancel_after.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         destination: impl Into<String>,
@@ -5000,6 +6711,24 @@ impl From<PaymentChannelCreate> for Tx {
 /// [`PaymentChannelFund`](https://xrpl.org/docs/references/protocol/transactions/types/paymentchannelfund) transaction.
 ///
 /// Required: `Channel`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{PaymentChannelFund, TxModel};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let channel =
+///     Hash256::from_hex("5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3")?;
+/// let tx = PaymentChannelFund::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     channel,
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_expiration(843_322_252u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], PaymentChannelFund::TRANSACTION_TYPE);
+/// assert_eq!(json["Expiration"], 843_322_252);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PaymentChannelFund {
@@ -5026,6 +6755,21 @@ impl PaymentChannelFund {
     pub const TRANSACTION_TYPE: &'static str = "PaymentChannelFund";
 
     /// A `PaymentChannelFund` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::PaymentChannelFund;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let channel =
+    ///     Hash256::from_hex("5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3")?;
+    /// let tx = PaymentChannelFund::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     channel,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.channel, channel);
+    /// assert!(tx.expiration.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, channel: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -5063,6 +6807,19 @@ impl From<PaymentChannelFund> for Tx {
 /// [`PermissionedDomainDelete`](https://xrpl.org/docs/references/protocol/transactions/types/permissioneddomaindelete) transaction.
 ///
 /// Required: `DomainID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{PermissionedDomainDelete, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let domain_id =
+///     Hash256::from_hex("4B1F78FFAD8C0CB39B26F911E9A3C4AE9015A13FF133DB4D23CEB0596614760A")?;
+/// let tx = PermissionedDomainDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", domain_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], PermissionedDomainDelete::TRANSACTION_TYPE);
+/// assert_eq!(json["DomainID"], domain_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PermissionedDomainDelete {
@@ -5079,6 +6836,17 @@ impl PermissionedDomainDelete {
     pub const TRANSACTION_TYPE: &'static str = "PermissionedDomainDelete";
 
     /// A `PermissionedDomainDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::PermissionedDomainDelete;
+    /// # use xrpl_core::types::Hash256;
+    /// let domain_id =
+    ///     Hash256::from_hex("4B1F78FFAD8C0CB39B26F911E9A3C4AE9015A13FF133DB4D23CEB0596614760A")?;
+    /// let tx = PermissionedDomainDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", domain_id);
+    /// assert_eq!(tx.domain_id, domain_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, domain_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -5107,6 +6875,25 @@ impl From<PermissionedDomainDelete> for Tx {
 /// [`PermissionedDomainSet`](https://xrpl.org/docs/references/protocol/transactions/types/permissioneddomainset) transaction.
 ///
 /// Required: `AcceptedCredentials`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{CredentialSpec, PermissionedDomainSet, TxModel};
+/// use xrpl_core::types::Hash256;
+///
+/// let accepted_credentials =
+///     vec![CredentialSpec::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "4B5943")];
+/// let domain_id =
+///     Hash256::from_hex("4B1F78FFAD8C0CB39B26F911E9A3C4AE9015A13FF133DB4D23CEB0596614760A")?;
+/// let tx = PermissionedDomainSet::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     accepted_credentials,
+/// )
+/// .with_domain_id(domain_id);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], PermissionedDomainSet::TRANSACTION_TYPE);
+/// assert_eq!(json["DomainID"], domain_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PermissionedDomainSet {
@@ -5126,6 +6913,18 @@ impl PermissionedDomainSet {
     pub const TRANSACTION_TYPE: &'static str = "PermissionedDomainSet";
 
     /// A `PermissionedDomainSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{CredentialSpec, PermissionedDomainSet};
+    /// let accepted_credentials =
+    ///     vec![CredentialSpec::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "4B5943")];
+    /// let tx = PermissionedDomainSet::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     accepted_credentials,
+    /// );
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.domain_id.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, accepted_credentials: Vec<CredentialSpec>) -> Self {
         Self {
             common: Common::new(account),
@@ -5162,6 +6961,17 @@ impl From<PermissionedDomainSet> for Tx {
 /// [`SetFee`](https://xrpl.org/docs/references/protocol/transactions/types/setfee) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{SetFee, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = SetFee::new("rrrrrrrrrrrrrrrrrrrrrhoLvTp").with_base_fee_drops(Amount::xrp(10)?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], SetFee::TRANSACTION_TYPE); // "SetFee"
+/// assert_eq!(json["BaseFeeDrops"], "10");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SetFee {
@@ -5227,6 +7037,13 @@ impl SetFee {
     pub const TRANSACTION_TYPE: &'static str = "SetFee";
 
     /// A `SetFee` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::SetFee;
+    /// let tx = SetFee::new("rrrrrrrrrrrrrrrrrrrrrhoLvTp");
+    /// assert_eq!(tx.common.account, "rrrrrrrrrrrrrrrrrrrrrhoLvTp");
+    /// assert!(tx.ledger_sequence.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -5318,6 +7135,17 @@ impl From<SetFee> for Tx {
 /// [`SetRegularKey`](https://xrpl.org/docs/references/protocol/transactions/types/setregularkey) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{SetRegularKey, TxModel};
+///
+/// let tx = SetRegularKey::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_regular_key("rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], SetRegularKey::TRANSACTION_TYPE); // "SetRegularKey"
+/// assert_eq!(json["RegularKey"], "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SetRegularKey {
@@ -5338,6 +7166,13 @@ impl SetRegularKey {
     pub const TRANSACTION_TYPE: &'static str = "SetRegularKey";
 
     /// A `SetRegularKey` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::SetRegularKey;
+    /// let tx = SetRegularKey::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.regular_key.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -5373,6 +7208,25 @@ impl From<SetRegularKey> for Tx {
 /// [`SignerListSet`](https://xrpl.org/docs/references/protocol/transactions/types/signerlistset) transaction.
 ///
 /// Required: `SignerQuorum`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{SignerEntry, SignerListSet, TxModel};
+///
+/// let signer_entries = vec![
+///     SignerEntry::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", 1),
+///     SignerEntry::new("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", 1),
+/// ];
+/// let tx = SignerListSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 2)
+///     .with_signer_entries(signer_entries);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], SignerListSet::TRANSACTION_TYPE); // "SignerListSet"
+/// assert_eq!(
+///     json["SignerEntries"][0]["SignerEntry"]["Account"],
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"
+/// );
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SignerListSet {
@@ -5397,6 +7251,13 @@ impl SignerListSet {
     pub const TRANSACTION_TYPE: &'static str = "SignerListSet";
 
     /// A `SignerListSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::SignerListSet;
+    /// let tx = SignerListSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 2);
+    /// assert_eq!(tx.signer_quorum, 2);
+    /// assert!(tx.signer_entries.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, signer_quorum: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -5435,6 +7296,16 @@ impl From<SignerListSet> for Tx {
 
 flags_type!(
     /// The flags of a [`SponsorshipSet`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::SponsorshipSetFlags;
+    ///
+    /// let flags = SponsorshipSetFlags::SPONSORSHIP_SET_REQUIRE_SIGN_FOR_FEE
+    ///     | SponsorshipSetFlags::SPONSORSHIP_SET_REQUIRE_SIGN_FOR_RESERVE;
+    /// assert!(flags.contains(SponsorshipSetFlags::SPONSORSHIP_SET_REQUIRE_SIGN_FOR_RESERVE));
+    /// assert_eq!(u32::from(flags), 0x0005_0000);
+    /// ```
     SponsorshipSetFlags {
         /// `tfSponsorshipSetRequireSignForFee`.
         SPONSORSHIP_SET_REQUIRE_SIGN_FOR_FEE = 0x00010000,
@@ -5456,6 +7327,17 @@ flags_type!(
 /// [`SponsorshipSet`](https://xrpl.org/docs/references/protocol/transactions/types/sponsorshipset) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{SponsorshipSet, TxModel};
+///
+/// let tx = SponsorshipSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_sponsee("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], SponsorshipSet::TRANSACTION_TYPE); // "SponsorshipSet"
+/// assert_eq!(json["Sponsee"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SponsorshipSet {
@@ -5496,6 +7378,13 @@ impl SponsorshipSet {
     pub const TRANSACTION_TYPE: &'static str = "SponsorshipSet";
 
     /// A `SponsorshipSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::SponsorshipSet;
+    /// let tx = SponsorshipSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.counterparty_sponsor.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -5562,6 +7451,16 @@ impl From<SponsorshipSet> for Tx {
 
 flags_type!(
     /// The flags of a [`SponsorshipTransfer`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::SponsorshipTransferFlags;
+    ///
+    /// let flags = SponsorshipTransferFlags::SPONSORSHIP_END;
+    /// assert!(flags.contains(SponsorshipTransferFlags::SPONSORSHIP_END));
+    /// assert!(!SponsorshipTransferFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     SponsorshipTransferFlags {
         /// `tfSponsorshipEnd`.
         SPONSORSHIP_END = 0x00010000,
@@ -5579,6 +7478,17 @@ flags_type!(
 /// [`SponsorshipTransfer`](https://xrpl.org/docs/references/protocol/transactions/types/sponsorshiptransfer) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{SponsorshipTransfer, TxModel};
+///
+/// let tx = SponsorshipTransfer::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_sponsee("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], SponsorshipTransfer::TRANSACTION_TYPE);
+/// assert_eq!(json["Sponsee"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SponsorshipTransfer {
@@ -5598,6 +7508,13 @@ impl SponsorshipTransfer {
     pub const TRANSACTION_TYPE: &'static str = "SponsorshipTransfer";
 
     /// A `SponsorshipTransfer` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::SponsorshipTransfer;
+    /// let tx = SponsorshipTransfer::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.object_id.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -5641,6 +7558,16 @@ impl From<SponsorshipTransfer> for Tx {
 /// [`TicketCreate`](https://xrpl.org/docs/references/protocol/transactions/types/ticketcreate) transaction.
 ///
 /// Required: `TicketCount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TicketCreate, TxModel};
+///
+/// let tx = TicketCreate::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 5);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], TicketCreate::TRANSACTION_TYPE); // "TicketCreate"
+/// assert_eq!(json["TicketCount"], 5);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct TicketCreate {
@@ -5657,6 +7584,13 @@ impl TicketCreate {
     pub const TRANSACTION_TYPE: &'static str = "TicketCreate";
 
     /// A `TicketCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::TicketCreate;
+    /// let tx = TicketCreate::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", 5);
+    /// assert_eq!(tx.ticket_count, 5);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(account: impl Into<String>, ticket_count: u32) -> Self {
         Self {
             common: Common::new(account),
@@ -5684,6 +7618,15 @@ impl From<TicketCreate> for Tx {
 
 flags_type!(
     /// The flags of a [`TrustSet`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::TrustSetFlags;
+    ///
+    /// let flags = TrustSetFlags::SET_NO_RIPPLE | TrustSetFlags::SET_FREEZE;
+    /// assert!(flags.contains(TrustSetFlags::SET_FREEZE));
+    /// assert_eq!(u32::from(flags), 0x0012_0000);
+    /// ```
     TrustSetFlags {
         /// `tfSetfAuth`.
         SETF_AUTH = 0x00010000,
@@ -5709,6 +7652,19 @@ flags_type!(
 /// [`TrustSet`](https://xrpl.org/docs/references/protocol/transactions/types/trustset) transaction.
 ///
 /// Required: none beyond the common fields.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TrustSet, TxModel};
+/// use xrpl_core::types::Amount;
+///
+/// let tx = TrustSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
+///     .with_limit_amount(Amount::token("100", "USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?);
+/// tx.validate()?; // the checks rippled makes before applying it
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], TrustSet::TRANSACTION_TYPE); // "TrustSet"
+/// assert_eq!(json["LimitAmount"]["value"], "100");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct TrustSet {
@@ -5739,6 +7695,13 @@ impl TrustSet {
     pub const TRANSACTION_TYPE: &'static str = "TrustSet";
 
     /// A `TrustSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::TrustSet;
+    /// let tx = TrustSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.limit_amount.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -5793,6 +7756,21 @@ impl From<TrustSet> for Tx {
 /// [`UNLModify`](https://xrpl.org/docs/references/protocol/transactions/types/unlmodify) transaction.
 ///
 /// Required: `UNLModifyDisabling`, `LedgerSequence`, `UNLModifyValidator`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, UNLModify};
+///
+/// let tx = UNLModify::new(
+///     "rrrrrrrrrrrrrrrrrrrrrhoLvTp",
+///     1,
+///     106_911_489,
+///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], UNLModify::TRANSACTION_TYPE); // "UNLModify"
+/// assert_eq!(json["UNLModifyDisabling"], 1);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct UNLModify {
@@ -5815,6 +7793,18 @@ impl UNLModify {
     pub const TRANSACTION_TYPE: &'static str = "UNLModify";
 
     /// A `UNLModify` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::UNLModify;
+    /// let tx = UNLModify::new(
+    ///     "rrrrrrrrrrrrrrrrrrrrrhoLvTp",
+    ///     1,
+    ///     106_911_489,
+    ///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+    /// );
+    /// assert_eq!(tx.unl_modify_disabling, 1);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// ```
     pub fn new(
         account: impl Into<String>,
         unl_modify_disabling: u8,
@@ -5850,6 +7840,24 @@ impl From<UNLModify> for Tx {
 /// [`VaultClawback`](https://xrpl.org/docs/references/protocol/transactions/types/vaultclawback) transaction.
 ///
 /// Required: `VaultID`, `Holder`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, VaultClawback};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let vault_id =
+///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+/// let tx = VaultClawback::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     vault_id,
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+/// )
+/// .with_amount(Amount::token("10", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], VaultClawback::TRANSACTION_TYPE); // "VaultClawback"
+/// assert_eq!(json["Amount"]["value"], "10");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultClawback {
@@ -5872,6 +7880,21 @@ impl VaultClawback {
     pub const TRANSACTION_TYPE: &'static str = "VaultClawback";
 
     /// A `VaultClawback` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::VaultClawback;
+    /// # use xrpl_core::types::Hash256;
+    /// let vault_id =
+    ///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+    /// let tx = VaultClawback::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     vault_id,
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    /// );
+    /// assert_eq!(tx.vault_id, vault_id);
+    /// assert!(tx.amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, vault_id: Hash256, holder: impl Into<String>) -> Self {
         Self {
             common: Common::new(account),
@@ -5908,6 +7931,16 @@ impl From<VaultClawback> for Tx {
 
 flags_type!(
     /// The flags of a [`VaultCreate`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::VaultCreateFlags;
+    ///
+    /// let flags =
+    ///     VaultCreateFlags::VAULT_PRIVATE | VaultCreateFlags::VAULT_SHARE_NON_TRANSFERABLE;
+    /// assert!(flags.contains(VaultCreateFlags::VAULT_SHARE_NON_TRANSFERABLE));
+    /// assert_eq!(u32::from(flags), 0x0003_0000);
+    /// ```
     VaultCreateFlags {
         /// `tfVaultPrivate`.
         VAULT_PRIVATE = 0x00010000,
@@ -5923,6 +7956,18 @@ flags_type!(
 /// [`VaultCreate`](https://xrpl.org/docs/references/protocol/transactions/types/vaultcreate) transaction.
 ///
 /// Required: `Asset`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, VaultCreate};
+/// use xrpl_core::types::Asset;
+///
+/// let tx = VaultCreate::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", Asset::xrp())
+///     .with_assets_maximum("1000000");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], VaultCreate::TRANSACTION_TYPE); // "VaultCreate"
+/// assert_eq!(json["AssetsMaximum"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultCreate {
@@ -5986,6 +8031,14 @@ impl VaultCreate {
     pub const TRANSACTION_TYPE: &'static str = "VaultCreate";
 
     /// A `VaultCreate` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::VaultCreate;
+    /// # use xrpl_core::types::Asset;
+    /// let tx = VaultCreate::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", Asset::xrp());
+    /// assert_eq!(tx.asset, Asset::xrp());
+    /// assert!(tx.assets_maximum.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, asset: Asset) -> Self {
         Self {
             common: Common::new(account),
@@ -6086,6 +8139,20 @@ impl From<VaultCreate> for Tx {
 /// [`VaultDelete`](https://xrpl.org/docs/references/protocol/transactions/types/vaultdelete) transaction.
 ///
 /// Required: `VaultID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, VaultDelete};
+/// use xrpl_core::types::Hash256;
+///
+/// let vault_id =
+///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+/// let tx = VaultDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vault_id)
+///     .with_memo_data("636C6F73696E67");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], VaultDelete::TRANSACTION_TYPE); // "VaultDelete"
+/// assert_eq!(json["MemoData"], "636C6F73696E67");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultDelete {
@@ -6105,6 +8172,17 @@ impl VaultDelete {
     pub const TRANSACTION_TYPE: &'static str = "VaultDelete";
 
     /// A `VaultDelete` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::VaultDelete;
+    /// # use xrpl_core::types::Hash256;
+    /// let vault_id =
+    ///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+    /// let tx = VaultDelete::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vault_id);
+    /// assert_eq!(tx.vault_id, vault_id);
+    /// assert!(tx.memo_data.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, vault_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -6141,6 +8219,23 @@ impl From<VaultDelete> for Tx {
 /// [`VaultDeposit`](https://xrpl.org/docs/references/protocol/transactions/types/vaultdeposit) transaction.
 ///
 /// Required: `VaultID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, VaultDeposit};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let vault_id =
+///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+/// let tx = VaultDeposit::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     vault_id,
+///     Amount::xrp(1_000_000)?,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], VaultDeposit::TRANSACTION_TYPE); // "VaultDeposit"
+/// assert_eq!(json["VaultID"], vault_id.to_string());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultDeposit {
@@ -6160,6 +8255,21 @@ impl VaultDeposit {
     pub const TRANSACTION_TYPE: &'static str = "VaultDeposit";
 
     /// A `VaultDeposit` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::VaultDeposit;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let vault_id =
+    ///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+    /// let tx = VaultDeposit::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     vault_id,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.vault_id, vault_id);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, vault_id: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -6189,6 +8299,20 @@ impl From<VaultDeposit> for Tx {
 /// [`VaultSet`](https://xrpl.org/docs/references/protocol/transactions/types/vaultset) transaction.
 ///
 /// Required: `VaultID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, VaultSet};
+/// use xrpl_core::types::Hash256;
+///
+/// let vault_id =
+///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+/// let tx = VaultSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vault_id)
+///     .with_assets_maximum("1000000");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], VaultSet::TRANSACTION_TYPE); // "VaultSet"
+/// assert_eq!(json["AssetsMaximum"], "1000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultSet {
@@ -6218,6 +8342,17 @@ impl VaultSet {
     pub const TRANSACTION_TYPE: &'static str = "VaultSet";
 
     /// A `VaultSet` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::VaultSet;
+    /// # use xrpl_core::types::Hash256;
+    /// let vault_id =
+    ///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+    /// let tx = VaultSet::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", vault_id);
+    /// assert_eq!(tx.vault_id, vault_id);
+    /// assert!(tx.assets_maximum.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, vault_id: Hash256) -> Self {
         Self {
             common: Common::new(account),
@@ -6270,6 +8405,24 @@ impl From<VaultSet> for Tx {
 /// [`VaultWithdraw`](https://xrpl.org/docs/references/protocol/transactions/types/vaultwithdraw) transaction.
 ///
 /// Required: `VaultID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, VaultWithdraw};
+/// use xrpl_core::types::{Amount, Hash256};
+///
+/// let vault_id =
+///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+/// let tx = VaultWithdraw::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     vault_id,
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], VaultWithdraw::TRANSACTION_TYPE); // "VaultWithdraw"
+/// assert_eq!(json["Destination"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultWithdraw {
@@ -6310,6 +8463,21 @@ impl VaultWithdraw {
     pub const TRANSACTION_TYPE: &'static str = "VaultWithdraw";
 
     /// A `VaultWithdraw` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::VaultWithdraw;
+    /// # use xrpl_core::types::{Amount, Hash256};
+    /// let vault_id =
+    ///     Hash256::from_hex("1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B")?;
+    /// let tx = VaultWithdraw::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     vault_id,
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.vault_id, vault_id);
+    /// assert!(tx.destination.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account: impl Into<String>, vault_id: Hash256, amount: Amount) -> Self {
         Self {
             common: Common::new(account),
@@ -6363,6 +8531,29 @@ impl From<VaultWithdraw> for Tx {
 /// [`XChainAccountCreateCommit`](https://xrpl.org/docs/references/protocol/transactions/types/xchainaccountcreatecommit) transaction.
 ///
 /// Required: `XChainBridge`, `Destination`, `Amount`, `SignatureReward`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainAccountCreateCommit, XChainBridge};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// let tx = XChainAccountCreateCommit::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+///     Amount::xrp(100)?,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainAccountCreateCommit::TRANSACTION_TYPE);
+/// assert_eq!(json["Destination"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainAccountCreateCommit {
@@ -6388,6 +8579,27 @@ impl XChainAccountCreateCommit {
     pub const TRANSACTION_TYPE: &'static str = "XChainAccountCreateCommit";
 
     /// A `XChainAccountCreateCommit` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainAccountCreateCommit, XChainBridge};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// let tx = XChainAccountCreateCommit::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    ///     Amount::xrp(100)?,
+    /// );
+    /// assert_eq!(tx.destination, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6425,6 +8637,39 @@ impl From<XChainAccountCreateCommit> for Tx {
 /// [`XChainAddAccountCreateAttestation`](https://xrpl.org/docs/references/protocol/transactions/types/xchainaddaccountcreateattestation) transaction.
 ///
 /// Required: `XChainBridge`, `AttestationSignerAccount`, `PublicKey`, `Signature`, `OtherChainSource`, `Amount`, `AttestationRewardAccount`, `WasLockingChainSend`, `XChainAccountCreateCount`, `Destination`, `SignatureReward`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{
+///     TxModel, XChainAddAccountCreateAttestation, XChainBridge,
+/// };
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+/// let tx = XChainAddAccountCreateAttestation::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+///     "0A0B0C0D",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+///     1,
+///     "1",
+///     "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+///     Amount::xrp(100)?,
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainAddAccountCreateAttestation::TRANSACTION_TYPE);
+/// assert_eq!(json["AttestationSignerAccount"], "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainAddAccountCreateAttestation {
@@ -6471,6 +8716,35 @@ impl XChainAddAccountCreateAttestation {
     pub const TRANSACTION_TYPE: &'static str = "XChainAddAccountCreateAttestation";
 
     /// A `XChainAddAccountCreateAttestation` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainAddAccountCreateAttestation, XChainBridge};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+    /// let tx = XChainAddAccountCreateAttestation::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    ///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+    ///     "0A0B0C0D",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    ///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    ///     1,
+    ///     "1",
+    ///     "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+    ///     Amount::xrp(100)?,
+    /// );
+    /// assert_eq!(tx.attestation_signer_account, "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6522,6 +8796,36 @@ impl From<XChainAddAccountCreateAttestation> for Tx {
 /// [`XChainAddClaimAttestation`](https://xrpl.org/docs/references/protocol/transactions/types/xchainaddclaimattestation) transaction.
 ///
 /// Required: `XChainBridge`, `AttestationSignerAccount`, `PublicKey`, `Signature`, `OtherChainSource`, `Amount`, `AttestationRewardAccount`, `WasLockingChainSend`, `XChainClaimID`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainAddClaimAttestation, XChainBridge};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+/// let tx = XChainAddClaimAttestation::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+///     "0A0B0C0D",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+///     1,
+///     "1",
+/// )
+/// .with_destination("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainAddClaimAttestation::TRANSACTION_TYPE);
+/// assert_eq!(json["Destination"], "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainAddClaimAttestation {
@@ -6569,6 +8873,33 @@ impl XChainAddClaimAttestation {
     pub const TRANSACTION_TYPE: &'static str = "XChainAddClaimAttestation";
 
     /// A `XChainAddClaimAttestation` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainAddClaimAttestation, XChainBridge};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// // "0A0B0C0D" stands in for each proof, ciphertext or signature (hex).
+    /// let tx = XChainAddClaimAttestation::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    ///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+    ///     "0A0B0C0D",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    ///     "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    ///     1,
+    ///     "1",
+    /// );
+    /// assert_eq!(tx.attestation_signer_account, "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+    /// assert!(tx.destination.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6624,6 +8955,30 @@ impl From<XChainAddClaimAttestation> for Tx {
 /// [`XChainClaim`](https://xrpl.org/docs/references/protocol/transactions/types/xchainclaim) transaction.
 ///
 /// Required: `XChainBridge`, `XChainClaimID`, `Destination`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainBridge, XChainClaim};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// let tx = XChainClaim::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     "1",
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_destination_tag(12345u32);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainClaim::TRANSACTION_TYPE); // "XChainClaim"
+/// assert_eq!(json["DestinationTag"], 12345);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainClaim {
@@ -6656,6 +9011,27 @@ impl XChainClaim {
     pub const TRANSACTION_TYPE: &'static str = "XChainClaim";
 
     /// A `XChainClaim` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainBridge, XChainClaim};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// let tx = XChainClaim::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     "1",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.x_chain_claim_id, "1");
+    /// assert!(tx.destination_tag.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6701,6 +9077,29 @@ impl From<XChainClaim> for Tx {
 /// [`XChainCommit`](https://xrpl.org/docs/references/protocol/transactions/types/xchaincommit) transaction.
 ///
 /// Required: `XChainBridge`, `XChainClaimID`, `Amount`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainBridge, XChainCommit};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// let tx = XChainCommit::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     "1",
+///     Amount::xrp(1_000_000)?,
+/// )
+/// .with_other_chain_destination("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainCommit::TRANSACTION_TYPE); // "XChainCommit"
+/// assert_eq!(json["OtherChainDestination"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainCommit {
@@ -6730,6 +9129,26 @@ impl XChainCommit {
     pub const TRANSACTION_TYPE: &'static str = "XChainCommit";
 
     /// A `XChainCommit` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainBridge, XChainCommit};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// let tx = XChainCommit::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     "1",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// assert_eq!(tx.x_chain_claim_id, "1");
+    /// assert!(tx.other_chain_destination.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6773,6 +9192,28 @@ impl From<XChainCommit> for Tx {
 /// [`XChainCreateBridge`](https://xrpl.org/docs/references/protocol/transactions/types/xchaincreatebridge) transaction.
 ///
 /// Required: `XChainBridge`, `SignatureReward`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainBridge, XChainCreateBridge};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// let tx = XChainCreateBridge::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     Amount::xrp(100)?,
+/// )
+/// .with_min_account_create_amount(Amount::xrp(10_000_000)?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainCreateBridge::TRANSACTION_TYPE);
+/// assert_eq!(json["MinAccountCreateAmount"], "10000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainCreateBridge {
@@ -6799,6 +9240,25 @@ impl XChainCreateBridge {
     pub const TRANSACTION_TYPE: &'static str = "XChainCreateBridge";
 
     /// A `XChainCreateBridge` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainBridge, XChainCreateBridge};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// let tx = XChainCreateBridge::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     Amount::xrp(100)?,
+    /// );
+    /// assert_eq!(tx.signature_reward, Amount::xrp(100)?);
+    /// assert!(tx.min_account_create_amount.is_none()); // optional fields start unset
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6840,6 +9300,28 @@ impl From<XChainCreateBridge> for Tx {
 /// [`XChainCreateClaimID`](https://xrpl.org/docs/references/protocol/transactions/types/xchaincreateclaimid) transaction.
 ///
 /// Required: `XChainBridge`, `SignatureReward`, `OtherChainSource`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainBridge, XChainCreateClaimID};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// let tx = XChainCreateClaimID::new(
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     bridge,
+///     Amount::xrp(100)?,
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+/// );
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainCreateClaimID::TRANSACTION_TYPE);
+/// assert_eq!(json["SignatureReward"], "100");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainCreateClaimID {
@@ -6862,6 +9344,26 @@ impl XChainCreateClaimID {
     pub const TRANSACTION_TYPE: &'static str = "XChainCreateClaimID";
 
     /// A `XChainCreateClaimID` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainBridge, XChainCreateClaimID};
+    /// # use xrpl_core::types::{Amount, Asset};
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// let tx = XChainCreateClaimID::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     bridge,
+    ///     Amount::xrp(100)?,
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    /// );
+    /// assert_eq!(tx.signature_reward, Amount::xrp(100)?);
+    /// assert!(tx.common.fee.is_none()); // as are Fee, Sequence, …: autofill sets them
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(
         account: impl Into<String>,
         x_chain_bridge: XChainBridge,
@@ -6896,6 +9398,16 @@ impl From<XChainCreateClaimID> for Tx {
 
 flags_type!(
     /// The flags of a [`XChainModifyBridge`] (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::transaction::models::XChainModifyBridgeFlags;
+    ///
+    /// let flags = XChainModifyBridgeFlags::CLEAR_ACCOUNT_CREATE_AMOUNT;
+    /// assert!(flags.contains(XChainModifyBridgeFlags::CLEAR_ACCOUNT_CREATE_AMOUNT));
+    /// assert!(!XChainModifyBridgeFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     XChainModifyBridgeFlags {
         /// `tfClearAccountCreateAmount`.
         CLEAR_ACCOUNT_CREATE_AMOUNT = 0x00010000,
@@ -6909,6 +9421,24 @@ flags_type!(
 /// [`XChainModifyBridge`](https://xrpl.org/docs/references/protocol/transactions/types/xchainmodifybridge) transaction.
 ///
 /// Required: `XChainBridge`.
+///
+/// ```
+/// use xrpl_core::transaction::models::{TxModel, XChainBridge, XChainModifyBridge};
+/// use xrpl_core::types::{Amount, Asset};
+///
+/// let bridge = XChainBridge::new(
+///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     Asset::xrp(),
+///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     Asset::xrp(),
+/// );
+/// let tx = XChainModifyBridge::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", bridge)
+///     .with_signature_reward(Amount::xrp(100)?);
+/// let json = tx.to_json()?;
+/// assert_eq!(json["TransactionType"], XChainModifyBridge::TRANSACTION_TYPE);
+/// assert_eq!(json["SignatureReward"], "100");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainModifyBridge {
@@ -6939,6 +9469,20 @@ impl XChainModifyBridge {
     pub const TRANSACTION_TYPE: &'static str = "XChainModifyBridge";
 
     /// A `XChainModifyBridge` from `account` with its required fields; everything else unset.
+    ///
+    /// ```
+    /// # use xrpl_core::transaction::models::{XChainBridge, XChainModifyBridge};
+    /// # use xrpl_core::types::Asset;
+    /// let bridge = XChainBridge::new(
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Asset::xrp(),
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     Asset::xrp(),
+    /// );
+    /// let tx = XChainModifyBridge::new("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", bridge);
+    /// assert_eq!(tx.common.account, "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// assert!(tx.signature_reward.is_none()); // optional fields start unset
+    /// ```
     pub fn new(account: impl Into<String>, x_chain_bridge: XChainBridge) -> Self {
         Self {
             common: Common::new(account),
@@ -6981,6 +9525,13 @@ impl From<XChainModifyBridge> for Tx {
 }
 
 /// Every transaction type rippled 3.4.1 defines, by `TransactionType`.
+///
+/// ```
+/// use xrpl_core::transaction::models::NAMES;
+///
+/// assert_eq!(NAMES.len(), 82);
+/// assert!(NAMES.contains(&"Payment"));
+/// ```
 pub const NAMES: &[&str] = &[
     "AMMBid",
     "AMMClawback",

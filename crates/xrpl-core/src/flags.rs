@@ -117,6 +117,18 @@ macro_rules! flags_type {
             $( $(#[$doc])* pub const $flag: Self = Self($value); )*
 
             /// No flags.
+            ///
+            #[doc = concat!(
+                "```\n",
+                "# use xrpl_core::flags::Flags;\n",
+                "# use xrpl_core::transaction::models::*;\n",
+                "# use xrpl_core::types::ledger_object::*;\n",
+                "let flags = ", stringify!($name), "::empty();\n",
+                "assert!(flags.is_empty());\n",
+                "assert_eq!(flags, ", stringify!($name), "::default());\n",
+                "assert_eq!(u32::from(flags), 0);\n",
+                "```",
+            )]
             pub const fn empty() -> Self {
                 Self(0)
             }

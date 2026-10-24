@@ -13,6 +13,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// `AMM` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::AMM;
+///
+/// let entry: AMM = serde_json::from_value(json!({
+///     "LedgerEntryType": "AMM",
+///     "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+///     "LPTokenBalance": {
+///         "currency": "03930D02208264E2E40EC1B0C09E4DB96EE197B1",
+///         "issuer": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+///         "value": "1000"
+///     },
+///     "Asset": {"currency": "XRP"},
+///     "Asset2": {"currency": "USD", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"},
+///     "Flags": 0, "OwnerNode": "0"
+/// }))?;
+/// assert_eq!(entry.asset2["currency"], "USD");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AMM {
@@ -75,6 +95,15 @@ pub struct AMM {
 
 flags_type!(
     /// The flags of a [`AccountRoot`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::AccountRootFlags;
+    ///
+    /// let flags = AccountRootFlags::PASSWORD_SPENT | AccountRootFlags::REQUIRE_DEST_TAG;
+    /// assert!(flags.contains(AccountRootFlags::REQUIRE_DEST_TAG));
+    /// assert_eq!(u32::from(flags), 0x0003_0000);
+    /// ```
     AccountRootFlags {
         /// `lsfPasswordSpent`: The account has used its one free regular-key change (a SetRegularKey signed with the master key costs no fee until then).
         PASSWORD_SPENT = 0x00010000,
@@ -110,6 +139,26 @@ flags_type!(
 );
 
 /// `AccountRoot` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::Amount;
+/// use xrpl_core::types::ledger_object::{AccountRoot, AccountRootFlags};
+///
+/// let entry: AccountRoot = serde_json::from_value(json!({
+///     "LedgerEntryType": "AccountRoot",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Sequence": 5,
+///     "Balance": "1000000000",
+///     "OwnerCount": 0,
+///     "Flags": 8388608, "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.balance, Amount::Xrp(1_000_000_000));
+/// assert!(entry.flags.contains(AccountRootFlags::DEFAULT_RIPPLE));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountRoot {
@@ -263,6 +312,19 @@ pub struct AccountRoot {
 }
 
 /// `Amendments` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::Amendments;
+///
+/// let entry: Amendments = serde_json::from_value(json!({
+///     "LedgerEntryType": "Amendments",
+///     "Amendments": ["42426C4D4F1009EE67080A9B7965B44656D7714D104A72F9B4369F97ABF044EE"],
+///     "Flags": 0
+/// }))?;
+/// assert_eq!(entry.amendments.map(|ids| ids.len()), Some(1));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Amendments {
@@ -306,6 +368,31 @@ pub struct Amendments {
 }
 
 /// `Bridge` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::Amount;
+/// use xrpl_core::types::ledger_object::Bridge;
+///
+/// let entry: Bridge = serde_json::from_value(json!({
+///     "LedgerEntryType": "Bridge",
+///     "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "SignatureReward": "100",
+///     "XChainBridge": {
+///         "LockingChainDoor": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///         "LockingChainIssue": {"currency": "XRP"},
+///         "IssuingChainDoor": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///         "IssuingChainIssue": {"currency": "XRP"}
+///     },
+///     "XChainClaimID": "0",
+///     "XChainAccountCreateCount": "1",
+///     "XChainAccountClaimCount": "0",
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.signature_reward, Amount::Xrp(100));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Bridge {
@@ -355,6 +442,23 @@ pub struct Bridge {
 }
 
 /// `Check` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::Check;
+///
+/// let entry: Check = serde_json::from_value(json!({
+///     "LedgerEntryType": "Check",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "SendMax": "1000000",
+///     "Sequence": 5,
+///     "Flags": 0, "OwnerNode": "0", "DestinationNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.destination.to_string(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Check {
@@ -415,6 +519,16 @@ pub struct Check {
 
 flags_type!(
     /// The flags of a [`Credential`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::CredentialFlags;
+    ///
+    /// let flags = CredentialFlags::ACCEPTED;
+    /// assert!(flags.contains(CredentialFlags::ACCEPTED));
+    /// assert!(!CredentialFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     CredentialFlags {
         /// `lsfAccepted`: The subject has accepted the credential.
         ACCEPTED = 0x00010000,
@@ -422,6 +536,24 @@ flags_type!(
 );
 
 /// `Credential` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{Credential, CredentialFlags};
+///
+/// let entry: Credential = serde_json::from_value(json!({
+///     "LedgerEntryType": "Credential",
+///     "Subject": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "CredentialType": "4B5943",
+///     "Flags": 65536, "IssuerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.subject.to_string(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// assert!(entry.flags.contains(CredentialFlags::ACCEPTED));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Credential {
@@ -472,6 +604,24 @@ pub struct Credential {
 }
 
 /// `DID` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::DID;
+///
+/// let entry: DID = serde_json::from_value(json!({
+///     "LedgerEntryType": "DID",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "URI": "68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E",
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(
+///     entry.uri.as_deref(),
+///     Some("68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E")
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DID {
@@ -512,6 +662,22 @@ pub struct DID {
 }
 
 /// `Delegate` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::Delegate;
+///
+/// let entry: Delegate = serde_json::from_value(json!({
+///     "LedgerEntryType": "Delegate",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Authorize": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Permissions": [{"Permission": {"PermissionValue": "Payment"}}],
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.authorize.to_string(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Delegate {
@@ -552,6 +718,24 @@ pub struct Delegate {
 }
 
 /// `DepositPreauth` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::DepositPreauth;
+///
+/// let entry: DepositPreauth = serde_json::from_value(json!({
+///     "LedgerEntryType": "DepositPreauth",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Authorize": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(
+///     entry.authorize.map(|id| id.to_string()).as_deref(),
+///     Some("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DepositPreauth {
@@ -590,6 +774,16 @@ pub struct DepositPreauth {
 
 flags_type!(
     /// The flags of a [`DirectoryNode`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::DirectoryNodeFlags;
+    ///
+    /// let flags = DirectoryNodeFlags::NFTOKEN_BUY_OFFERS;
+    /// assert!(flags.contains(DirectoryNodeFlags::NFTOKEN_BUY_OFFERS));
+    /// assert!(!DirectoryNodeFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0000_0001);
+    /// ```
     DirectoryNodeFlags {
         /// `lsfNFTokenBuyOffers`: The directory lists buy offers for an NFT.
         NFTOKEN_BUY_OFFERS = 0x00000001,
@@ -599,6 +793,23 @@ flags_type!(
 );
 
 /// `DirectoryNode` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{DirectoryNode, DirectoryNodeFlags};
+///
+/// let entry: DirectoryNode = serde_json::from_value(json!({
+///     "LedgerEntryType": "DirectoryNode",
+///     "Indexes": ["D50092E5B3F02AC1145272FFB88F22C8D8CF82EE330E10EBFDC29E7A0635660C"],
+///     "RootIndex": "00000299BD60630F6C37B91FB1FDA6979E59D19E9D42C2DBF39ABBEF66F6FBB8",
+///     "NFTokenID": "00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228",
+///     "Flags": 1
+/// }))?;
+/// assert_eq!(entry.indexes.len(), 1);
+/// assert!(entry.flags.contains(DirectoryNodeFlags::NFTOKEN_BUY_OFFERS));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DirectoryNode {
@@ -702,6 +913,22 @@ pub struct DirectoryNode {
 }
 
 /// `Escrow` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::Escrow;
+///
+/// let entry: Escrow = serde_json::from_value(json!({
+///     "LedgerEntryType": "Escrow",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Amount": "1000000",
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.destination.to_string(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Escrow {
@@ -786,6 +1013,22 @@ pub struct Escrow {
 }
 
 /// `FeeSettings` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::Amount;
+/// use xrpl_core::types::ledger_object::FeeSettings;
+///
+/// let entry: FeeSettings = serde_json::from_value(json!({
+///     "LedgerEntryType": "FeeSettings",
+///     "BaseFeeDrops": "10",
+///     "ReserveBaseDrops": "1000000",
+///     "ReserveIncrementDrops": "200000",
+///     "Flags": 0
+/// }))?;
+/// assert_eq!(entry.reserve_base_drops, Some(Amount::Xrp(1_000_000)));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct FeeSettings {
@@ -860,6 +1103,19 @@ pub struct FeeSettings {
 }
 
 /// `LedgerHashes` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::LedgerHashes;
+///
+/// let entry: LedgerHashes = serde_json::from_value(json!({
+///     "LedgerEntryType": "LedgerHashes",
+///     "Hashes": ["5A76D6976A3598E3DAD0B1B177F10C8032EAEEDA0A084F8C8B9419C1416D73D1"],
+///     "Flags": 0
+/// }))?;
+/// assert_eq!(entry.hashes.len(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LedgerHashes {
@@ -893,6 +1149,16 @@ pub struct LedgerHashes {
 
 flags_type!(
     /// The flags of a [`Loan`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::LoanFlags;
+    ///
+    /// let flags = LoanFlags::LOAN_DEFAULT;
+    /// assert!(flags.contains(LoanFlags::LOAN_DEFAULT));
+    /// assert!(!LoanFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     LoanFlags {
         /// `lsfLoanDefault`: The loan has defaulted.
         LOAN_DEFAULT = 0x00010000,
@@ -904,6 +1170,30 @@ flags_type!(
 );
 
 /// `Loan` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{Loan, LoanFlags};
+///
+/// let entry: Loan = serde_json::from_value(json!({
+///     "LedgerEntryType": "Loan",
+///     "LoanBrokerID": "30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F",
+///     "LoanSequence": 1,
+///     "Borrower": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "StartDate": 843321657,
+///     "PaymentInterval": 2592000,
+///     "PeriodicPayment": "1000",
+///     "Flags": 262144, "PreviousTxnLgrSeq": 92436010, "OwnerNode": "0", "LoanBrokerNode": "0",
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(
+///     entry.loan_broker_id.to_string(),
+///     "30BF70FA03BF434831FF6BB9574F7A455A0513AC8DC6F01A10C9A3E77B58029F"
+/// );
+/// assert!(entry.flags.contains(LoanFlags::LOAN_OVERPAYMENT));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Loan {
@@ -1064,6 +1354,27 @@ pub struct Loan {
 }
 
 /// `LoanBroker` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::LoanBroker;
+///
+/// let entry: LoanBroker = serde_json::from_value(json!({
+///     "LedgerEntryType": "LoanBroker",
+///     "Sequence": 5,
+///     "VaultID": "1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B",
+///     "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+///     "Owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "LoanSequence": 1,
+///     "Flags": 0, "PreviousTxnLgrSeq": 92436010, "OwnerNode": "0", "VaultNode": "0",
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(
+///     entry.vault_id.to_string(),
+///     "1C09AD34A51B4B01A2C6675E748087AC85DBDD9247AC2D42D8CF3CA9F7AE8B3B"
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LoanBroker {
@@ -1155,6 +1466,15 @@ pub struct LoanBroker {
 
 flags_type!(
     /// The flags of a [`MPToken`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::MPTokenFlags;
+    ///
+    /// let flags = MPTokenFlags::MPT_LOCKED | MPTokenFlags::MPT_AUTHORIZED;
+    /// assert!(flags.contains(MPTokenFlags::MPT_AUTHORIZED));
+    /// assert_eq!(u32::from(flags), 0x0000_0003);
+    /// ```
     MPTokenFlags {
         /// `lsfMPTLocked`: Locked: the tokens cannot move.
         MPT_LOCKED = 0x00000001,
@@ -1166,6 +1486,24 @@ flags_type!(
 );
 
 /// `MPToken` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{MPToken, MPTokenFlags};
+///
+/// let entry: MPToken = serde_json::from_value(json!({
+///     "LedgerEntryType": "MPToken",
+///     "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "MPTokenIssuanceID": "000004C463C52827307480341125DA0577DEFC38405B0E3E",
+///     "MPTAmount": "100",
+///     "Flags": 2, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.mpt_amount.as_deref(), Some("100"));
+/// assert!(entry.flags.contains(MPTokenFlags::MPT_AUTHORIZED));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MPToken {
@@ -1249,6 +1587,15 @@ pub struct MPToken {
 
 flags_type!(
     /// The flags of a [`MPTokenIssuance`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::MPTokenIssuanceFlags;
+    ///
+    /// let flags = MPTokenIssuanceFlags::MPT_LOCKED | MPTokenIssuanceFlags::MPT_CAN_LOCK;
+    /// assert!(flags.contains(MPTokenIssuanceFlags::MPT_CAN_LOCK));
+    /// assert_eq!(u32::from(flags), 0x0000_0003);
+    /// ```
     MPTokenIssuanceFlags {
         /// `lsfMPTLocked`: Locked: the tokens cannot move.
         MPT_LOCKED = 0x00000001,
@@ -1270,6 +1617,24 @@ flags_type!(
 );
 
 /// `MPTokenIssuance` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{MPTokenIssuance, MPTokenIssuanceFlags};
+///
+/// let entry: MPTokenIssuance = serde_json::from_value(json!({
+///     "LedgerEntryType": "MPTokenIssuance",
+///     "Issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Sequence": 5,
+///     "OutstandingAmount": "1000",
+///     "Flags": 32, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.outstanding_amount, "1000");
+/// assert!(entry.flags.contains(MPTokenIssuanceFlags::MPT_CAN_TRANSFER));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MPTokenIssuance {
@@ -1377,6 +1742,16 @@ pub struct MPTokenIssuance {
 
 flags_type!(
     /// The flags of a [`NFTokenOffer`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::NFTokenOfferFlags;
+    ///
+    /// let flags = NFTokenOfferFlags::SELL_NFTOKEN;
+    /// assert!(flags.contains(NFTokenOfferFlags::SELL_NFTOKEN));
+    /// assert!(!NFTokenOfferFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0000_0001);
+    /// ```
     NFTokenOfferFlags {
         /// `lsfSellNFToken`: The offer sells the NFT (otherwise it is a buy offer).
         SELL_NFTOKEN = 0x00000001,
@@ -1384,6 +1759,25 @@ flags_type!(
 );
 
 /// `NFTokenOffer` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::Amount;
+/// use xrpl_core::types::ledger_object::{NFTokenOffer, NFTokenOfferFlags};
+///
+/// let entry: NFTokenOffer = serde_json::from_value(json!({
+///     "LedgerEntryType": "NFTokenOffer",
+///     "Owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "NFTokenID": "00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228",
+///     "Amount": "1000000",
+///     "Flags": 1, "OwnerNode": "0", "NFTokenOfferNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.amount, Amount::Xrp(1_000_000));
+/// assert!(entry.flags.contains(NFTokenOfferFlags::SELL_NFTOKEN));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenOffer {
@@ -1434,6 +1828,27 @@ pub struct NFTokenOffer {
 }
 
 /// `NFTokenPage` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::NFTokenPage;
+///
+/// let entry: NFTokenPage = serde_json::from_value(json!({
+///     "LedgerEntryType": "NFTokenPage",
+///     "NFTokens": [
+///         {
+///             "NFToken": {
+///                 "NFTokenID": "00081388DC1AB4937C899037B2FDFC3CB20F6F64E73120BB5F8AA66A00000228",
+///                 "URI": "68747470733A2F2F6578616D706C652E636F6D2F6974656D2E6A736F6E"
+///             }
+///         }
+///     ],
+///     "Flags": 0, "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.nf_tokens.len(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFTokenPage {
@@ -1472,6 +1887,22 @@ pub struct NFTokenPage {
 }
 
 /// `NegativeUNL` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::NegativeUNL;
+///
+/// let entry: NegativeUNL = serde_json::from_value(json!({
+///     "LedgerEntryType": "NegativeUNL",
+///     "ValidatorToDisable": "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+///     "Flags": 0
+/// }))?;
+/// assert_eq!(
+///     entry.validator_to_disable.as_deref(),
+///     Some("ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63")
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NegativeUNL {
@@ -1523,6 +1954,15 @@ pub struct NegativeUNL {
 
 flags_type!(
     /// The flags of a [`Offer`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::OfferFlags;
+    ///
+    /// let flags = OfferFlags::PASSIVE | OfferFlags::SELL;
+    /// assert!(flags.contains(OfferFlags::SELL));
+    /// assert_eq!(u32::from(flags), 0x0003_0000);
+    /// ```
     OfferFlags {
         /// `lsfPassive`: A passive offer: it does not consume offers that match it exactly.
         PASSIVE = 0x00010000,
@@ -1534,6 +1974,31 @@ flags_type!(
 );
 
 /// `Offer` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::Amount;
+/// use xrpl_core::types::ledger_object::{Offer, OfferFlags};
+///
+/// let entry: Offer = serde_json::from_value(json!({
+///     "LedgerEntryType": "Offer",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Sequence": 5,
+///     "TakerPays": "20000000",
+///     "TakerGets": {
+///         "currency": "USD",
+///         "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///         "value": "10"
+///     },
+///     "BookDirectory": "5C8970D155D65DB8FF49B291D7EFFA4A09F9E8A68D9974B25A0E35FA931A0000",
+///     "Flags": 65536, "BookNode": "0", "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.taker_pays, Amount::Xrp(20_000_000));
+/// assert!(entry.flags.contains(OfferFlags::PASSIVE));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Offer {
@@ -1593,6 +2058,33 @@ pub struct Offer {
 }
 
 /// `Oracle` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::Oracle;
+///
+/// let entry: Oracle = serde_json::from_value(json!({
+///     "LedgerEntryType": "Oracle",
+///     "Owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Provider": "70726F7669646572",
+///     "PriceDataSeries": [
+///         {
+///             "PriceData": {
+///                 "BaseAsset": "XRP",
+///                 "QuoteAsset": "USD",
+///                 "AssetPrice": "61A8",
+///                 "Scale": 4
+///             }
+///         }
+///     ],
+///     "AssetClass": "63757272656E6379",
+///     "LastUpdateTime": 1789671597,
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.last_update_time, 1_789_671_597);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Oracle {
@@ -1642,6 +2134,25 @@ pub struct Oracle {
 }
 
 /// `PayChannel` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::PayChannel;
+///
+/// let entry: PayChannel = serde_json::from_value(json!({
+///     "LedgerEntryType": "PayChannel",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Amount": "10000000",
+///     "Balance": "1000000",
+///     "PublicKey": "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+///     "SettleDelay": 86400,
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.settle_delay, 86400);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PayChannel {
@@ -1718,6 +2229,29 @@ pub struct PayChannel {
 }
 
 /// `PermissionedDomain` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::PermissionedDomain;
+///
+/// let entry: PermissionedDomain = serde_json::from_value(json!({
+///     "LedgerEntryType": "PermissionedDomain",
+///     "Owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Sequence": 5,
+///     "AcceptedCredentials": [
+///         {
+///             "Credential": {
+///                 "Issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///                 "CredentialType": "4B5943"
+///             }
+///         }
+///     ],
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.accepted_credentials.len(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PermissionedDomain {
@@ -1752,6 +2286,15 @@ pub struct PermissionedDomain {
 
 flags_type!(
     /// The flags of a [`RippleState`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::RippleStateFlags;
+    ///
+    /// let flags = RippleStateFlags::LOW_RESERVE | RippleStateFlags::HIGH_RESERVE;
+    /// assert!(flags.contains(RippleStateFlags::HIGH_RESERVE));
+    /// assert_eq!(u32::from(flags), 0x0003_0000);
+    /// ```
     RippleStateFlags {
         /// `lsfLowReserve`: The trust line counts toward the low account's owner reserve.
         LOW_RESERVE = 0x00010000,
@@ -1779,6 +2322,32 @@ flags_type!(
 );
 
 /// `RippleState` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{RippleState, RippleStateFlags};
+///
+/// let entry: RippleState = serde_json::from_value(json!({
+///     "LedgerEntryType": "RippleState",
+///     "Balance": {"currency": "USD", "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji", "value": "10"},
+///     "LowLimit": {
+///         "currency": "USD",
+///         "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///         "value": "100"
+///     },
+///     "HighLimit": {
+///         "currency": "USD",
+///         "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///         "value": "0"
+///     },
+///     "Flags": 65536, "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.low_limit.to_string(), "100 USD.rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+/// assert!(entry.flags.contains(RippleStateFlags::LOW_RESERVE));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct RippleState {
@@ -1858,6 +2427,16 @@ pub struct RippleState {
 
 flags_type!(
     /// The flags of a [`SignerList`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::SignerListFlags;
+    ///
+    /// let flags = SignerListFlags::ONE_OWNER_COUNT;
+    /// assert!(flags.contains(SignerListFlags::ONE_OWNER_COUNT));
+    /// assert!(!SignerListFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     SignerListFlags {
         /// `lsfOneOwnerCount`: The signer list counts as one entry toward the owner reserve.
         ONE_OWNER_COUNT = 0x00010000,
@@ -1865,6 +2444,27 @@ flags_type!(
 );
 
 /// `SignerList` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{SignerList, SignerListFlags};
+///
+/// let entry: SignerList = serde_json::from_value(json!({
+///     "LedgerEntryType": "SignerList",
+///     "SignerQuorum": 2,
+///     "SignerEntries": [
+///         {"SignerEntry": {"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "SignerWeight": 1}},
+///         {"SignerEntry": {"Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "SignerWeight": 1}}
+///     ],
+///     "SignerListID": 0,
+///     "Flags": 65536, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.signer_quorum, 2);
+/// assert!(entry.flags.contains(SignerListFlags::ONE_OWNER_COUNT));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SignerList {
@@ -1902,6 +2502,16 @@ pub struct SignerList {
 
 flags_type!(
     /// The flags of a [`Sponsorship`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::SponsorshipFlags;
+    ///
+    /// let flags = SponsorshipFlags::SPONSORSHIP_REQUIRE_SIGN_FOR_FEE
+    ///     | SponsorshipFlags::SPONSORSHIP_REQUIRE_SIGN_FOR_RESERVE;
+    /// assert!(flags.contains(SponsorshipFlags::SPONSORSHIP_REQUIRE_SIGN_FOR_RESERVE));
+    /// assert_eq!(u32::from(flags), 0x0003_0000);
+    /// ```
     SponsorshipFlags {
         /// `lsfSponsorshipRequireSignForFee`: The sponsor must sign each transaction whose fee it pays.
         SPONSORSHIP_REQUIRE_SIGN_FOR_FEE = 0x00010000,
@@ -1911,6 +2521,23 @@ flags_type!(
 );
 
 /// `Sponsorship` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{Sponsorship, SponsorshipFlags};
+///
+/// let entry: Sponsorship = serde_json::from_value(json!({
+///     "LedgerEntryType": "Sponsorship",
+///     "Owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Sponsee": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Flags": 65536, "PreviousTxnLgrSeq": 92436010, "OwnerNode": "0", "SponseeNode": "0",
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.sponsee.to_string(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+/// assert!(entry.flags.contains(SponsorshipFlags::SPONSORSHIP_REQUIRE_SIGN_FOR_FEE));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Sponsorship {
@@ -1957,6 +2584,21 @@ pub struct Sponsorship {
 }
 
 /// `Ticket` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::Ticket;
+///
+/// let entry: Ticket = serde_json::from_value(json!({
+///     "LedgerEntryType": "Ticket",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "TicketSequence": 7,
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.ticket_sequence, 7);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Ticket {
@@ -1988,6 +2630,16 @@ pub struct Ticket {
 
 flags_type!(
     /// The flags of a [`Vault`] entry (`Flags`).
+    ///
+    /// ```
+    /// use xrpl_core::flags::Flags;
+    /// use xrpl_core::types::ledger_object::VaultFlags;
+    ///
+    /// let flags = VaultFlags::VAULT_PRIVATE;
+    /// assert!(flags.contains(VaultFlags::VAULT_PRIVATE));
+    /// assert!(!VaultFlags::empty().contains(flags));
+    /// assert_eq!(u32::from(flags), 0x0001_0000);
+    /// ```
     VaultFlags {
         /// `lsfVaultPrivate`: A private vault: only authorized accounts may deposit.
         VAULT_PRIVATE = 0x00010000,
@@ -1995,6 +2647,27 @@ flags_type!(
 );
 
 /// `Vault` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::flags::Flags;
+/// use xrpl_core::types::ledger_object::{Vault, VaultFlags};
+///
+/// let entry: Vault = serde_json::from_value(json!({
+///     "LedgerEntryType": "Vault",
+///     "Sequence": 5,
+///     "Owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+///     "Asset": {"currency": "XRP"},
+///     "ShareMPTID": "000000018049717CC948789F32F267ADC2582484E3DFA698",
+///     "WithdrawalPolicy": 1,
+///     "Flags": 65536, "PreviousTxnLgrSeq": 92436010, "OwnerNode": "0",
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.asset["currency"], "XRP");
+/// assert!(entry.flags.contains(VaultFlags::VAULT_PRIVATE));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Vault {
@@ -2091,6 +2764,30 @@ pub struct Vault {
 }
 
 /// `XChainOwnedClaimID` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::XChainOwnedClaimID;
+///
+/// let entry: XChainOwnedClaimID = serde_json::from_value(json!({
+///     "LedgerEntryType": "XChainOwnedClaimID",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "XChainBridge": {
+///         "LockingChainDoor": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///         "LockingChainIssue": {"currency": "XRP"},
+///         "IssuingChainDoor": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///         "IssuingChainIssue": {"currency": "XRP"}
+///     },
+///     "XChainClaimID": "1",
+///     "OtherChainSource": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "XChainClaimAttestations": [],
+///     "SignatureReward": "1000000",
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.x_chain_claim_id, "1");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainOwnedClaimID {
@@ -2133,6 +2830,28 @@ pub struct XChainOwnedClaimID {
 }
 
 /// `XChainOwnedCreateAccountClaimID` ledger entry.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_core::types::ledger_object::XChainOwnedCreateAccountClaimID;
+///
+/// let entry: XChainOwnedCreateAccountClaimID = serde_json::from_value(json!({
+///     "LedgerEntryType": "XChainOwnedCreateAccountClaimID",
+///     "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "XChainBridge": {
+///         "LockingChainDoor": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///         "LockingChainIssue": {"currency": "XRP"},
+///         "IssuingChainDoor": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///         "IssuingChainIssue": {"currency": "XRP"}
+///     },
+///     "XChainAccountCreateCount": "1",
+///     "XChainCreateAccountAttestations": [],
+///     "Flags": 0, "OwnerNode": "0", "PreviousTxnLgrSeq": 92436010,
+///     "PreviousTxnID": "ED3269BC0709DF99EBEE6B0320532389F655498356575A094ABB995A70431D99"
+/// }))?;
+/// assert_eq!(entry.x_chain_account_create_count, "1");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct XChainOwnedCreateAccountClaimID {
@@ -2169,6 +2888,13 @@ pub struct XChainOwnedCreateAccountClaimID {
 }
 
 /// Every ledger entry type rippled 3.4.1 defines, by `LedgerEntryType`.
+///
+/// ```
+/// use xrpl_core::types::ledger_object::NAMES;
+///
+/// assert_eq!(NAMES.len(), 31);
+/// assert!(NAMES.contains(&"AccountRoot"));
+/// ```
 pub const NAMES: &[&str] = &[
     "AMM",
     "AccountRoot",
