@@ -3,6 +3,10 @@
  "params": {
   "api_version": 2
  },
+ "scrubbed": [
+  "result.info.hostid",
+  "result.info.pubkey_node"
+ ],
  "result": {
   "info": {
    "build_version": "3.4.1",
@@ -11,7 +15,7 @@
     "branch": "HEAD",
     "hash": "d147fccf54a500fce586522f28d6044c37fd8d29"
    },
-   "hostid": "halcyon-server",
+   "hostid": "SCRUBBED",
    "initial_sync_duration_us": "544696405",
    "io_latency_ms": 1,
    "jq_trans_overflow": "58381",
@@ -137,7 +141,7 @@
      ]
     }
    ],
-   "pubkey_node": "n9LV6NfwNuH8WYR4HZTheGFhjGbuJB7VzANuXApH7iryMp4jAh4T",
+   "pubkey_node": "n9_scrubbed_node_public_key",
    "pubkey_validator": "none",
    "server_state": "full",
    "server_state_duration_us": "115098071636",

@@ -45,6 +45,11 @@ fixture records where it came from.
 | `crates/xrpl-client/tests/fixtures/rippled/` | 45 recorded responses: every public `rippled` and Clio method, some in two forms (binary, with options); API version 2 | `rippled` 3.4.1 on mainnet; Clio (`s2.ripple.com`) for Clio-only methods; Testnet for what the live test creates |
 | `crates/xrpl-client/tests/fixtures/streams/` | Messages of every stream kind, and `path_find` updates, API version 2 | `rippled` 3.4.1 on mainnet (WebSocket) |
 
+The recordings keep every field, but not what identifies the server they
+were recorded from: in `server_info` and `server_state`, the host name
+(`hostid`) and node key (`pubkey_node`) are replaced, and the file's
+`"scrubbed"` list names them (the recorder does this itself).
+
 Unit tests that compare against `rippled` carry a comment saying which call
 produced the expected value (for example `// rippled 3.4.1 offline sign of
 the Payment ...`), so any expected value can be re-derived.
