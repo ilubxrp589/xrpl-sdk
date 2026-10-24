@@ -31,7 +31,7 @@ use alloc::{format, string::String};
 /// ```
 pub fn encode(seed: &[u8; 16]) -> Zeroizing<String> {
     let mut out = Zeroizing::new(String::with_capacity(8 * 7));
-    for (n, pair) in (0u32..).zip(seed.chunks_exact(2)) {
+    for (n, pair) in (0u32..).zip(seed.as_chunks::<2>().0) {
         let mut value = pair
             .iter()
             .fold(0u32, |acc, byte| (acc << 8) | u32::from(*byte));
@@ -97,13 +97,11 @@ pub fn decode(text: &str) -> Result<Zeroizing<[u8; 16]>, CoreError> {
     }
     let mut seed = Zeroizing::new([0u8; 16]);
     for ((n, block), out) in (0u32..)
-        .zip(digits.chunks_exact(6))
-        .zip(seed.chunks_exact_mut(2))
+        .zip(digits.as_chunks::<6>().0)
+        .zip(seed.as_chunks_mut::<2>().0)
     {
         let label = n + 1;
-        let &[d0, d1, d2, d3, d4, check] = block else {
-            return Err(invalid(format!("block {label} is not six digits")));
-        };
+        let &[d0, d1, d2, d3, d4, check] = block;
         let mut value = [d0, d1, d2, d3, d4]
             .iter()
             .fold(0u32, |acc, d| acc * 10 + d);
