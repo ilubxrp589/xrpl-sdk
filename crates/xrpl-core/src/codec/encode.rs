@@ -304,7 +304,19 @@ fn out_of_range(field_name: &str, type_name: &str, value: &Value) -> CoreError {
     ))
 }
 
+/// A UInt8; for `TransactionResult`, also a result's name (`tesSUCCESS`)
+/// whose code fits a byte (`tes` and `tec`), as `rippled`'s JSON parser
+/// takes it.
 fn encode_uint8(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
+    if field_name == "TransactionResult" {
+        if let Some(name) = value.as_str().filter(|s| !s.starts_with(|c: char| c.is_ascii_digit())) {
+            return super::definitions::transaction_result_code(name)
+                .ok()
+                .and_then(|code| u8::try_from(code).ok())
+                .map(|code| vec![code])
+                .ok_or_else(|| out_of_range(field_name, "UInt8", value));
+        }
+    }
     unsigned_json(value)
         .and_then(|n| u8::try_from(n).ok())
         .map(|n| vec![n])

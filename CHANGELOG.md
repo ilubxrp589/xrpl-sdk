@@ -8,6 +8,13 @@ may break the API, and says so under "Changed (breaking)").
 ## [Unreleased]
 
 ### Fixed
+- **`TransactionResult` by name, as `rippled` writes it.** Decoding
+  metadata gave the result's number (`0`) where `rippled` writes its name
+  (`"tesSUCCESS"`), so decoded metadata (`LedgerTransaction::meta_json`, a
+  `meta_blob`) did not read as `TransactionMetadata`. The decoder now writes
+  the name, and the encoder takes a name as `rippled` does (a `tes` or
+  `tec` result: one that fits the byte). New: `transaction_result_code` and
+  `transaction_result_name` in `codec::definitions`.
 - **`ManifestEvent` keeps the serialized manifest**: `rippled` sends it with
   every `manifestReceived` message (`manifest`, hex), and the type dropped
   it. It is now checked against a real validator's manifest in the message

@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 ///     "TransactionIndex": 3,
 ///     "AffectedNodes": [{"ModifiedNode": {
 ///         "LedgerEntryType": "AccountRoot",
-///         "LedgerIndex": "13F1A95D7AAB7108D5CE7EEAF504B2894B8C674E6D68499076441C4837282BF8",
+///         "LedgerIndex": "2B6AC232AA4C4BE41BF49D2459FA4A0347E1B543A4C92FCEE0821C0201E2E9A8",
 ///         "FinalFields": {"Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Balance": "990"},
 ///         "PreviousFields": {"Balance": "1000"}
 ///     }}],

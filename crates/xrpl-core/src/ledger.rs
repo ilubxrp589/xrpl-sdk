@@ -344,9 +344,9 @@ impl LedgerTransaction {
         crate::codec::decode_transaction_binary(&self.tx_blob)
     }
 
-    /// The metadata as JSON, decoded from its bytes. Unlike `rippled`'s
-    /// JSON, `TransactionResult` is the result's numeric code (0 for
-    /// `tesSUCCESS`), not its name.
+    /// The metadata as JSON, decoded from its bytes, as `rippled` writes it
+    /// (`TransactionResult` by name). It reads as a
+    /// [`TransactionMetadata`](crate::transaction::TransactionMetadata).
     ///
     /// ```
     /// use xrpl_core::ledger::verify_ledger_response;
@@ -358,8 +358,10 @@ impl LedgerTransaction {
     /// let tx = &verify_ledger_response(answer)?.transactions[0];
     /// let meta = tx.meta_json()?;
     /// assert_eq!(meta["TransactionIndex"], 16);
-    /// assert_eq!(meta["TransactionResult"], 0); // tesSUCCESS
+    /// assert_eq!(meta["TransactionResult"], "tesSUCCESS");
     /// assert_eq!(meta["AffectedNodes"].as_array().map(Vec::len), Some(5));
+    /// let typed: xrpl_core::transaction::TransactionMetadata = serde_json::from_value(meta)?;
+    /// assert!(typed.is_success());
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///

@@ -70,6 +70,19 @@ static LEDGER_ENTRY_TYPES: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
         .collect()
 });
 
+/// Transaction result name → code (`TRANSACTION_RESULTS`): `tesSUCCESS` 0,
+/// the `tec` codes from 100, the others negative.
+static TRANSACTION_RESULTS: LazyLock<HashMap<String, i32>> = LazyLock::new(|| {
+    let defs = parse_definitions();
+    let Some(results) = defs.get("TRANSACTION_RESULTS").and_then(|v| v.as_object()) else {
+        return HashMap::new();
+    };
+    results
+        .iter()
+        .filter_map(|(name, val)| Some((name.clone(), i32::try_from(val.as_i64()?).ok()?)))
+        .collect()
+});
+
 /// Type name → type code mapping.
 static TYPE_CODES: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
     let defs = parse_definitions();
@@ -303,6 +316,48 @@ pub fn permission_value_code(name: &str) -> Result<u32, CoreError> {
     Err(CoreError::CodecError(format!(
         "unknown PermissionValue: {name}"
     )))
+}
+
+/// The code of a transaction result (engine result), as `rippled` 3.4.1
+/// defines it: `tesSUCCESS` is 0, the `tec` codes (failed, in a ledger,
+/// fee charged) run from 100, and the others (never in a ledger) are
+/// negative.
+///
+/// ```
+/// use xrpl_core::codec::definitions::transaction_result_code;
+///
+/// assert_eq!(transaction_result_code("tesSUCCESS")?, 0);
+/// assert_eq!(transaction_result_code("tecPATH_DRY")?, 128);
+/// assert_eq!(transaction_result_code("tefPAST_SEQ")?, -190);
+/// assert!(transaction_result_code("tesNOTHING").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] if `rippled` defines no result named `name`.
+pub fn transaction_result_code(name: &str) -> Result<i32, CoreError> {
+    TRANSACTION_RESULTS
+        .get(name)
+        .copied()
+        .ok_or_else(|| CoreError::CodecError(format!("unknown transaction result: {name}")))
+}
+
+/// The name of a transaction result code (`0` is `tesSUCCESS`), if `rippled`
+/// 3.4.1 defines one.
+///
+/// ```
+/// use xrpl_core::codec::definitions::transaction_result_name;
+///
+/// assert_eq!(transaction_result_name(0), Some("tesSUCCESS"));
+/// assert_eq!(transaction_result_name(128), Some("tecPATH_DRY"));
+/// assert_eq!(transaction_result_name(99), None);
+/// ```
+pub fn transaction_result_name(code: i32) -> Option<&'static str> {
+    TRANSACTION_RESULTS
+        .iter()
+        .find(|(_, &c)| c == code)
+        .map(|(name, _)| name.as_str())
 }
 
 #[cfg(test)]

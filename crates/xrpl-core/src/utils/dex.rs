@@ -9,9 +9,10 @@
 use super::decimal::Decimal;
 use crate::CoreError;
 
-/// An offer's quality (TakerPays per TakerGets) when both sides are XRP
-/// amounts in drops, as an approximation; `None` when `taker_gets_drops`
-/// is 0.
+/// A quality (TakerPays per TakerGets) from two amounts given as whole
+/// numbers in the same units (drops, say), as an approximate `f64`; `None`
+/// when `taker_gets_drops` is 0. It is the plain ratio: no offer has XRP on
+/// both sides.
 ///
 /// ```
 /// use xrpl_core::utils::dex::offer_quality_xrp;

@@ -43,6 +43,20 @@ fn the_transactions_rebuild_the_transaction_hash() {
         .is_some());
 }
 
+/// Metadata decoded from a real ledger's bytes is `rippled`'s JSON, so it
+/// reads as `TransactionMetadata` (the result by name, as `rippled` writes it).
+#[test]
+fn decoded_metadata_is_rippleds_json() {
+    let verified = verify_ledger_response(&fixture()["binary"]).unwrap();
+    for tx in &verified.transactions {
+        let meta = tx.meta_json().unwrap();
+        assert!(meta["TransactionResult"].as_str().unwrap().starts_with("te"));
+        let typed: xrpl_core::transaction::TransactionMetadata =
+            serde_json::from_value(meta).unwrap();
+        assert!(!typed.affected_nodes.is_empty());
+    }
+}
+
 #[test]
 fn a_missing_or_changed_transaction_is_caught() {
     let mut answer = fixture()["binary"].clone();
