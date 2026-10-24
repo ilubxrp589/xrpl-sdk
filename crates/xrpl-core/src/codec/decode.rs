@@ -999,20 +999,31 @@ mod tests {
     #[test]
     fn transaction_results_by_name_as_rippled_writes_them() {
         use crate::codec::encode_transaction_json;
-        let meta = |result: Value| {
-            json!({"TransactionIndex": 3, "TransactionResult": result, "AffectedNodes": []})
-        };
-        for (name, byte) in [("tesSUCCESS", 0u8), ("tecPATH_DRY", 128), ("tecUNFUNDED_OFFER", 103)] {
+        let meta = |result: Value| json!({"TransactionIndex": 3, "TransactionResult": result, "AffectedNodes": []});
+        for (name, byte) in [
+            ("tesSUCCESS", 0u8),
+            ("tecPATH_DRY", 128),
+            ("tecUNFUNDED_OFFER", 103),
+        ] {
             let bytes = encode_transaction_json(&meta(json!(name))).unwrap();
             assert_eq!(bytes, encode_transaction_json(&meta(json!(byte))).unwrap());
-            assert_eq!(decode_transaction_binary(&bytes).unwrap()["TransactionResult"], name);
+            assert_eq!(
+                decode_transaction_binary(&bytes).unwrap()["TransactionResult"],
+                name
+            );
         }
         for refused in ["terRETRY", "tefPAST_SEQ", "tesNOTHING"] {
-            assert!(encode_transaction_json(&meta(json!(refused))).is_err(), "{refused}");
+            assert!(
+                encode_transaction_json(&meta(json!(refused))).is_err(),
+                "{refused}"
+            );
         }
         // A byte rippled names no result for stays a number.
         let bytes = encode_transaction_json(&meta(json!(99))).unwrap();
-        assert_eq!(decode_transaction_binary(&bytes).unwrap()["TransactionResult"], 99);
+        assert_eq!(
+            decode_transaction_binary(&bytes).unwrap()["TransactionResult"],
+            99
+        );
     }
 
     #[test]

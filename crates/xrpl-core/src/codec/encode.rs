@@ -309,7 +309,10 @@ fn out_of_range(field_name: &str, type_name: &str, value: &Value) -> CoreError {
 /// takes it.
 fn encode_uint8(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
     if field_name == "TransactionResult" {
-        if let Some(name) = value.as_str().filter(|s| !s.starts_with(|c: char| c.is_ascii_digit())) {
+        if let Some(name) = value
+            .as_str()
+            .filter(|s| !s.starts_with(|c: char| c.is_ascii_digit()))
+        {
             return super::definitions::transaction_result_code(name)
                 .ok()
                 .and_then(|code| u8::try_from(code).ok())

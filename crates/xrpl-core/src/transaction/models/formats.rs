@@ -1380,6 +1380,9 @@ impl Batch {
 impl TxModel for Batch {
     const TRANSACTION_TYPE: &'static str = "Batch";
     type Flags = BatchFlags;
+    fn validate(&self) -> Result<(), CoreError> {
+        super::validate::batch(self)
+    }
     fn common(&self) -> &Common {
         &self.common
     }

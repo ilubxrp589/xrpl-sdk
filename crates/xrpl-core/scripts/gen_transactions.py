@@ -102,7 +102,7 @@ VALIDATED = {
     "AccountSet": "account_set", "AMMCreate": "amm_create", "AMMDeposit": "amm_deposit",
     "AMMWithdraw": "amm_withdraw", "AMMVote": "amm_vote", "AMMBid": "amm_bid",
     "Clawback": "clawback", "DelegateSet": "delegate_set", "SignerListSet": "signer_list_set",
-    "TrustSet": "trust_set", "NFTokenAcceptOffer": "nf_token_accept_offer",
+    "TrustSet": "trust_set", "NFTokenAcceptOffer": "nf_token_accept_offer", "Batch": "batch",
 }
 
 

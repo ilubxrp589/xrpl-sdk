@@ -50,7 +50,10 @@ fn decoded_metadata_is_rippleds_json() {
     let verified = verify_ledger_response(&fixture()["binary"]).unwrap();
     for tx in &verified.transactions {
         let meta = tx.meta_json().unwrap();
-        assert!(meta["TransactionResult"].as_str().unwrap().starts_with("te"));
+        assert!(meta["TransactionResult"]
+            .as_str()
+            .unwrap()
+            .starts_with("te"));
         let typed: xrpl_core::transaction::TransactionMetadata =
             serde_json::from_value(meta).unwrap();
         assert!(!typed.affected_nodes.is_empty());

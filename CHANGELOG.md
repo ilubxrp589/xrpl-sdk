@@ -8,6 +8,15 @@ may break the API, and says so under "Changed (breaking)").
 ## [Unreleased]
 
 ### Fixed
+- **A `Batch` is checked before it is signed.** `Batch::validate` (run by
+  `Wallet::sign` and `sign_and_submit`) now refuses what `rippled` refuses
+  without looking at the ledger: other than exactly one mode flag, fewer
+  than 2 or more than 8 inner transactions, a Batch inside a Batch, an
+  inner transaction with both a `Sequence` and a `TicketSequence`, and an
+  inner transaction that fails its own checks. (`MIN_INNER_TRANSACTIONS` and
+  `MAX_INNER_TRANSACTIONS` were documented but checked nowhere.) What
+  autofill fills in is not checked, so `sign_and_submit` still autofills a
+  Batch's inner transactions.
 - **`TransactionResult` by name, as `rippled` writes it.** Decoding
   metadata gave the result's number (`0`) where `rippled` writes its name
   (`"tesSUCCESS"`), so decoded metadata (`LedgerTransaction::meta_json`, a
