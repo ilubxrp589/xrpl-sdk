@@ -574,6 +574,18 @@ pub use xrpl_core::transaction::ToTxJson;
 /// faucet; returns once a validated ledger shows the account. Only the
 /// address leaves this machine; keep the seed with [`Wallet::seed`].
 ///
+/// ```no_run
+/// # async fn run() -> Result<(), xrpl_sdk::ClientError> {
+/// use xrpl_sdk::{generate_faucet_wallet, Client, FaucetNetwork, LedgerIndex, XrplHttpClient};
+///
+/// let wallet = generate_faucet_wallet(FaucetNetwork::Testnet).await?;
+/// let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
+/// let info = client.account_info(wallet.classic_address(), LedgerIndex::Validated).await?;
+/// println!("{} holds {}", wallet.classic_address(), info.account_data.balance);
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Errors
 ///
 /// The errors of [`faucet::fund_and_wait`]: [`ClientError::HttpStatus`]

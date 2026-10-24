@@ -6,7 +6,18 @@ use alloc::string::{String, ToString};
 
 /// XRPL currency identifier.
 /// - Standard: 3-character ASCII (e.g., "USD", "EUR", "BTC")
-/// - NonStandard: 20-byte hex (used for NFT/AMM pools)
+/// - NonStandard: any other 20 bytes, written as 40 hex digits: a longer
+///   code (`"RLUSD"`), an AMM's LP token, XRP's code (all zeros)
+///
+/// ```
+/// use xrpl_core::types::Currency;
+///
+/// assert_eq!(Currency::from_code("USD")?, Currency::Standard(*b"USD"));
+/// let rlusd = Currency::from_code("RLUSD")?;
+/// assert!(matches!(rlusd, Currency::NonStandard(_)));
+/// assert_eq!(rlusd.to_string(), "524C555344000000000000000000000000000000");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Currency {
     /// 3-char ISO currency code stored as ASCII bytes.
@@ -27,11 +38,29 @@ pub fn is_iso_char(b: u8) -> bool {
 
 impl Currency {
     /// The special XRP currency (20 zero bytes). Only used in PathStep, never in Amount.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let xrp = Currency::xrp();
+    /// assert!(xrp.is_xrp());
+    /// assert_eq!(xrp.to_bytes(), [0; 20]);
+    /// assert_eq!(xrp.to_string(), "XRP");
+    /// ```
     pub fn xrp() -> Self {
         Currency::NonStandard([0u8; 20])
     }
 
     /// `rippled`'s `noCurrency()` (0x00…01), which it writes as `"1"`.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let none = Currency::no_currency();
+    /// assert_eq!(none.to_string(), "1");
+    /// assert_eq!(Currency::parse("1")?, none);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn no_currency() -> Self {
         let mut bytes = [0u8; 20];
         bytes[19] = 1;
@@ -42,6 +71,16 @@ impl Currency {
     /// (no currency), a three-character ISO code, or 40 hex digits. The
     /// result is canonical: the same currency compares equal however it was
     /// written (`"USD"` and its 40-digit form are one value).
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let usd = Currency::parse("USD")?;
+    /// assert_eq!(Currency::parse("0000000000000000000000005553440000000000")?, usd);
+    /// assert!(Currency::parse("XRP")?.is_xrp());
+    /// assert!(Currency::parse("RLUSD").is_err()); // Currency::from_code takes it
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -65,6 +104,15 @@ impl Currency {
     /// takes, or 4 to 20 ASCII characters (`"RLUSD"`), stored as their bytes
     /// padded with zeros, as the ledger holds such codes.
     ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let rlusd = Currency::from_code("RLUSD")?;
+    /// assert_eq!(rlusd.to_string(), "524C555344000000000000000000000000000000");
+    /// assert_eq!(Currency::from_code("USD")?, Currency::from_ascii("USD")?);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// As [`Currency::parse`], for a code that is not 4 to 20 ASCII characters.
@@ -81,6 +129,16 @@ impl Currency {
 
     /// Create a standard 3-char currency from a string. `"XRP"` is XRP's
     /// currency (20 zero bytes), as `rippled`'s `to_currency` reads it.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let code = Currency::from_ascii("W&B")?; // rippled's ISO set has symbols
+    /// assert_eq!(code.to_bytes()[12..15], *b"W&B");
+    /// assert!(Currency::from_ascii("A B").is_err());
+    /// assert!(Currency::from_ascii("USDT").is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -106,7 +164,18 @@ impl Currency {
         Ok(Currency::Standard(arr))
     }
 
-    /// Create from 20-byte hex string.
+    /// Create from 20-byte hex string. A standard code given as hex is that
+    /// standard code.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let code = Currency::from_hex("0158415500000000C1F76FF6ECB0BAC600000000")?;
+    /// assert_eq!(code.to_string(), "0158415500000000C1F76FF6ECB0BAC600000000");
+    /// let usd = Currency::from_hex("0000000000000000000000005553440000000000")?;
+    /// assert_eq!(usd, Currency::from_ascii("USD")?);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -127,7 +196,17 @@ impl Currency {
         Ok(Self::from_bytes(arr))
     }
 
-    /// Encode to 20-byte wire format.
+    /// Encode to 20-byte wire format: a standard code is bytes 12 to 14,
+    /// with zeros around it.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let bytes = Currency::from_ascii("USD")?.to_bytes();
+    /// assert_eq!(bytes[12..15], *b"USD");
+    /// assert!(bytes[..12].iter().chain(&bytes[15..]).all(|b| *b == 0));
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn to_bytes(&self) -> [u8; 20] {
         match self {
             Currency::Standard(code) => {
@@ -142,6 +221,16 @@ impl Currency {
     }
 
     /// Decode from 20-byte wire format.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// let mut bytes = [0u8; 20];
+    /// bytes[12..15].copy_from_slice(b"USD");
+    /// assert_eq!(Currency::from_bytes(bytes), Currency::from_ascii("USD")?);
+    /// assert!(Currency::from_bytes([0; 20]).is_xrp());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn from_bytes(bytes: [u8; 20]) -> Self {
         // All zeros = XRP currency marker
         if bytes == [0u8; 20] {
@@ -166,6 +255,14 @@ impl Currency {
     }
 
     /// Returns true if this is the XRP currency marker.
+    ///
+    /// ```
+    /// use xrpl_core::types::Currency;
+    ///
+    /// assert!(Currency::xrp().is_xrp());
+    /// assert!(!Currency::from_ascii("USD")?.is_xrp());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_xrp(&self) -> bool {
         matches!(self, Currency::NonStandard(bytes) if *bytes == [0u8; 20])
     }

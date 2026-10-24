@@ -13,6 +13,22 @@ pub use xrpl_core::crypto::MAX_MULTISIGNERS;
 
 /// A signed transaction: what [`Wallet::sign`], [`sign`] and [`sign_async`]
 /// return.
+///
+/// ```
+/// use xrpl_sdk::{hash_signed_tx_blob, verify_transaction, Wallet};
+///
+/// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// let tx = serde_json::json!({
+///     "TransactionType": "Payment",
+///     "Account": wallet.classic_address(),
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Amount": "1000000", "Fee": "12", "Sequence": 1,
+/// });
+/// let signed = wallet.sign(&tx)?;
+/// assert!(verify_transaction(&signed.tx_json)?);
+/// assert_eq!(signed.hash, hash_signed_tx_blob(&signed.tx_blob)?);
+/// # Ok::<(), xrpl_sdk::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct SignedTransaction {
@@ -29,6 +45,17 @@ pub struct SignedTransaction {
 /// High-level wallet for XRPL transactions: a key pair, its address and,
 /// when it was made from one, its seed. `Debug` shows the address and key
 /// type only; the secrets are wiped on drop.
+///
+/// ```
+/// use xrpl_sdk::{KeyType, Wallet};
+///
+/// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// assert_eq!(wallet.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+/// assert_eq!(wallet.key_type(), KeyType::Ed25519);
+/// // `Debug` shows no secret.
+/// assert!(!format!("{wallet:?}").contains("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r"));
+/// # Ok::<(), xrpl_sdk::CoreError>(())
+/// ```
 #[derive(Clone)]
 pub struct Wallet {
     keypair: Keypair,
@@ -42,6 +69,15 @@ impl Wallet {
     ///
     /// A freshly generated random seed always derives a valid keypair, so this
     /// is infallible; use [`Wallet::from_seed`] for seeds from elsewhere.
+    ///
+    /// ```
+    /// use xrpl_sdk::{KeyType, Wallet};
+    ///
+    /// let wallet = Wallet::generate();
+    /// assert_eq!(wallet.key_type(), KeyType::Ed25519);
+    /// assert!(wallet.classic_address().starts_with('r'));
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     #[allow(
         clippy::expect_used,
         reason = "a random 16-byte seed always derives a keypair"
@@ -51,6 +87,17 @@ impl Wallet {
     }
 
     /// Generate a new random wallet with a specific key type.
+    ///
+    /// ```
+    /// use xrpl_sdk::{KeyType, Wallet};
+    ///
+    /// let wallet = Wallet::generate_with_type(KeyType::Secp256k1);
+    /// assert_eq!(wallet.key_type(), KeyType::Secp256k1);
+    /// // Keep the seed to open the same wallet again.
+    /// let backup = wallet.seed().expect("a generated wallet has its seed");
+    /// assert_eq!(Wallet::from_seed(&backup)?.classic_address(), wallet.classic_address());
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     #[allow(
         clippy::expect_used,
         reason = "a random 16-byte seed always derives a keypair"
@@ -64,6 +111,16 @@ impl Wallet {
 
     /// Create a wallet from a base58-encoded seed string.
     ///
+    /// ```
+    /// use xrpl_sdk::{CoreError, KeyType, Wallet};
+    ///
+    /// let wallet = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// assert_eq!(wallet.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// assert_eq!(wallet.key_type(), KeyType::Secp256k1); // the seed says which
+    /// assert!(matches!(Wallet::from_seed("not a seed"), Err(CoreError::InvalidSeed(_))));
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidSeed`] if `seed_str` is not a seed: not base58, a
@@ -73,6 +130,14 @@ impl Wallet {
     }
 
     /// Alias for `from_seed` — XRPL often uses "secret" to mean seed.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_secret("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// assert_eq!(wallet.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -110,6 +175,19 @@ impl Wallet {
     /// [`DerivationPath::xrp_account`] for a later account. A wrong
     /// passphrase or path is not an error: it opens a different, empty
     /// wallet, so check the address.
+    ///
+    /// ```
+    /// use xrpl_sdk::{DerivationPath, Wallet};
+    ///
+    /// let phrase = "assault rare scout seed design extend noble drink talk control guitar quote";
+    /// // Account 0 with no passphrase is what `from_mnemonic` opens.
+    /// let first = Wallet::from_mnemonic_with(phrase, "", &DerivationPath::xrp_account(0)?)?;
+    /// assert_eq!(first.classic_address(), Wallet::from_mnemonic(phrase)?.classic_address());
+    /// // Another account, or a passphrase, is another wallet.
+    /// let second = Wallet::from_mnemonic_with(phrase, "", &DerivationPath::xrp_account(1)?)?;
+    /// assert_ne!(second.classic_address(), first.classic_address());
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -149,6 +227,17 @@ impl Wallet {
     }
 
     /// Open a wallet from secret numbers with the given key type.
+    ///
+    /// ```
+    /// use xrpl_sdk::{KeyType, Wallet};
+    ///
+    /// let numbers = "399150 474506 009147 088773 432160 282843 253738 605430";
+    /// let ed25519 = Wallet::from_secret_numbers_with_type(numbers, KeyType::Ed25519)?;
+    /// assert_eq!(ed25519.key_type(), KeyType::Ed25519);
+    /// // The same numbers with the other key type are another account.
+    /// assert_ne!(ed25519.classic_address(), Wallet::from_secret_numbers(numbers)?.classic_address());
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -190,6 +279,16 @@ impl Wallet {
     }
 
     /// Create a wallet from an existing keypair.
+    ///
+    /// ```
+    /// use xrpl_sdk::{Keypair, Seed, Wallet};
+    ///
+    /// let keypair = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// let wallet = Wallet::from_keypair(keypair);
+    /// assert_eq!(wallet.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+    /// assert!(wallet.seed().is_none()); // a bare key pair has no seed
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn from_keypair(keypair: Keypair) -> Self {
         let account_id = keypair.account_id();
         let address = keypair.classic_address();
@@ -209,21 +308,57 @@ impl Wallet {
     /// The seed (`s…`), to store and restore this wallet with
     /// [`Wallet::from_seed`], in a string wiped on drop. `None` for a wallet
     /// made from a bare keypair.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::generate();
+    /// let backup = wallet.seed().expect("a generated wallet has its seed");
+    /// assert!(backup.starts_with('s'));
+    /// assert_eq!(Wallet::from_seed(&backup)?.classic_address(), wallet.classic_address());
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn seed(&self) -> Option<Zeroizing<String>> {
         self.seed.as_ref().map(Seed::to_base58)
     }
 
     /// The key pair.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// assert_eq!(wallet.keypair().classic_address(), wallet.classic_address());
+    /// assert_eq!(wallet.keypair().public_key(), wallet.public_key());
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn keypair(&self) -> &Keypair {
         &self.keypair
     }
 
     /// The key type.
+    ///
+    /// ```
+    /// use xrpl_sdk::{KeyType, Wallet};
+    ///
+    /// assert_eq!(Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?.key_type(), KeyType::Ed25519);
+    /// assert_eq!(Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?.key_type(), KeyType::Secp256k1);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn key_type(&self) -> KeyType {
         self.keypair.key_type()
     }
 
     /// The 20-byte account ID.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// assert_eq!(wallet.account_id().to_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+    /// assert_eq!(wallet.account_id().as_bytes().len(), 20);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn account_id(&self) -> AccountId {
         self.account_id
     }
@@ -231,6 +366,25 @@ impl Wallet {
     /// Sign a `Batch` as one of its participants (an account with an inner
     /// transaction that is not the batch's own account): the `BatchSigner`
     /// to add with `transaction::batch::add_batch_signers`.
+    ///
+    /// ```
+    /// use xrpl_sdk::{batch, Wallet};
+    ///
+    /// // Bob has an inner transaction in Alice's batch `tx`, so he signs it too.
+    /// let bob = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// # let alice = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// # let (a, b) = (alice.classic_address(), bob.classic_address());
+    /// # let mut tx = serde_json::json!({"TransactionType": "Batch", "Account": a, "Sequence": 10, "Flags": 0x0001_0000,
+    /// #     "Fee": batch::batch_fee(10, 2, 1).to_string(), "RawTransactions": [
+    /// #     {"RawTransaction": batch::inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+    /// #     {"RawTransaction": batch::inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+    /// # ]});
+    /// let approval = bob.sign_batch(&tx)?;
+    /// assert_eq!(approval.account, bob.classic_address());
+    /// batch::add_batch_signers(&mut tx, vec![approval])?;
+    /// assert!(batch::verify_batch_signers(&tx)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -252,6 +406,25 @@ impl Wallet {
     /// wallet holds: the `BatchSigner` to add with
     /// `transaction::batch::add_batch_signers`.
     ///
+    /// ```
+    /// use xrpl_sdk::{batch, Wallet};
+    ///
+    /// // This wallet holds the regular key of rPT1Sjq2…, which has an inner
+    /// // transaction in Alice's batch `tx`.
+    /// let regular_key = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// # let alice = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// # let (a, b) = (alice.classic_address(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// # let mut tx = serde_json::json!({"TransactionType": "Batch", "Account": a, "Sequence": 10, "Flags": 0x0001_0000,
+    /// #     "Fee": batch::batch_fee(10, 2, 1).to_string(), "RawTransactions": [
+    /// #     {"RawTransaction": batch::inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+    /// #     {"RawTransaction": batch::inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+    /// # ]});
+    /// let approval = regular_key.sign_batch_as(&tx, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// batch::add_batch_signers(&mut tx, vec![approval])?;
+    /// assert!(batch::verify_batch_signers(&tx)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// As [`Wallet::sign_batch`], and an address error
@@ -268,6 +441,26 @@ impl Wallet {
     /// Sign a `Batch` for `batch_signer`, an account whose signer list this
     /// wallet is on: one of the `Signers` of its multi-signed `BatchSigner`.
     ///
+    /// ```
+    /// use xrpl_sdk::{batch, Wallet};
+    ///
+    /// // rPT1Sjq2…, with an inner transaction in Alice's batch `tx`, approves
+    /// // through its signer list; this wallet is on the list.
+    /// let member = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// # let alice = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// # let (a, b) = (alice.classic_address(), "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// # let mut tx = serde_json::json!({"TransactionType": "Batch", "Account": a, "Sequence": 10, "Flags": 0x0001_0000,
+    /// #     "Fee": batch::batch_fee(10, 2, 1).to_string(), "RawTransactions": [
+    /// #     {"RawTransaction": batch::inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": a, "Destination": b, "Amount": "5000000", "Sequence": 11}))?},
+    /// #     {"RawTransaction": batch::inner_transaction(&serde_json::json!({"TransactionType": "Payment", "Account": b, "Destination": a, "Amount": "1000000", "Sequence": 3}))?},
+    /// # ]});
+    /// let signature = member.sign_batch_for(&tx, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// let approval = batch::multisigned_batch_signer("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", vec![signature])?;
+    /// batch::add_batch_signers(&mut tx, vec![approval])?;
+    /// assert!(batch::verify_batch_signers(&tx)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// As [`Wallet::sign_batch`], and an address error
@@ -283,6 +476,17 @@ impl Wallet {
 
     /// Sign a payment channel claim for `amount_drops` (the channel's total
     /// paid out, not an increment) with this wallet's key.
+    ///
+    /// ```
+    /// use xrpl_sdk::{verify_payment_channel_claim, Wallet};
+    ///
+    /// let channel = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";
+    /// let source = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// // The destination may now have taken 1 XRP from the channel in all.
+    /// let claim = source.sign_payment_channel_claim(channel, 1_000_000)?;
+    /// assert!(verify_payment_channel_claim(channel, 1_000_000, &claim, &source.public_key_hex())?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -328,16 +532,41 @@ impl Wallet {
     }
 
     /// Get the classic address (starts with 'r').
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// assert_eq!(wallet.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn classic_address(&self) -> &str {
         &self.address
     }
 
     /// The public key as the XRP Ledger writes it (33 bytes).
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// assert_eq!(wallet.public_key().len(), 33);
+    /// assert!(matches!(wallet.public_key()[0], 0x02 | 0x03)); // a compressed secp256k1 key
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn public_key(&self) -> &[u8] {
         self.keypair.public_key()
     }
 
     /// The public key in upper-case hex, as `SigningPubKey` holds it.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// assert_eq!(wallet.public_key_hex(), "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63");
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     pub fn public_key_hex(&self) -> String {
         hex::encode_upper(self.keypair.public_key())
     }
@@ -347,6 +576,23 @@ impl Wallet {
     /// [`collect_signers`]. The transaction is signed with an empty
     /// `SigningPubKey` (a missing one counts as empty; a non-empty one is an
     /// error), as `rippled`'s `sign_for` does.
+    ///
+    /// ```
+    /// use xrpl_sdk::Wallet;
+    ///
+    /// // rHb9CJAW…'s Payment, which this wallet signs as one of its signers.
+    /// let wallet = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// let tx = serde_json::json!({
+    ///     "TransactionType": "Payment",
+    ///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "Amount": "1000000", "Fee": "30", "Sequence": 1,
+    /// });
+    /// let signer = wallet.sign_for_multisigning(&tx)?;
+    /// assert_eq!(signer.account, wallet.classic_address());
+    /// assert_eq!(signer.signing_pub_key, wallet.public_key_hex());
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -378,6 +624,23 @@ impl SigningKey for Wallet {
 /// or a hardware wallet ([`SigningKey`]). Returns the signed JSON, the blob
 /// to submit and the transaction's ID.
 ///
+/// ```
+/// use xrpl_sdk::{sign, verify_transaction, Wallet};
+///
+/// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// let tx = serde_json::json!({
+///     "TransactionType": "Payment",
+///     "Account": wallet.classic_address(),
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Amount": "1000000", "Fee": "12", "Sequence": 1,
+/// });
+/// // The wallet's key pair signs as the wallet does.
+/// let signed = sign(&tx, wallet.keypair())?;
+/// assert_eq!(signed, wallet.sign(&tx)?);
+/// assert!(verify_transaction(&signed.tx_json)?);
+/// # Ok::<(), xrpl_sdk::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// As [`Wallet::sign`], and the key's own errors
@@ -393,6 +656,34 @@ pub fn sign<K: SigningKey + ?Sized>(
 /// signing service). The signature is checked against the key's public key
 /// before it is used, so a key that signs the wrong thing is an error here,
 /// not a refusal from the network.
+///
+/// ```
+/// use xrpl_sdk::{sign_async, CoreError, Wallet};
+///
+/// # async fn run() -> Result<(), CoreError> {
+/// let wallet = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// let tx = serde_json::json!({
+///     "TransactionType": "Payment",
+///     "Account": wallet.classic_address(),
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Amount": "1000000", "Fee": "12", "Sequence": 1,
+/// });
+/// // Any `AsyncSigningKey`: a KMS, a signing service, or (here) a wallet.
+/// let signed = sign_async(&tx, &wallet).await?;
+/// assert_eq!(signed, wallet.sign(&tx)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
 ///
 /// # Errors
 ///
@@ -426,6 +717,22 @@ fn signed(tx_json: serde_json::Value) -> Result<SignedTransaction, CoreError> {
 /// [`MAX_MULTISIGNERS`] may sign.
 /// `SigningPubKey` is set empty; a `TxnSignature` (a single signature) is an
 /// error.
+///
+/// ```
+/// use xrpl_sdk::wallet::collect_signers;
+/// use xrpl_sdk::{verify_transaction, Wallet};
+///
+/// // rHb9CJAW…'s signer list holds both of these.
+/// let alice = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// let bob = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+/// let mut tx = serde_json::json!({"TransactionType": "Payment", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "1000000", "Fee": "36", "Sequence": 1});
+/// let signers = vec![alice.sign_for_multisigning(&tx)?, bob.sign_for_multisigning(&tx)?];
+/// collect_signers(&mut tx, signers)?;
+/// assert_eq!(tx["SigningPubKey"], "");
+/// assert!(verify_transaction(&tx)?);
+/// # Ok::<(), xrpl_sdk::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

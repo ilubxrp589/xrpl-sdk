@@ -17,6 +17,20 @@ use std::time::Duration;
 ///
 /// The wait is the server's `Retry-After` when it gives one, else
 /// `base_delay` doubled on each retry, never more than `max_delay`.
+///
+/// ```
+/// use std::time::Duration;
+/// use xrpl_client::http::{RetryPolicy, XrplHttpClient};
+///
+/// let default = RetryPolicy::default();
+/// assert_eq!((default.max_retries, default.base_delay), (2, Duration::from_secs(1)));
+/// assert_eq!(RetryPolicy::NONE.max_retries, 0);
+/// // Up to five retries, waiting as by default.
+/// let client = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+///     .retry(RetryPolicy { max_retries: 5, ..RetryPolicy::default() })
+///     .build()?;
+/// # Ok::<(), xrpl_client::ClientError>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetryPolicy {
     /// Retries after the first attempt (0: never retry).
@@ -107,6 +121,17 @@ impl std::fmt::Debug for HttpClientBuilder {
 impl HttpClientBuilder {
     /// The longest a request may take, connection included (default 30 s).
     /// Not applied on `wasm32`, where the browser's `fetch` decides.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplHttpClient;
+    ///
+    /// let builder = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .timeout(Duration::from_secs(5));
+    /// assert!(format!("{builder:?}").contains(" timeout: 5s"));
+    /// let client = builder.build()?;
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
@@ -115,6 +140,17 @@ impl HttpClientBuilder {
 
     /// The longest connecting may take (default 10 s). Not applied on
     /// `wasm32`.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplHttpClient;
+    ///
+    /// let builder = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .connect_timeout(Duration::from_secs(3));
+    /// assert!(format!("{builder:?}").contains("connect_timeout: 3s"));
+    /// let client = builder.build()?;
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     #[must_use]
     pub fn connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
@@ -123,6 +159,17 @@ impl HttpClientBuilder {
 
     /// A header sent with every request, for example a provider's API key.
     /// `Debug` shows its name, never its value.
+    ///
+    /// ```
+    /// use xrpl_client::XrplHttpClient;
+    ///
+    /// let builder = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .header("x-api-key", "your-key");
+    /// let shown = format!("{builder:?}");
+    /// assert!(shown.contains("x-api-key") && !shown.contains("your-key"));
+    /// let client = builder.build()?;
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     #[must_use]
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
@@ -130,6 +177,16 @@ impl HttpClientBuilder {
     }
 
     /// The `User-Agent` (default `halcyon-xrpl-client/<version>`).
+    ///
+    /// ```
+    /// use xrpl_client::XrplHttpClient;
+    ///
+    /// let builder = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .user_agent("my-wallet/1.0");
+    /// assert!(format!("{builder:?}").contains("my-wallet/1.0"));
+    /// let client = builder.build()?;
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     #[must_use]
     pub fn user_agent(mut self, user_agent: impl Into<String>) -> Self {
         self.user_agent = user_agent.into();
@@ -138,6 +195,16 @@ impl HttpClientBuilder {
 
     /// The most [`Client::autofill`](crate::Client::autofill) sets as a `Fee` (default
     /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    ///
+    /// ```
+    /// use xrpl_client::{Transport, XrplHttpClient};
+    ///
+    /// let client = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .max_fee_drops(50_000) // 0.05 XRP
+    ///     .build()?;
+    /// assert_eq!(client.max_fee_drops(), 50_000);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     #[must_use]
     pub fn max_fee_drops(mut self, drops: u64) -> Self {
         self.max_fee_drops = drops;
@@ -146,6 +213,17 @@ impl HttpClientBuilder {
 
     /// When a request is sent again (default [`RetryPolicy::default`];
     /// [`RetryPolicy::NONE`] never).
+    ///
+    /// ```
+    /// use xrpl_client::http::{RetryPolicy, XrplHttpClient};
+    ///
+    /// // Never send a request again, even when the server is busy.
+    /// let builder = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .retry(RetryPolicy::NONE);
+    /// assert!(format!("{builder:?}").contains("max_retries: 0"));
+    /// let client = builder.build()?;
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     #[must_use]
     pub fn retry(mut self, retry: RetryPolicy) -> Self {
         self.retry = retry;
@@ -153,6 +231,18 @@ impl HttpClientBuilder {
     }
 
     /// The client.
+    ///
+    /// ```
+    /// use xrpl_client::{ClientError, XrplHttpClient};
+    ///
+    /// let client = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234").build()?;
+    /// // A header HTTP does not allow is refused here, before anything is sent.
+    /// let refused = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .header("bad name", "x")
+    ///     .build();
+    /// assert!(matches!(refused, Err(ClientError::InvalidRequest(_))));
+    /// # Ok::<(), ClientError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -191,6 +281,12 @@ impl HttpClientBuilder {
 /// The largest response body read (128 MiB): a `ledger` with every
 /// transaction expanded fits many times over; a server that sends more is
 /// refused rather than allowed to fill memory.
+///
+/// ```
+/// use xrpl_client::http::MAX_RESPONSE_BYTES;
+///
+/// assert_eq!(MAX_RESPONSE_BYTES, 128 * 1024 * 1024);
+/// ```
 pub const MAX_RESPONSE_BYTES: usize = 128 * 1024 * 1024;
 
 /// A `Retry-After` in seconds (the HTTP-date form is not read).
@@ -287,6 +383,17 @@ pub(crate) async fn read_capped(
 
 /// HTTP JSON-RPC client for XRPL nodes. Cloning is cheap: clones share one
 /// connection pool.
+///
+/// ```
+/// use xrpl_client::{Transport, XrplHttpClient};
+///
+/// let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?.with_max_fee_drops(100_000);
+/// assert_eq!(client.max_fee_drops(), 100_000);
+/// // A clone shares the connection pool, and has the same settings.
+/// let clone = client.clone();
+/// assert_eq!(clone.max_fee_drops(), 100_000);
+/// # Ok::<(), xrpl_client::ClientError>(())
+/// ```
 #[derive(Clone)]
 pub struct XrplHttpClient {
     base_url: String,
@@ -312,6 +419,16 @@ impl XrplHttpClient {
     /// Create a new HTTP client connecting to the given XRPL node URL, with
     /// the default settings (see [`XrplHttpClient::builder`]).
     ///
+    /// ```
+    /// use xrpl_client::client::DEFAULT_MAX_FEE_DROPS;
+    /// use xrpl_client::{Transport, XrplHttpClient};
+    ///
+    /// // Nothing is sent until the first request.
+    /// let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// assert_eq!(client.max_fee_drops(), DEFAULT_MAX_FEE_DROPS);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::Transport`] (`Setup`) if the HTTP stack cannot start.
@@ -322,6 +439,18 @@ impl XrplHttpClient {
 
     /// Settings for a client of the server at `url`: timeouts, headers, the
     /// user agent, the fee cap and the [`RetryPolicy`].
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplHttpClient;
+    ///
+    /// let builder = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234");
+    /// // The defaults: 30 s a request, 10 s to connect.
+    /// let shown = format!("{builder:?}");
+    /// assert!(shown.contains(" timeout: 30s") && shown.contains("connect_timeout: 10s"));
+    /// let client = builder.timeout(Duration::from_secs(10)).build()?;
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     pub fn builder(url: &str) -> HttpClientBuilder {
         HttpClientBuilder {
             url: url.to_string(),

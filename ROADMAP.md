@@ -38,7 +38,8 @@ welcome as GitHub issues.
 - [x] Typed WebSocket stream events for every rippled stream, checked against mainnet messages
 - [x] A blocking (non-async) client
 - [x] A command-line tool: `cargo install halcyon-xrpl-cli` (`hxrpl`)
-- [ ] An example of every public item on docs.rs
+- [x] An example of every public item on docs.rs (done before 1.0: every public type, trait,
+      function, method and constant, each compiled and run as a test)
 
 ## 0.5: trust (released 2026-10-22)
 

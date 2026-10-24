@@ -9,6 +9,32 @@ use serde_json::{Map, Value};
 
 /// One balance change: XRP (`currency` "XRP", no issuer) or a token, from the
 /// point of view of the account it is listed under.
+///
+/// ```
+/// use xrpl_core::transaction::TransactionMetadata;
+/// use xrpl_core::utils::balance_changes::{get_balance_changes, Balance};
+///
+/// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+/// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+/// #     "AffectedNodes": [
+/// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+/// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+/// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+/// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+/// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+/// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8}}}
+/// #     ]
+/// # }))?;
+/// // `meta`: a Payment that created an account with 100 XRP, from an
+/// // account that paid 0.012 XRP in fees (xrpl.js's paymentXrpCreateAccount fixture).
+/// let changes = get_balance_changes(&meta)?;
+/// let xrp = |value: &str| Balance { currency: "XRP".into(), issuer: None, value: value.into() };
+/// assert_eq!(changes[0].balances, [xrp("100")]);
+/// assert_eq!(changes[1].balances, [xrp("-100.012")]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Balance {
     /// `"XRP"` or the token's currency code.
@@ -21,6 +47,32 @@ pub struct Balance {
 }
 
 /// Every balance change of one account.
+///
+/// ```
+/// use xrpl_core::transaction::TransactionMetadata;
+/// use xrpl_core::utils::balance_changes::get_balance_changes;
+///
+/// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+/// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+/// #     "AffectedNodes": [
+/// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+/// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+/// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+/// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+/// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+/// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8}}}
+/// #     ]
+/// # }))?;
+/// // `meta`: a Payment that created an account with 100 XRP, from an
+/// // account that paid 0.012 XRP in fees (xrpl.js's paymentXrpCreateAccount fixture).
+/// let changes = get_balance_changes(&meta)?;
+/// assert_eq!(changes[0].account, "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K");
+/// assert_eq!(changes[1].account, "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc");
+/// assert_eq!(changes[1].balances[0].value, "-100.012");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountBalanceChanges {
     /// The account that sends the transaction or owns the entry (`Account`).
@@ -65,6 +117,31 @@ pub fn delivered_amount(meta: &TransactionMetadata) -> Option<Amount> {
 /// XRP held in escrows, payment channels and checks (they are not account
 /// balances). For what a Payment delivered, see [`delivered_amount`], never
 /// the transaction's `Amount` (a partial payment delivers less).
+///
+/// ```
+/// use xrpl_core::transaction::TransactionMetadata;
+/// use xrpl_core::utils::get_balance_changes;
+///
+/// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+/// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+/// #     "AffectedNodes": [
+/// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+/// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+/// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+/// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+/// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+/// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8}}}
+/// #     ]
+/// # }))?;
+/// // `meta`: a Payment that created an account with 100 XRP, from an
+/// // account that paid 0.012 XRP in fees (xrpl.js's paymentXrpCreateAccount fixture).
+/// let changes = get_balance_changes(&meta)?;
+/// let summary: Vec<(&str, &str)> = changes.iter().map(|c| (c.account.as_str(), c.balances[0].value.as_str())).collect();
+/// assert_eq!(summary, [("rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "100"), ("rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "-100.012")]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///

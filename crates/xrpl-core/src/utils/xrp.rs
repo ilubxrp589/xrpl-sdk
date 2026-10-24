@@ -4,9 +4,25 @@ use super::decimal::Decimal;
 use crate::CoreError;
 
 /// Drops in one XRP.
+///
+/// ```
+/// use xrpl_core::utils::xrp::{drops_to_xrp, xrp_to_drops, DROPS_PER_XRP};
+///
+/// assert_eq!(xrp_to_drops("1")?, DROPS_PER_XRP);
+/// assert_eq!(drops_to_xrp(25 * DROPS_PER_XRP), "25");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub const DROPS_PER_XRP: u64 = 1_000_000;
 
 /// All the XRP there will ever be (100 billion), in drops.
+///
+/// ```
+/// use xrpl_core::utils::xrp::{drops_to_xrp, xrp_to_drops, MAX_DROPS};
+///
+/// assert_eq!(drops_to_xrp(MAX_DROPS), "100000000000");
+/// assert_eq!(MAX_DROPS, xrpl_core::types::MAX_XRP_DROPS);
+/// assert!(xrp_to_drops("100000000000.000001").is_err());
+/// ```
 pub const MAX_DROPS: u64 = 100_000_000_000 * DROPS_PER_XRP;
 
 /// Convert an XRP amount written in decimal (`"1.5"`, `"0.000001"`) to drops.

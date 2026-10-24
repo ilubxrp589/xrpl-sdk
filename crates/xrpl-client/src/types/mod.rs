@@ -33,6 +33,16 @@ use serde::Serialize;
 /// `Validated` (the default) is final; `Current` is the open ledger, whose
 /// contents can still change; `Closed` is the latest closed ledger, not yet
 /// necessarily validated.
+///
+/// ```
+/// use xrpl_client::types::LedgerIndex;
+///
+/// assert_eq!(LedgerIndex::default(), LedgerIndex::Validated);
+/// assert_eq!(LedgerIndex::from(107831520u32), LedgerIndex::Index(107831520));
+/// assert_eq!(serde_json::to_value(LedgerIndex::Current)?, "current");
+/// assert_eq!(serde_json::to_value(LedgerIndex::Index(107831520))?, 107831520);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LedgerIndex {
     /// The latest validated ledger: final.
@@ -48,6 +58,20 @@ pub enum LedgerIndex {
 
 impl LedgerIndex {
     /// The JSON `rippled` takes for this ledger (what it serializes as).
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// assert_eq!(LedgerIndex::Closed.to_value(), json!("closed"));
+    /// assert_eq!(LedgerIndex::Index(107831520).to_value(), json!(107831520));
+    /// // The same JSON as serializing it.
+    /// assert_eq!(
+    ///     LedgerIndex::Validated.to_value(),
+    ///     serde_json::to_value(LedgerIndex::Validated)?,
+    /// );
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn to_value(self) -> serde_json::Value {
         match self {
             LedgerIndex::Validated => serde_json::Value::String("validated".into()),

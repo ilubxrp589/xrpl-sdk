@@ -9,6 +9,28 @@ use std::future::Future;
 use xrpl_core::types::LedgerObject;
 
 /// The most pages [`Client::request_all`] follows before it gives up.
+///
+/// ```
+/// # use serde_json::{json, Value};
+/// # use xrpl_client::{Transport, TransportFuture};
+/// # struct Endless;
+/// # impl Transport for Endless {
+/// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+/// #         Box::pin(async { Ok(json!({"lines": [], "marker": "more"})) })
+/// #     }
+/// # }
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::client::MAX_PAGES;
+/// use xrpl_client::requests::AccountLinesRequest;
+/// use xrpl_client::{Client, ClientError};
+///
+/// // `Endless` answers every page with a marker for one more.
+/// let all = Endless.request_all(AccountLinesRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")).await;
+/// assert!(matches!(all, Err(ClientError::PaginationLimitReached(MAX_PAGES))));
+/// # Ok(())
+/// # }
+/// # futures::executor::block_on(run()).unwrap();
+/// ```
 pub const MAX_PAGES: usize = 50;
 
 /// The `rippled` API version every request asks for, unless its parameters
@@ -16,6 +38,29 @@ pub const MAX_PAGES: usize = 50;
 /// transaction in `tx_json` with its `hash` and `meta` beside it (`tx`,
 /// `account_tx`, `ledger`, streams), a Payment's `DeliverMax`, numeric
 /// ledger indexes. Clio answers version 2 too.
+///
+/// ```
+/// # use serde_json::{json, Value};
+/// # use xrpl_client::{Transport, TransportFuture};
+/// # struct Echo;
+/// # impl Transport for Echo {
+/// #     fn send_raw<'a>(&'a self, _: &'a str, params: Value) -> TransportFuture<'a> {
+/// #         Box::pin(async move { Ok(params) })
+/// #     }
+/// # }
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::{Client, API_VERSION};
+///
+/// // `Echo` answers with the parameters it was sent.
+/// let sent = Echo.raw_request("server_info", json!({})).await?;
+/// assert_eq!(sent["api_version"], API_VERSION);
+/// // A request that names a version keeps it.
+/// let sent = Echo.raw_request("server_info", json!({"api_version": 1})).await?;
+/// assert_eq!(sent["api_version"], 1);
+/// # Ok(())
+/// # }
+/// # futures::executor::block_on(run()).unwrap();
+/// ```
 pub const API_VERSION: u32 = 2;
 
 /// `params` with [`API_VERSION`] added, unless it names a version (or is not
@@ -31,10 +76,52 @@ pub(crate) fn with_api_version(mut params: Value) -> Value {
 /// The fee cap a client starts with: 2 XRP (xrpl.js's default `maxFeeXRP`).
 /// A normal fee is 10-20 drops; fees near the cap mean the network is
 /// heavily loaded, or the server is lying.
+///
+/// ```
+/// use xrpl_client::client::DEFAULT_MAX_FEE_DROPS;
+/// use xrpl_client::{Transport, XrplHttpClient};
+///
+/// let client = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
+/// assert_eq!(client.max_fee_drops(), DEFAULT_MAX_FEE_DROPS);
+/// assert_eq!(DEFAULT_MAX_FEE_DROPS, 2_000_000); // 2 XRP
+/// assert_eq!(client.with_max_fee_drops(10_000).max_fee_drops(), 10_000);
+/// # Ok::<(), xrpl_client::ClientError>(())
+/// ```
 pub const DEFAULT_MAX_FEE_DROPS: u64 = 2_000_000;
 
 /// How many ledgers past the current one [`Client::autofill`] gives a
 /// transaction (`LastLedgerSequence`): about a minute and a half.
+///
+/// ```
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// # use serde_json::{json, Value};
+/// # use xrpl_client::{Transport, TransportFuture};
+/// # struct Node;
+/// # impl Transport for Node {
+/// #     fn send_raw<'a>(&'a self, method: &'a str, _: Value) -> TransportFuture<'a> {
+/// #         let answer = match method {
+/// #             "account_info" => json!({"account_data": {"Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+/// #                 "Balance": "100000000", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}),
+/// #             "fee" => json!({"drops": {"base_fee": "10", "median_fee": "5000",
+/// #                 "minimum_fee": "10", "open_ledger_fee": "12"}}),
+/// #             "ledger_current" => json!({"ledger_current_index": 7}),
+/// #             _ => json!({"info": {"network_id": 1}}),
+/// #         };
+/// #         Box::pin(async move { Ok(answer) })
+/// #     }
+/// # }
+/// # let client = Node;
+/// use xrpl_client::client::LAST_LEDGER_OFFSET;
+/// use xrpl_client::Client;
+///
+/// // `client` answers as a server whose open ledger is 7.
+/// let mut tx = json!({"TransactionType": "AccountSet", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD"});
+/// client.autofill(&mut tx).await?;
+/// assert_eq!(tx["LastLedgerSequence"], 7 + LAST_LEDGER_OFFSET);
+/// # Ok(())
+/// # }
+/// # futures::executor::block_on(run()).unwrap();
+/// ```
 pub const LAST_LEDGER_OFFSET: u32 = 20;
 
 /// An X-address says whether it is for a test network (XLS-5d): one for
@@ -294,6 +381,35 @@ pub use xrpl_core::{MaybeSend, MaybeSync};
 
 /// The future [`Transport::send_raw`] returns: boxed, and `Send` on
 /// native targets.
+///
+/// ```
+/// # use serde_json::json;
+/// # struct Canned(Value);
+/// # impl Transport for Canned {
+/// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+/// #         let answer = self.0.clone();
+/// #         Box::pin(async move { Ok(answer) })
+/// #     }
+/// # }
+/// use serde_json::Value;
+/// use xrpl_client::{Client, Transport, TransportFuture};
+///
+/// /// Logs each request, then sends it with another transport.
+/// struct Logged<T>(T);
+/// impl<T: Transport> Transport for Logged<T> {
+///     fn send_raw<'a>(&'a self, method: &'a str, params: Value) -> TransportFuture<'a> {
+///         println!("-> {method}");
+///         self.0.send_raw(method, params)
+///     }
+///     fn max_fee_drops(&self) -> u64 { self.0.max_fee_drops() } // keep its fee cap
+/// }
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// let client = Logged(Canned(json!({"ledger_current_index": 7})));
+/// assert_eq!(client.ledger_current().await?, 7);
+/// # Ok(())
+/// # }
+/// # futures::executor::block_on(run()).unwrap();
+/// ```
 #[cfg(not(target_arch = "wasm32"))]
 pub type TransportFuture<'a> =
     std::pin::Pin<Box<dyn Future<Output = Result<Value, ClientError>> + Send + 'a>>;
@@ -331,10 +447,32 @@ pub type TransportFuture<'a> =
 /// assert_eq!(client.ledger_current().await?, 7);
 /// # Ok(())
 /// # }
+/// # futures::executor::block_on(run()).unwrap();
 /// ```
 pub trait Transport: MaybeSend + MaybeSync {
     /// Send `method` with `params` and return the response's `result`.
     /// A rippled error (`"status": "error"`) is [`ClientError::RpcError`].
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Echo;
+    /// # impl Transport for Echo {
+    /// #     fn send_raw<'a>(&'a self, _: &'a str, params: Value) -> TransportFuture<'a> {
+    /// #         Box::pin(async move { Ok(params) })
+    /// #     }
+    /// # }
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::{Client, Transport};
+    ///
+    /// // `Echo` answers with the parameters it receives.
+    /// assert_eq!(Echo.send_raw("fee", json!({})).await?, json!({}));
+    /// // `Client::raw_request` adds the API version first.
+    /// assert_eq!(Echo.raw_request("fee", json!({})).await?, json!({"api_version": 2}));
+    /// # Ok(())
+    /// # }
+    /// # futures::executor::block_on(run()).unwrap();
+    /// ```
     ///
     /// # Errors
     ///
@@ -351,6 +489,16 @@ pub trait Transport: MaybeSend + MaybeSync {
     /// The most [`Client::autofill`] sets as a `Fee`, in drops:
     /// [`DEFAULT_MAX_FEE_DROPS`] (2 XRP) unless the client was built with
     /// another (`with_max_fee_drops`).
+    ///
+    /// ```
+    /// use xrpl_client::{Transport, XrplHttpClient};
+    ///
+    /// let client = XrplHttpClient::builder("https://s.altnet.rippletest.net:51234")
+    ///     .max_fee_drops(50_000)
+    ///     .build()?;
+    /// assert_eq!(client.max_fee_drops(), 50_000);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     fn max_fee_drops(&self) -> u64 {
         DEFAULT_MAX_FEE_DROPS
     }
@@ -393,10 +541,39 @@ impl<T: Transport + ?Sized> Transport for std::sync::Arc<T> {
 /// built on it) wait with Tokio's timer on native targets, so run them in a
 /// Tokio runtime with its timer enabled (`#[tokio::main]` has it); in
 /// `wasm32` they wait with JavaScript's `setTimeout`.
+///
+/// ```no_run
+/// use xrpl_client::types::LedgerIndex;
+/// use xrpl_client::{Client, ClientError, XrplHttpClient, XrplWsClient};
+///
+/// /// An account's XRP, in drops, over any transport.
+/// async fn drops(client: &impl Client, account: &str) -> Result<Option<u64>, ClientError> {
+///     let info = client.account_info(account, LedgerIndex::Validated).await?;
+///     Ok(info.account_data.balance_drops())
+/// }
+///
+/// # async fn run() -> Result<(), ClientError> {
+/// let http = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?;
+/// let ws = XrplWsClient::connect("wss://s.altnet.rippletest.net:51233").await?;
+/// println!("{:?}", drops(&http, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").await?);
+/// println!("{:?}", drops(&ws, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").await?);
+/// # Ok(())
+/// # }
+/// ```
 pub trait Client: Transport {
     /// Send `method` with `params` (and `api_version`, [`API_VERSION`],
     /// unless `params` names one) and return the response's `result`, as the
     /// transport sends it ([`Transport::send_raw`]).
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use serde_json::json;
+    ///
+    /// let closed = client.raw_request("ledger_closed", json!({})).await?;
+    /// println!("ledger {} closed", closed["ledger_index"]);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -410,6 +587,20 @@ pub trait Client: Transport {
     }
 
     /// Send a typed request and decode its `result`.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::requests::NoRippleCheckRequest;
+    ///
+    /// let check = client
+    ///     .request(&NoRippleCheckRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "user"))
+    ///     .await?;
+    /// for problem in &check.problems {
+    ///     println!("{problem}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -481,6 +672,18 @@ pub trait Client: Transport {
     /// Every page after the first asks for the ledger the first came from,
     /// so the result is one ledger's state, never a mix of two.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::requests::AccountObjectsRequest;
+    ///
+    /// let objects = client
+    ///     .request_all(AccountObjectsRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"))
+    ///     .await?;
+    /// println!("{} ledger entries", objects.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::PaginationLimitReached`] when there are still more
@@ -515,6 +718,16 @@ pub trait Client: Transport {
 
     /// Get account information.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let info = client.account_info("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// println!("{}, next sequence {}", info.account_data.balance, info.account_data.sequence);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
@@ -535,6 +748,14 @@ pub trait Client: Transport {
 
     /// Get current fee information.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// let fee = client.fee().await?;
+    /// println!("open ledger fee: {} drops", fee.drops.open_ledger_fee);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The errors of [`Client::request`].
@@ -543,6 +764,27 @@ pub trait Client: Transport {
     }
 
     /// Get the current (open) ledger index.
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Canned(Value);
+    /// # impl Transport for Canned {
+    /// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = self.0.clone();
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::Client;
+    ///
+    /// // A transport that answers as a server whose open ledger is 7.
+    /// let client = Canned(json!({"ledger_current_index": 7}));
+    /// assert_eq!(client.ledger_current().await?, 7);
+    /// # Ok(())
+    /// # }
+    /// # futures::executor::block_on(run()).unwrap();
+    /// ```
     ///
     /// # Errors
     ///
@@ -557,6 +799,16 @@ pub trait Client: Transport {
     }
 
     /// Get ledger information.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let ledger = client.ledger(LedgerIndex::Validated).await?;
+    /// println!("ledger {:?}: {:?}", ledger.ledger_index, ledger.ledger_hash);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -581,6 +833,15 @@ pub trait Client: Transport {
     /// can still fail. For the outcome, use [`Client::submit_and_wait`];
     /// never sign a replacement on the strength of this result alone.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client, tx_blob: &str) -> Result<(), xrpl_client::ClientError> {
+    /// // `tx_blob`: a signed transaction, in hex.
+    /// let preliminary = client.submit(tx_blob).await?;
+    /// println!("sent {:?}; not final until a validated ledger holds it", preliminary.hash());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::TransactionFailed`], [`ClientError::TransactionRetry`]
@@ -596,6 +857,15 @@ pub trait Client: Transport {
 
     /// Submit a multi-signed transaction (JSON with `Signers` and an empty
     /// `SigningPubKey`); the engine result is sorted as for [`Client::submit`].
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client, tx_json: serde_json::Value) -> Result<(), xrpl_client::ClientError> {
+    /// // `tx_json`: the transaction with its `Signers` and an empty `SigningPubKey`.
+    /// let preliminary = client.submit_multisigned(&tx_json).await?;
+    /// println!("sent {:?}", preliminary.hash());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -616,6 +886,22 @@ pub trait Client: Transport {
     /// submitting it (rippled 2.4+). Leave out `SigningPubKey` and
     /// `TxnSignature`; `Fee`, `Sequence` and the like are filled in.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use serde_json::json;
+    ///
+    /// let payment = json!({
+    ///     "TransactionType": "Payment",
+    ///     "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    ///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "Amount": "1000000",
+    /// });
+    /// let outcome = client.simulate(&payment).await?;
+    /// println!("{} (applied: {})", outcome.engine_result, outcome.applied);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] when the server refuses the transaction
@@ -631,6 +917,14 @@ pub trait Client: Transport {
 
     /// Look up a transaction by hash.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// let tx = client.tx("E17E9EB903392000BC727251524391893D147E280B64F02EE0B5B9CFE7968CDA").await?;
+    /// println!("{:?} in ledger {:?}", tx.transaction_result(), tx.ledger_index);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`txnNotFound`) for a transaction the server
@@ -640,6 +934,18 @@ pub trait Client: Transport {
     }
 
     /// Get trust lines for an account (one page of up to 400).
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let page = client.account_lines("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// for line in &page.lines {
+    ///     println!("{} {} with {}", line.balance, line.currency, line.account);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -655,6 +961,18 @@ pub trait Client: Transport {
 
     /// Get open offers for an account (one page of up to 400).
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let page = client.account_offers("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// for offer in &page.offers {
+    ///     println!("#{}: {:?} for {:?}", offer.seq, offer.taker_gets, offer.taker_pays);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
@@ -668,6 +986,18 @@ pub trait Client: Transport {
     }
 
     /// Get NFTs owned by an account (one page of up to 400).
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let page = client.account_nfts("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// for nft in &page.account_nfts {
+    ///     println!("{} (taxon {})", nft.nf_token_id, nft.nf_token_taxon);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -684,6 +1014,18 @@ pub trait Client: Transport {
     /// The best offers (up to 20) that give `taker_gets` for `taker_pays`:
     /// the same order as [`BookOffersRequest::new`] and `rippled`'s
     /// `book_offers` (what the offer gives, then what it wants).
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_core::types::Asset;
+    ///
+    /// // Offers that give XRP for USD issued by rHb9CJAW….
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// let book = client.book_offers(&Asset::xrp(), &usd).await?;
+    /// println!("{} offers", book.offers.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -706,6 +1048,17 @@ pub trait Client: Transport {
     /// validated ledger: the asks (offers selling `base` for `quote`) and
     /// the bids (offers buying `base` with `quote`), best first, up to
     /// `limit` offers a side. See [`OrderBook`] for prices and the spread.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// let book = client.order_book(&Asset::xrp(), &usd, 10).await?;
+    /// println!("ledger {}: spread {:?}", book.ledger_index, book.spread());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -749,6 +1102,17 @@ pub trait Client: Transport {
     }
 
     /// Get AMM pool information.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// let pool = client.amm_info(&Asset::xrp(), &usd).await?.amm;
+    /// println!("{:?} and {:?}, fee {:?}", pool.amount, pool.amount2, pool.trading_fee);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -800,6 +1164,18 @@ pub trait Client: Transport {
 
     /// Get objects owned by an account (limit defaults to 200).
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// // The account's escrows: the first page, of up to 200.
+    /// let account = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+    /// let page = client.account_objects(account, Some("escrow"), LedgerIndex::Validated, None, None).await?;
+    /// println!("{} escrows; more: {}", page.account_objects.len(), page.marker.is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
@@ -824,6 +1200,16 @@ pub trait Client: Transport {
 
     /// Get currencies an account can send or receive.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let currencies = client.account_currencies("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// println!("receives {:?}, sends {:?}", currencies.receive_currencies, currencies.send_currencies);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
@@ -843,6 +1229,19 @@ pub trait Client: Transport {
     }
 
     /// Get payment channels for an account.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let (source, destination) = ("rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// let page = client.account_channels(source, Some(destination), LedgerIndex::Validated).await?;
+    /// for channel in &page.channels {
+    ///     println!("{}: {} of {} drops paid out", channel.channel_id, channel.balance, channel.amount);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -866,6 +1265,19 @@ pub trait Client: Transport {
 
     /// Get a single ledger entry by its object ID.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    /// use xrpl_core::hashes::keylet;
+    ///
+    /// // An account's AccountRoot entry, by its ID.
+    /// let id = keylet::account("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// let entry = client.ledger_entry(&id.to_string(), LedgerIndex::Validated).await?;
+    /// println!("{:?}", entry.node);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`entryNotFound`) when that ledger holds no
@@ -886,6 +1298,14 @@ pub trait Client: Transport {
 
     /// Get server information.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// let info = client.server_info().await?.info;
+    /// println!("{:?} on network {:?}, ledgers {:?}", info.build_version, info.network_id, info.complete_ledgers);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The errors of [`Client::request`].
@@ -896,6 +1316,19 @@ pub trait Client: Transport {
     }
 
     /// Get gateway balances for an issuing account.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// // What an issuer owes, apart from its own hot wallet's balance.
+    /// let issuer = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+    /// let hot_wallet = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+    /// let balances = client.gateway_balances(issuer, Some(vec![hot_wallet]), LedgerIndex::Validated).await?;
+    /// println!("{:?}", balances.obligations);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -940,6 +1373,39 @@ pub trait Client: Transport {
     /// `autofill_batch`). For a multi-signed transaction use
     /// [`Client::autofill_for_multisigning`], whose fee counts the signers.
     ///
+    /// ```
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Node;
+    /// # impl Transport for Node {
+    /// #     fn send_raw<'a>(&'a self, method: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = match method {
+    /// #             "account_info" => json!({"account_data": {"Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    /// #                 "Balance": "100000000", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}),
+    /// #             "fee" => json!({"drops": {"base_fee": "10", "median_fee": "5000",
+    /// #                 "minimum_fee": "10", "open_ledger_fee": "12"}}),
+    /// #             "ledger_current" => json!({"ledger_current_index": 7}),
+    /// #             _ => json!({"info": {"network_id": 1}}),
+    /// #         };
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// # let client = Node;
+    /// use xrpl_client::Client;
+    ///
+    /// // `client` answers as a server would: the account's next sequence is 5, the
+    /// // open-ledger fee 12 drops, the open ledger 7.
+    /// let mut tx = json!({"TransactionType": "AccountSet", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD"});
+    /// client.autofill(&mut tx).await?;
+    /// assert_eq!(tx["Sequence"], 5);
+    /// assert_eq!(tx["Fee"], "12");
+    /// assert_eq!(tx["LastLedgerSequence"], 27);
+    /// # Ok(())
+    /// # }
+    /// # futures::executor::block_on(run()).unwrap();
+    /// ```
+    ///
     /// # Errors
     ///
     /// - [`ClientError::FeeTooHigh`] for a fee above [`Transport::max_fee_drops`].
@@ -962,6 +1428,37 @@ pub trait Client: Transport {
     /// sign: the fee is the open ledger's × (1 + `signers`), as `rippled`
     /// charges a multi-signed transaction, and `SigningPubKey` is set empty.
     /// With `signers` 0 it is exactly [`Client::autofill`].
+    ///
+    /// ```
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Node;
+    /// # impl Transport for Node {
+    /// #     fn send_raw<'a>(&'a self, method: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = match method {
+    /// #             "account_info" => json!({"account_data": {"Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    /// #                 "Balance": "100000000", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}),
+    /// #             "fee" => json!({"drops": {"base_fee": "10", "median_fee": "5000",
+    /// #                 "minimum_fee": "10", "open_ledger_fee": "12"}}),
+    /// #             "ledger_current" => json!({"ledger_current_index": 7}),
+    /// #             _ => json!({"info": {"network_id": 1}}),
+    /// #         };
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// # let client = Node;
+    /// use xrpl_client::Client;
+    ///
+    /// // `client` answers with an open-ledger fee of 12 drops. Two signers: three times that.
+    /// let mut tx = json!({"TransactionType": "AccountSet", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD"});
+    /// client.autofill_for_multisigning(&mut tx, 2).await?;
+    /// assert_eq!(tx["Fee"], "36");
+    /// assert_eq!(tx["SigningPubKey"], "");
+    /// # Ok(())
+    /// # }
+    /// # futures::executor::block_on(run()).unwrap();
+    /// ```
     ///
     /// # Errors
     ///
@@ -1101,6 +1598,43 @@ pub trait Client: Transport {
     /// its signer list needs one base fee per signer: set the `Fee` yourself
     /// for those.)
     ///
+    /// ```
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Node;
+    /// # impl Transport for Node {
+    /// #     fn send_raw<'a>(&'a self, method: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = match method {
+    /// #             "account_info" => json!({"account_data": {"Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    /// #                 "Balance": "100000000", "Flags": 0, "OwnerCount": 0, "Sequence": 5}}),
+    /// #             "fee" => json!({"drops": {"base_fee": "10", "median_fee": "5000",
+    /// #                 "minimum_fee": "10", "open_ledger_fee": "12"}}),
+    /// #             "ledger_current" => json!({"ledger_current_index": 7}),
+    /// #             _ => json!({"info": {"network_id": 1}}),
+    /// #         };
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// # let client = Node;
+    /// use xrpl_client::Client;
+    ///
+    /// let (alice, bob) = ("rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD", "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// let mut batch = json!({"TransactionType": "Batch", "Account": alice, "Sequence": 10, "Flags": 0x0001_0000,
+    ///     "RawTransactions": [
+    ///         {"RawTransaction": {"TransactionType": "Payment", "Account": alice, "Destination": bob, "Amount": "5000000"}},
+    ///         {"RawTransaction": {"TransactionType": "Payment", "Account": bob, "Destination": alice, "Amount": "1000000"}},
+    ///     ]});
+    /// // `client` answers that Bob's next sequence is 5; the fee is 12 drops a base fee.
+    /// client.autofill_batch(&mut batch, alice, Some(12), 0).await?;
+    /// assert_eq!(batch["RawTransactions"][0]["RawTransaction"]["Sequence"], 11);
+    /// assert_eq!(batch["RawTransactions"][1]["RawTransaction"]["Sequence"], 5);
+    /// assert_eq!(batch["Fee"], "60"); // 2 for the batch, 1 per payment, 1 for Bob's signature
+    /// # Ok(())
+    /// # }
+    /// # futures::executor::block_on(run()).unwrap();
+    /// ```
+    ///
     /// # Errors
     ///
     /// - [`ClientError::UnexpectedResponse`] for a batch with no `Sequence`
@@ -1164,6 +1698,21 @@ pub trait Client: Transport {
     /// transaction the server dropped (`telINSUF_FEE_P`,
     /// `telCAN_NOT_QUEUE…`, or a failed connection) is resubmitted, as the
     /// same blob, until it is found or expires.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client, tx_blob: &str) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::ClientError;
+    ///
+    /// match client.submit_and_wait(tx_blob).await {
+    ///     Ok(result) => println!("validated in ledger {:?}", result.ledger_index),
+    ///     Err(ClientError::TransactionClaimed { engine_result, .. }) => println!("failed, fee charged: {engine_result}"),
+    ///     Err(ClientError::TransactionExpired(_)) => println!("in no ledger, ever: safe to sign again"),
+    ///     Err(ClientError::OutcomeUnknown { hash, .. }) => println!("look {hash} up before sending again"),
+    ///     Err(e) => return Err(e),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -1277,6 +1826,14 @@ pub trait Client: Transport {
     }
 
     /// The index of the latest validated ledger.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// let index = client.validated_ledger_index().await?;
+    /// println!("ledger {index} is validated");
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -1394,6 +1951,16 @@ pub trait Client: Transport {
 
     /// All trust lines of an account, following the marker.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let lines = client.account_lines_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// println!("{} trust lines", lines.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
@@ -1410,6 +1977,16 @@ pub trait Client: Transport {
     }
 
     /// All offers of an account, following the marker.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let offers = client.account_offers_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// println!("{} open offers", offers.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -1428,6 +2005,16 @@ pub trait Client: Transport {
 
     /// All NFTs of an account, following the marker.
     ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let nfts = client.account_nfts_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated).await?;
+    /// println!("{} NFTs", nfts.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`actNotFound`) for an account that does
@@ -1444,6 +2031,18 @@ pub trait Client: Transport {
     }
 
     /// All objects of an account, following the marker.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let checks = client
+    ///     .account_objects_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", Some("check"), LedgerIndex::Validated)
+    ///     .await?;
+    /// println!("{} checks", checks.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -1466,6 +2065,15 @@ pub trait Client: Transport {
     /// [`Client::request_all`] an [`AccountTxRequest`] with
     /// `with_ledger_index_min` / `with_ledger_index_max`; for a long history,
     /// [`Client::pages`] reads it page by page.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// for tx in client.account_tx_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").await? {
+    ///     println!("{:?}: {:?}", tx.hash(), tx.transaction_result());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///

@@ -159,6 +159,19 @@ fn encode_fields(
 /// canonical binary form, every field included: a signed transaction's
 /// `tx_blob`.
 ///
+/// ```
+/// use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
+///
+/// let tx = serde_json::json!({"TransactionType": "Payment",
+///     "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "Amount": "1000000", "Fee": "12", "Sequence": 1, "Flags": 0});
+/// let blob = encode_transaction_json(&tx)?;
+/// // Fields in canonical order: TransactionType (header 0x12) first, Payment = 0.
+/// assert_eq!(blob[..3], [0x12, 0x00, 0x00]);
+/// assert_eq!(decode_transaction_binary(&blob)?, tx);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::UnknownField`] for a name `rippled` 3.4.1 does not define
@@ -177,6 +190,21 @@ pub fn encode_transaction_json(json: &Value) -> Result<Vec<u8>, CoreError> {
 /// the prefix `"STX\0"`, then the transaction's signed fields (every field
 /// but `TxnSignature`, `Signers` and the others that are not signed). A
 /// multi-signer's is [`encode_for_multisigning`].
+///
+/// ```
+/// use xrpl_core::codec::encode_for_signing;
+/// use serde_json::json;
+///
+/// let mut tx = json!({"TransactionType": "AccountSet", "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+///     "Fee": "12", "Sequence": 1,
+///     "SigningPubKey": "030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D435"});
+/// let data = encode_for_signing(&tx)?;
+/// assert!(data.starts_with(b"STX\0"));
+/// // The signature is not part of what it signs.
+/// tx["TxnSignature"] = json!("3045022100AB");
+/// assert_eq!(encode_for_signing(&tx)?, data);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -276,7 +304,22 @@ fn out_of_range(field_name: &str, type_name: &str, value: &Value) -> CoreError {
     ))
 }
 
+/// A UInt8; for `TransactionResult`, also a result's name (`tesSUCCESS`)
+/// whose code fits a byte (`tes` and `tec`), as `rippled`'s JSON parser
+/// takes it.
 fn encode_uint8(value: &Value, field_name: &str) -> Result<Vec<u8>, CoreError> {
+    if field_name == "TransactionResult" {
+        if let Some(name) = value
+            .as_str()
+            .filter(|s| !s.starts_with(|c: char| c.is_ascii_digit()))
+        {
+            return super::definitions::transaction_result_code(name)
+                .ok()
+                .and_then(|code| u8::try_from(code).ok())
+                .map(|code| vec![code])
+                .ok_or_else(|| out_of_range(field_name, "UInt8", value));
+        }
+    }
     unsigned_json(value)
         .and_then(|n| u8::try_from(n).ok())
         .map(|n| vec![n])
@@ -876,6 +919,19 @@ fn encode_raw_hex(
 /// sign it that way: a missing `SigningPubKey` is signed as empty, as
 /// `sign_for` does, and a non-empty one is an error (the signatures would not
 /// match the transaction once its `Signers` are added).
+///
+/// ```
+/// use xrpl_core::codec::encode_for_multisigning;
+/// use xrpl_core::types::AccountId;
+/// use serde_json::json;
+///
+/// let tx = json!({"TransactionType": "AccountSet", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Fee": "24", "Sequence": 1, "SigningPubKey": ""});
+/// let data = encode_for_multisigning(&tx, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+/// assert!(data.starts_with(b"SMT\0"));
+/// assert!(data.ends_with(AccountId::from_address("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?.as_bytes()));
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

@@ -7,6 +7,28 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Fixed
+- **A `Batch` is checked before it is signed.** `Batch::validate` (run by
+  `Wallet::sign` and `sign_and_submit`) now refuses what `rippled` refuses
+  without looking at the ledger: other than exactly one mode flag, fewer
+  than 2 or more than 8 inner transactions, a Batch inside a Batch, an
+  inner transaction with both a `Sequence` and a `TicketSequence`, and an
+  inner transaction that fails its own checks. (`MIN_INNER_TRANSACTIONS` and
+  `MAX_INNER_TRANSACTIONS` were documented but checked nowhere.) What
+  autofill fills in is not checked, so `sign_and_submit` still autofills a
+  Batch's inner transactions.
+- **`TransactionResult` by name, as `rippled` writes it.** Decoding
+  metadata gave the result's number (`0`) where `rippled` writes its name
+  (`"tesSUCCESS"`), so decoded metadata (`LedgerTransaction::meta_json`, a
+  `meta_blob`) did not read as `TransactionMetadata`. The decoder now writes
+  the name, and the encoder takes a name as `rippled` does (a `tes` or
+  `tec` result: one that fits the byte). New: `transaction_result_code` and
+  `transaction_result_name` in `codec::definitions`.
+- **`ManifestEvent` keeps the serialized manifest**: `rippled` sends it with
+  every `manifestReceived` message (`manifest`, hex), and the type dropped
+  it. It is now checked against a real validator's manifest in the message
+  shape `rippled` builds.
+
 ### Changed
 - **Faster encoding of a Payment that carries `DeliverMax`.** Since 0.6 the
   encoder copied the whole transaction to drop or rename `DeliverMax`; it now
@@ -17,6 +39,16 @@ may break the API, and says so under "Changed (breaking)").
   (decoding a classic address: 476 ns → 372 ns, as fast as xrpl-rust's).
 
 ### Docs and project
+- **An example on every public item.** Every public type, trait, function,
+  method and constant of the three library crates (1,024 items) has an
+  example in its own documentation, compiled and run as a test (about 980
+  new; the generated `with_…` setters and flag constants are shown by their
+  type's example). The transaction models, ledger entries and flags types
+  get theirs from the generators. Examples that need a live server compile
+  but do not run; every other one asserts what the item does, with values
+  from `rippled` (recorded answers, `rippled`'s own tests and source) or the
+  repository's test vectors. Writing them found the bugs listed under
+  Fixed, and corrected about ten descriptions that disagreed with `rippled`.
 - **A weekly check of `rippled`'s definitions** (`.github/workflows/definitions.yml`):
   every Monday it compares the definitions on Devnet, Testnet and mainnet
   with the SDK's, and when a network's `rippled` knows a new transaction

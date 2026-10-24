@@ -80,6 +80,25 @@ impl LedgerHeader {
 
     /// The header's bytes, as `rippled` serializes it (and as its `ledger`
     /// method returns it in `ledger_data` with `binary: true`).
+    ///
+    /// ```
+    /// use xrpl_core::ledger::LedgerHeader;
+    ///
+    /// # let header = LedgerHeader::from_json(&serde_json::json!({
+    /// #     "ledger_index": 107852951, "total_coins": "99985585808150845",
+    /// #     "parent_hash": "711923FB0F74D50DB0413DBD0B53CB555C8013F899A4B0D3F0293E005969C17C",
+    /// #     "transaction_hash": "6AEA36387F6EC51B3885D9CA6BD34017A7DC69B2EA1FFC3CD486ABE8D27D019D",
+    /// #     "account_hash": "8A981B51E1282D88C0D0E5EADDA02B4A3683F655F6C5464A5178F8104631BA39",
+    /// #     "parent_close_time": 846088132, "close_time": 846088140,
+    /// #     "close_time_resolution": 10, "close_flags": 0
+    /// # }))?;
+    /// // `header`: mainnet ledger 107852951's (see `LedgerHeader`).
+    /// let bytes = header.to_bytes();
+    /// assert_eq!(bytes.len(), LedgerHeader::SIZE);
+    /// assert_eq!(bytes[..4], 107_852_951u32.to_be_bytes());
+    /// assert_eq!(LedgerHeader::from_bytes(&bytes)?, header);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     #[must_use]
     pub fn to_bytes(&self) -> [u8; Self::SIZE] {
         let mut out = [0u8; Self::SIZE];
@@ -104,6 +123,24 @@ impl LedgerHeader {
     }
 
     /// A header from its 118 bytes (`ledger_data` of a binary `ledger`).
+    ///
+    /// ```
+    /// use xrpl_core::ledger::LedgerHeader;
+    ///
+    /// # let header = LedgerHeader::from_json(&serde_json::json!({
+    /// #     "ledger_index": 107852951, "total_coins": "99985585808150845",
+    /// #     "parent_hash": "711923FB0F74D50DB0413DBD0B53CB555C8013F899A4B0D3F0293E005969C17C",
+    /// #     "transaction_hash": "6AEA36387F6EC51B3885D9CA6BD34017A7DC69B2EA1FFC3CD486ABE8D27D019D",
+    /// #     "account_hash": "8A981B51E1282D88C0D0E5EADDA02B4A3683F655F6C5464A5178F8104631BA39",
+    /// #     "parent_close_time": 846088132, "close_time": 846088140,
+    /// #     "close_time_resolution": 10, "close_flags": 0
+    /// # }))?;
+    /// // `header`: mainnet ledger 107852951's (see `LedgerHeader`).
+    /// let bytes = header.to_bytes();
+    /// assert_eq!(LedgerHeader::from_bytes(&bytes)?, header);
+    /// assert!(LedgerHeader::from_bytes(&bytes[..117]).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -141,6 +178,23 @@ impl LedgerHeader {
     /// A header from `rippled`'s JSON for it (the `ledger` object of its
     /// `ledger` method): `ledger_index` and `total_coins` may be strings (API
     /// version 1) or numbers.
+    ///
+    /// ```
+    /// use xrpl_core::ledger::LedgerHeader;
+    ///
+    /// // Mainnet ledger 107852951, as rippled's `ledger` method (API version 2) returns it.
+    /// let header = LedgerHeader::from_json(&serde_json::json!({
+    ///     "ledger_index": 107852951, "total_coins": "99985585808150845",
+    ///     "parent_hash": "711923FB0F74D50DB0413DBD0B53CB555C8013F899A4B0D3F0293E005969C17C",
+    ///     "transaction_hash": "6AEA36387F6EC51B3885D9CA6BD34017A7DC69B2EA1FFC3CD486ABE8D27D019D",
+    ///     "account_hash": "8A981B51E1282D88C0D0E5EADDA02B4A3683F655F6C5464A5178F8104631BA39",
+    ///     "parent_close_time": 846088132, "close_time": 846088140,
+    ///     "close_time_resolution": 10, "close_flags": 0
+    /// }))?;
+    /// assert_eq!((header.ledger_index, header.close_time), (107_852_951, 846_088_140));
+    /// assert_eq!(header.total_coins, 99_985_585_808_150_845);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -183,6 +237,27 @@ impl LedgerHeader {
     }
 
     /// The ledger's hash: SHA-512Half(`"LWR\0"` ‖ the header's bytes).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::sha512_half;
+    /// use xrpl_core::ledger::LedgerHeader;
+    ///
+    /// # let header = LedgerHeader::from_json(&serde_json::json!({
+    /// #     "ledger_index": 107852951, "total_coins": "99985585808150845",
+    /// #     "parent_hash": "711923FB0F74D50DB0413DBD0B53CB555C8013F899A4B0D3F0293E005969C17C",
+    /// #     "transaction_hash": "6AEA36387F6EC51B3885D9CA6BD34017A7DC69B2EA1FFC3CD486ABE8D27D019D",
+    /// #     "account_hash": "8A981B51E1282D88C0D0E5EADDA02B4A3683F655F6C5464A5178F8104631BA39",
+    /// #     "parent_close_time": 846088132, "close_time": 846088140,
+    /// #     "close_time_resolution": 10, "close_flags": 0
+    /// # }))?;
+    /// // `header`: mainnet ledger 107852951's (see `LedgerHeader`).
+    /// assert_eq!(header.hash().to_string(),
+    ///     "76768FFFD98D55385887C1018EB1074A9F8745512E84AB09250EE76B54BEDC93");
+    /// let mut data = b"LWR\0".to_vec();
+    /// data.extend_from_slice(&header.to_bytes());
+    /// assert_eq!(header.hash().0, sha512_half(&data));
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     #[must_use]
     pub fn hash(&self) -> Hash256 {
         prefixed_hash(b"LWR\0", &[&self.to_bytes()])
@@ -191,6 +266,21 @@ impl LedgerHeader {
 
 /// A ledger whose transactions were checked against its hash: see
 /// [`verify_ledger_response`].
+///
+/// ```
+/// use xrpl_core::ledger::verify_ledger_response;
+///
+/// # let fixture: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/mainnet_ledger_107852951.json"))?;
+/// # let answer = &fixture["binary"];
+/// // `answer`: rippled's `ledger` result for mainnet ledger 107852951, asked
+/// // with `binary`, `transactions` and `expand`.
+/// let ledger = verify_ledger_response(answer)?;
+/// assert_eq!(ledger.hash.to_string(), "76768FFFD98D55385887C1018EB1074A9F8745512E84AB09250EE76B54BEDC93");
+/// assert_eq!(ledger.header.ledger_index, 107_852_951);
+/// assert!(ledger.validated);
+/// assert_eq!(ledger.transactions.len(), 34);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct VerifiedLedger {
@@ -205,6 +295,20 @@ pub struct VerifiedLedger {
 }
 
 /// One transaction of a [`VerifiedLedger`].
+///
+/// ```
+/// use xrpl_core::hashes::transaction_id;
+/// use xrpl_core::ledger::verify_ledger_response;
+///
+/// # let fixture: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/mainnet_ledger_107852951.json"))?;
+/// # let answer = &fixture["binary"];
+/// // `answer`: rippled's `ledger` result for mainnet ledger 107852951, asked
+/// // with `binary`, `transactions` and `expand`.
+/// let tx = &verify_ledger_response(answer)?.transactions[0];
+/// assert_eq!(tx.id.to_string(), "07C8AB7158FA9A7E6DA120FD6591D2C9396215AAC28E4C484E95CF94BEBC3E9C");
+/// assert_eq!(tx.id, transaction_id(&tx.tx_blob));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LedgerTransaction {
@@ -219,6 +323,20 @@ pub struct LedgerTransaction {
 impl LedgerTransaction {
     /// The transaction as `rippled`'s JSON.
     ///
+    /// ```
+    /// use xrpl_core::ledger::verify_ledger_response;
+    ///
+    /// # let fixture: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/mainnet_ledger_107852951.json"))?;
+    /// # let answer = &fixture["binary"];
+    /// // `answer`: rippled's `ledger` result for mainnet ledger 107852951, asked
+    /// // with `binary`, `transactions` and `expand`.
+    /// let tx = &verify_ledger_response(answer)?.transactions[0];
+    /// let json = tx.tx_json()?;
+    /// assert_eq!(json["TransactionType"], "OfferCreate");
+    /// assert_eq!(json["Fee"], "12");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// A codec error if it does not decode.
@@ -226,7 +344,26 @@ impl LedgerTransaction {
         crate::codec::decode_transaction_binary(&self.tx_blob)
     }
 
-    /// The metadata as `rippled`'s JSON.
+    /// The metadata as JSON, decoded from its bytes, as `rippled` writes it
+    /// (`TransactionResult` by name). It reads as a
+    /// [`TransactionMetadata`](crate::transaction::TransactionMetadata).
+    ///
+    /// ```
+    /// use xrpl_core::ledger::verify_ledger_response;
+    ///
+    /// # let fixture: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/mainnet_ledger_107852951.json"))?;
+    /// # let answer = &fixture["binary"];
+    /// // `answer`: rippled's `ledger` result for mainnet ledger 107852951, asked
+    /// // with `binary`, `transactions` and `expand`.
+    /// let tx = &verify_ledger_response(answer)?.transactions[0];
+    /// let meta = tx.meta_json()?;
+    /// assert_eq!(meta["TransactionIndex"], 16);
+    /// assert_eq!(meta["TransactionResult"], "tesSUCCESS");
+    /// assert_eq!(meta["AffectedNodes"].as_array().map(Vec::len), Some(5));
+    /// let typed: xrpl_core::transaction::TransactionMetadata = serde_json::from_value(meta)?;
+    /// assert!(typed.is_success());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -244,6 +381,22 @@ impl LedgerTransaction {
 /// `transaction_hash`. Then the transactions are exactly the
 /// ledger's. Compare [`VerifiedLedger::hash`] with a hash from a source you
 /// trust to know the ledger is the network's.
+///
+/// ```
+/// use xrpl_core::ledger::verify_ledger_response;
+///
+/// # let fixture: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/mainnet_ledger_107852951.json"))?;
+/// # let answer = &fixture["binary"];
+/// // `answer`: rippled's `ledger` result for mainnet ledger 107852951, asked
+/// // with `binary`, `transactions` and `expand`.
+/// let ledger = verify_ledger_response(answer)?;
+/// assert_eq!(ledger.hash.to_string(), "76768FFFD98D55385887C1018EB1074A9F8745512E84AB09250EE76B54BEDC93");
+/// // One transaction left out: the rest do not rebuild the header's transaction_hash.
+/// let mut changed = answer.clone();
+/// changed["ledger"]["transactions"].as_array_mut().unwrap().pop();
+/// assert!(verify_ledger_response(&changed).is_err());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -329,6 +482,22 @@ fn take<const N: usize>(bytes: &[u8]) -> ([u8; N], &[u8]) {
 /// (`tx_blob` and `meta` of a binary `ledger` with expanded transactions).
 /// The order of the transactions does not matter.
 ///
+/// ```
+/// use xrpl_core::ledger::{transaction_tree_hash, verify_ledger_response};
+/// use xrpl_core::types::Hash256;
+///
+/// # let fixture: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/mainnet_ledger_107852951.json"))?;
+/// # let answer = &fixture["binary"];
+/// // `answer`: rippled's `ledger` result for mainnet ledger 107852951, asked
+/// // with `binary`, `transactions` and `expand`.
+/// let ledger = verify_ledger_response(answer)?;
+/// let txs = ledger.transactions.iter().rev().map(|t| (&t.tx_blob[..], &t.meta[..]));
+/// assert_eq!(transaction_tree_hash(txs)?.to_string(),
+///     "6AEA36387F6EC51B3885D9CA6BD34017A7DC69B2EA1FFC3CD486ABE8D27D019D");
+/// assert_eq!(transaction_tree_hash([])?, Hash256::ZERO); // no transactions
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::ValidationError`] when two transactions have the same ID
@@ -358,6 +527,18 @@ pub fn transaction_tree_hash<'a>(
 /// The root of a ledger's state tree (its header's `account_hash`) from
 /// each ledger entry's ID and bytes. A whole ledger's state is large (tens
 /// of millions of entries on mainnet); this is for a state you hold.
+///
+/// ```
+/// use xrpl_core::ledger::state_tree_hash;
+/// use xrpl_core::types::Hash256;
+///
+/// assert_eq!(state_tree_hash([])?, Hash256::ZERO); // an empty state
+/// let a = (Hash256([0x10; 32]), &b"entry a"[..]);
+/// let b = (Hash256([0x1F; 32]), &b"entry b"[..]);
+/// assert_eq!(state_tree_hash([a, b])?, state_tree_hash([b, a])?); // any order
+/// assert!(state_tree_hash([a, a]).is_err()); // an ID twice
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

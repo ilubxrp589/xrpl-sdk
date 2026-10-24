@@ -28,6 +28,16 @@ use alloc::{format, string::String, vec::Vec};
 
 /// The twelve words of `seed`, upper case and separated by single spaces,
 /// as `wallet_propose` writes its `master_key`. The string is wiped on drop.
+///
+/// ```
+/// use xrpl_core::crypto::rfc1751;
+///
+/// // rippled 3.4.1's `wallet_propose` writes this master_key for these bytes.
+/// assert_eq!(
+///     rfc1751::encode(&[0xFF; 16]).as_str(),
+///     "YOKE YOKE YOKE YOKE YOKE YEAR YOKE YOKE YOKE YOKE YOKE YEAR",
+/// );
+/// ```
 pub fn encode(seed: &[u8; 16]) -> Zeroizing<String> {
     let mut key = Zeroizing::new(*seed);
     key.reverse();
@@ -53,6 +63,18 @@ pub fn encode(seed: &[u8; 16]) -> Zeroizing<String> {
 
 /// The 16-byte seed that `words` encode (twelve words, as [`encode`] writes
 /// them; any case and spacing). The bytes are wiped on drop.
+///
+/// ```
+/// use xrpl_core::crypto::rfc1751;
+///
+/// let words = "YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY FILE";
+/// let seed = rfc1751::decode(words)?;
+/// assert_eq!(hex::encode_upper(*seed), "00112233445566778899AABBCCDDEEFF");
+/// assert_eq!(*rfc1751::decode(&words.to_lowercase())?, *seed);
+/// // One word short.
+/// assert!(rfc1751::decode("YOKE DREW DIME DRUM LAIN NIBS DUAL PEA BAIT CHOW JOY").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

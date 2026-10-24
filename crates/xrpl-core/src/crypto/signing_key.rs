@@ -61,10 +61,30 @@ pub trait SigningKey {
     /// The public key as the XRP Ledger writes it (`SigningPubKey`): 33
     /// bytes, `0xED` and the key for Ed25519, the compressed point (`0x02`
     /// or `0x03`, then X) for secp256k1.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed, SigningKey};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// let public_key = SigningKey::public_key(&keys);
+    /// assert_eq!(public_key.len(), 33);
+    /// assert_eq!(public_key[0], 0x03);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     fn public_key(&self) -> &[u8];
 
     /// Sign XRPL signing data: Ed25519 over `data` itself, secp256k1 over
     /// SHA-512Half of `data` (DER).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{verify_signing_data, Keypair, Seed, SigningKey};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// let data = b"XRPL signing data";
+    /// let signature = SigningKey::sign_signing_data(&keys, data)?;
+    /// assert!(verify_signing_data(SigningKey::public_key(&keys), data, &signature)?);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -137,10 +157,43 @@ pub trait SigningKey {
 pub trait AsyncSigningKey {
     /// The public key as the XRP Ledger writes it (see
     /// [`SigningKey::public_key`]). Fetch it once, when the key is set up.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{AsyncSigningKey, Keypair, Seed};
+    ///
+    /// // Every `SigningKey` is an `AsyncSigningKey`.
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// let public_key = AsyncSigningKey::public_key(&keys);
+    /// assert_eq!(public_key, keys.public_key());
+    /// assert_eq!(public_key[0], 0xED);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     fn public_key(&self) -> &[u8];
 
     /// Sign XRPL signing data: Ed25519 over `data` itself, secp256k1 over
     /// SHA-512Half of `data` (DER).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{verify_signing_data, AsyncSigningKey, Keypair, Seed};
+    ///
+    /// # async fn run() -> Result<(), xrpl_core::CoreError> {
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// let data = b"XRPL signing data";
+    /// let signature = AsyncSigningKey::sign_signing_data(&keys, data).await?;
+    /// assert!(verify_signing_data(keys.public_key(), data, &signature)?);
+    /// # Ok(())
+    /// # }
+    /// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+    /// #     use core::task::{Context, Poll, Waker};
+    /// #     let mut f = core::pin::pin!(f);
+    /// #     loop {
+    /// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+    /// #             return v;
+    /// #         }
+    /// #     }
+    /// # }
+    /// # block_on(run()).unwrap();
+    /// ```
     ///
     /// # Errors
     ///

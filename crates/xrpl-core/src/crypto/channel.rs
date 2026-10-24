@@ -25,6 +25,17 @@ fn claim_data(channel_id: &str, amount_drops: u64) -> Result<Vec<u8>, CoreError>
 /// [`Keypair`](super::Keypair) or any [`SigningKey`]). Returns the signature
 /// in hex, for PaymentChannelClaim's `Signature`.
 ///
+/// ```
+/// use xrpl_core::crypto::{sign_payment_channel_claim, verify_payment_channel_claim, Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// let channel = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";
+/// let signature = sign_payment_channel_claim(channel, 1_000_000, &keys)?;
+/// let public_key = hex::encode_upper(keys.public_key());
+/// assert!(verify_payment_channel_claim(channel, 1_000_000, &signature, &public_key)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::InvalidHex`] if `channel_id` is not 32 bytes in hex;
@@ -43,6 +54,29 @@ pub fn sign_payment_channel_claim<K: SigningKey + ?Sized>(
 /// [`AsyncSigningKey`](super::AsyncSigningKey) (a remote key), whose
 /// signature is checked against its public key.
 ///
+/// ```
+/// use xrpl_core::crypto::{sign_payment_channel_claim_async, verify_payment_channel_claim, Keypair, Seed};
+///
+/// # async fn run() -> Result<(), xrpl_core::CoreError> {
+/// let key = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// let channel = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";
+/// let signature = sign_payment_channel_claim_async(channel, 1_000_000, &key).await?;
+/// let public_key = hex::encode_upper(key.public_key());
+/// assert!(verify_payment_channel_claim(channel, 1_000_000, &signature, &public_key)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
+///
 /// # Errors
 ///
 /// As [`sign_payment_channel_claim`], and [`CoreError::SigningKeyFailed`]
@@ -59,6 +93,20 @@ pub async fn sign_payment_channel_claim_async<K: super::AsyncSigningKey + ?Sized
 
 /// Whether `signature` is the channel key's (`public_key`, hex) claim for
 /// `amount_drops`. A well-formed signature that does not match is `Ok(false)`.
+///
+/// This checks the claim `rippled` 3.4.1's `channel_authorize` signed:
+///
+/// ```
+/// use xrpl_core::crypto::verify_payment_channel_claim;
+///
+/// let channel = "5DB01B7FFED6B67E6B0414DED11E051D2EE2B7619CE0EAA6286D67A3A4D5BDB3";
+/// let public_key = "030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D435";
+/// let signature = "3044022015DB5B0764337A0DB560A8841879EA4C21C8A3E58EDB691E8EFF61395619E69A02205C99B5784F95181820FE7771D707260CAA5DF4F0CF21E3F8E9396290718C40B2";
+/// assert!(verify_payment_channel_claim(channel, 1_000_000, signature, public_key)?);
+/// // The same signature does not cover one drop more.
+/// assert!(!verify_payment_channel_claim(channel, 1_000_001, signature, public_key)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

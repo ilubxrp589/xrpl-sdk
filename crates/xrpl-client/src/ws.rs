@@ -72,6 +72,16 @@ impl std::fmt::Debug for WsClientBuilder {
 impl WsClientBuilder {
     /// How long a request waits for its reply (default 30 s), connection
     /// included while the client reconnects.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .request_timeout(Duration::from_secs(10));
+    /// assert!(format!("{builder:?}").contains("request_timeout: 10s"));
+    /// // `builder.connect().await?` opens the connection with this setting.
+    /// ```
     #[must_use]
     pub fn request_timeout(mut self, timeout: Duration) -> Self {
         self.request_timeout = timeout;
@@ -79,6 +89,16 @@ impl WsClientBuilder {
     }
 
     /// How long opening a connection may take (default 15 s).
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .connect_timeout(Duration::from_secs(5));
+    /// assert!(format!("{builder:?}").contains("connect_timeout: 5s"));
+    /// // `builder.connect().await?` opens the connection with this setting.
+    /// ```
     #[must_use]
     pub fn connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
@@ -86,6 +106,16 @@ impl WsClientBuilder {
     }
 
     /// How often the server is pinged (default 15 s).
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .ping_interval(Duration::from_secs(5));
+    /// assert!(format!("{builder:?}").contains("ping_interval: 5s"));
+    /// // `builder.connect().await?` opens the connection with this setting.
+    /// ```
     #[must_use]
     pub fn ping_interval(mut self, interval: Duration) -> Self {
         self.ping_interval = interval;
@@ -95,6 +125,17 @@ impl WsClientBuilder {
     /// How long a connection may say nothing before it is taken as dead (a
     /// laptop that slept, a NAT that dropped it) and replaced (default 45 s;
     /// make it longer than the ping interval).
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// // For a server that may stay quiet for a while.
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .silence_limit(Duration::from_secs(90));
+    /// assert!(format!("{builder:?}").contains("silence_limit: 90s"));
+    /// // `builder.connect().await?` opens the connection with this setting.
+    /// ```
     #[must_use]
     pub fn silence_limit(mut self, limit: Duration) -> Self {
         self.silence_limit = limit;
@@ -103,6 +144,18 @@ impl WsClientBuilder {
 
     /// Events buffered for each subscription before the oldest are dropped
     /// and reported as [`WsEvent::Missed`] (default 1,024; at least 1).
+    ///
+    /// ```
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .event_buffer(4096);
+    /// assert!(format!("{builder:?}").contains("event_buffer: 4096"));
+    /// // Never less than one.
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .event_buffer(0);
+    /// assert!(format!("{builder:?}").contains("event_buffer: 1"));
+    /// ```
     #[must_use]
     pub fn event_buffer(mut self, events: usize) -> Self {
         self.event_buffer = events.max(1);
@@ -111,6 +164,15 @@ impl WsClientBuilder {
 
     /// The most [`Client::autofill`](crate::Client::autofill) sets as a `Fee` (default
     /// [`crate::client::DEFAULT_MAX_FEE_DROPS`], 2 XRP).
+    ///
+    /// ```
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .max_fee_drops(100_000);
+    /// assert!(format!("{builder:?}").contains("max_fee_drops: 100000"));
+    /// // `builder.connect().await?` opens the connection with this setting.
+    /// ```
     #[must_use]
     pub fn max_fee_drops(mut self, drops: u64) -> Self {
         self.max_fee_drops = drops;
@@ -118,6 +180,20 @@ impl WsClientBuilder {
     }
 
     /// Connect, with automatic reconnection.
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use std::time::Duration;
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let client = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233")
+    ///     .connect_timeout(Duration::from_secs(5))
+    ///     .connect()
+    ///     .await?;
+    /// println!("connected: {}", client.is_connected());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -399,6 +475,24 @@ async fn resubscribe(shared: Arc<Shared>) {
 /// Events between the two were not seen; catch up with `account_tx` or
 /// `ledger` if they matter. A connection that goes silent is replaced the
 /// same way. Dropping the client closes the connection and stops its task.
+///
+/// ```no_run
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::stream::WsEvent;
+/// use xrpl_client::XrplWsClient;
+///
+/// let client = XrplWsClient::connect("wss://s.altnet.rippletest.net:51233").await?.with_max_fee_drops(100_000);
+/// let mut ledgers = client.subscribe_ledger().await?;
+/// while let Some(event) = ledgers.recv().await {
+///     match event {
+///         WsEvent::Ledger(ledger) => println!("ledger {} closed", ledger.ledger_index),
+///         WsEvent::Disconnected => println!("reconnecting…"),
+///         _ => {}
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 pub struct XrplWsClient {
     shared: Arc<Shared>,
     url: String,
@@ -435,6 +529,17 @@ impl XrplWsClient {
     /// Connect to an XRPL WebSocket endpoint (within 15 s) with automatic
     /// reconnection and the default settings (see [`XrplWsClient::builder`]).
     ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::{Client, XrplWsClient};
+    ///
+    /// let client = XrplWsClient::connect("wss://s.altnet.rippletest.net:51233").await?;
+    /// // Every `Client` method works over the connection.
+    /// println!("open ledger fee: {} drops", client.fee().await?.drops.open_ledger_fee);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::Timeout`] when the connection does not open within
@@ -446,6 +551,15 @@ impl XrplWsClient {
     /// Settings for a client of the server at `url`: request and connect
     /// timeouts, the ping interval, the silence limit, the event buffer and
     /// the fee cap.
+    ///
+    /// ```
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let builder = XrplWsClient::builder("wss://s.altnet.rippletest.net:51233");
+    /// // The defaults: 30 s for a request, a ping every 15 s.
+    /// let settings = format!("{builder:?}");
+    /// assert!(settings.contains("request_timeout: 30s") && settings.contains("ping_interval: 15s"));
+    /// ```
     pub fn builder(url: &str) -> WsClientBuilder {
         WsClientBuilder {
             url: url.to_string(),
@@ -460,6 +574,19 @@ impl XrplWsClient {
 
     /// Close the connection and stop reconnecting (the same as dropping the
     /// client). Requests in flight fail with [`ClientError::Disconnected`].
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// let mut ledgers = client.subscribe_ledger().await?;
+    /// println!("{:?}", ledgers.recv().await);
+    /// client.close();
+    /// // The subscription ends once it has handed over what had already arrived.
+    /// while let Some(event) = ledgers.recv().await {
+    ///     println!("{event:?}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn close(self) {}
 
     fn subscription(
@@ -494,6 +621,22 @@ impl XrplWsClient {
     /// the connection carries (unfiltered: other subscriptions' too). The
     /// subscription is restored after a reconnect.
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use serde_json::json;
+    ///
+    /// // Ledger closes and one account's transactions, on one receiver.
+    /// let (reply, mut events) = client
+    ///     .subscribe(json!({"streams": ["ledger"], "accounts": ["rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"]}))
+    ///     .await?;
+    /// println!("validated ledger {}", reply["ledger_index"]);
+    /// while let Some(event) = events.recv().await {
+    ///     println!("{event:?}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] when the server refuses the subscription;
@@ -506,6 +649,17 @@ impl XrplWsClient {
     }
 
     /// Undo a [`XrplWsClient::subscribe`] with the same parameters.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use serde_json::json;
+    ///
+    /// let params = json!({"streams": ["server"]});
+    /// let (_reply, _events) = client.subscribe(params.clone()).await?;
+    /// client.unsubscribe(params).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -534,6 +688,16 @@ impl XrplWsClient {
 
     /// Subscribe to ledger closes ([`WsEvent::Ledger`] only).
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// let mut ledgers = client.subscribe_ledger().await?;
+    /// while let Some(event) = ledgers.recv().await {
+    ///     println!("{event:?}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The same as [`XrplWsClient::subscribe`].
@@ -545,6 +709,20 @@ impl XrplWsClient {
     /// Subscribe to validations from every validator the server hears
     /// ([`WsEvent::Validation`] only).
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut validations = client.subscribe_validations().await?;
+    /// while let Some(event) = validations.recv().await {
+    ///     if let WsEvent::Validation(v) = event {
+    ///         println!("{} validated {:?}", v.validation_public_key, v.ledger_index);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The same as [`XrplWsClient::subscribe`].
@@ -555,6 +733,20 @@ impl XrplWsClient {
 
     /// Subscribe to the server's load and fee changes ([`WsEvent::Server`] only).
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut status = client.subscribe_server().await?;
+    /// while let Some(event) = status.recv().await {
+    ///     if let WsEvent::Server(s) = event {
+    ///         println!("{}: load factor {}/{}", s.server_status, s.load_factor, s.load_base);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The same as [`XrplWsClient::subscribe`].
@@ -564,6 +756,20 @@ impl XrplWsClient {
     }
 
     /// Subscribe to consensus phase changes ([`WsEvent::Consensus`] only).
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut phases = client.subscribe_consensus().await?;
+    /// while let Some(event) = phases.recv().await {
+    ///     if let WsEvent::Consensus(c) = event {
+    ///         println!("consensus: {}", c.consensus);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -576,6 +782,20 @@ impl XrplWsClient {
     /// Subscribe to each validated ledger's order-book trading
     /// ([`WsEvent::BookChanges`] only).
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut trading = client.subscribe_book_changes().await?;
+    /// while let Some(event) = trading.recv().await {
+    ///     if let WsEvent::BookChanges(b) = event {
+    ///         println!("ledger {}: {} books traded", b.ledger_index, b.changes.len());
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The same as [`XrplWsClient::subscribe`].
@@ -585,6 +805,20 @@ impl XrplWsClient {
     }
 
     /// Subscribe to validator manifests ([`WsEvent::Manifest`] only).
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut manifests = client.subscribe_manifests().await?;
+    /// while let Some(event) = manifests.recv().await {
+    ///     if let WsEvent::Manifest(m) = event {
+    ///         println!("{} now signs with {}", m.master_key, m.signing_key);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -599,6 +833,21 @@ impl XrplWsClient {
     /// subscription's). `taker_gets` / `taker_pays` are `{"currency": "XRP"}`
     /// or `{"currency", "issuer"}`. With `snapshot`, returns the book's
     /// current offers first (`both` adds the other side).
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_core::types::Asset;
+    ///
+    /// // Offers that give XRP for USD issued by rHb9CJAW…, with the current ones first.
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// let (snapshot, mut trades) = client.subscribe_order_book(&Asset::xrp(), &usd, true, false).await?;
+    /// println!("{} offers now", snapshot.offers.map_or(0, |o| o.len()));
+    /// while let Some(event) = trades.recv().await {
+    ///     println!("{event:?}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -624,6 +873,20 @@ impl XrplWsClient {
     /// Subscribe to every validated transaction on the network
     /// ([`WsEvent::Transaction`] with `validated: true` only).
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut validated = client.subscribe_transactions().await?;
+    /// while let Some(event) = validated.recv().await {
+    ///     if let WsEvent::Transaction(tx) = event {
+    ///         println!("{:?}: {}", tx.hash, tx.engine_result);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// The same as [`XrplWsClient::subscribe`].
@@ -637,6 +900,20 @@ impl XrplWsClient {
 
     /// Subscribe to transactions as they are proposed, before validation
     /// (preliminary results; [`WsEvent::Transaction`], `validated: false`).
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut proposed = client.subscribe_transactions_proposed().await?;
+    /// while let Some(event) = proposed.recv().await {
+    ///     if let WsEvent::Transaction(tx) = event {
+    ///         println!("{:?}: {} (validated: {})", tx.hash, tx.engine_result, tx.validated);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -652,6 +929,20 @@ impl XrplWsClient {
     /// receiver gets only those ([`WsEvent::Transaction`] with
     /// `validated: true` naming the account in the transaction or its
     /// metadata), never another subscription's.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut payments = client.subscribe_account("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").await?;
+    /// while let Some(event) = payments.recv().await {
+    ///     if let WsEvent::Transaction(tx) = event {
+    ///         println!("{:?} delivered {:?}", tx.hash, tx.delivered_amount());
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -669,6 +960,16 @@ impl XrplWsClient {
     }
 
     /// Unsubscribe from ledger closes.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// let mut ledgers = client.subscribe_ledger().await?;
+    /// let first = ledgers.recv().await;
+    /// println!("{first:?}");
+    /// client.unsubscribe_ledger().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -689,10 +990,14 @@ impl XrplWsClient {
     /// use xrpl_client::requests::PathFindRequest;
     /// use xrpl_client::stream::WsEvent;
     ///
-    /// let usd = serde_json::json!({"currency": "USD", "issuer": "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq", "value": "10"});
-    /// let (first, mut updates) = ws
-    ///     .path_find(&PathFindRequest::new("rSender…", "rReceiver…", usd))
-    ///     .await?;
+    /// // Pay 10 USD (issued by rHb9…) to rPT1…, from rU6K…'s funds.
+    /// let usd = serde_json::json!({"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "10"});
+    /// let search = PathFindRequest::new(
+    ///     "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     usd,
+    /// );
+    /// let (first, mut updates) = ws.path_find(&search).await?;
     /// println!("{} ways to pay", first.alternatives.len());
     /// while let Some(WsEvent::PathFind(update)) = updates.recv().await {
     ///     if update.full_reply {
@@ -726,6 +1031,15 @@ impl XrplWsClient {
 
     /// End the connection's [`XrplWsClient::path_find`] search.
     ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient, request: xrpl_client::requests::PathFindRequest) -> Result<(), xrpl_client::ClientError> {
+    /// let (first, _updates) = client.path_find(&request).await?;
+    /// println!("{} ways to pay", first.alternatives.len());
+    /// client.path_find_close().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::RpcError`] (`noPathRequest`) when no search is open,
@@ -741,16 +1055,48 @@ impl XrplWsClient {
     }
 
     /// Every event the connection carries, from now on.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// // Everything the connection carries: every stream's events, and its own.
+    /// let mut all = client.events();
+    /// while let Some(event) = all.recv().await {
+    ///     println!("{event:?}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn events(&self) -> Subscription {
         self.subscription(|_| true)
     }
 
     /// Returns true if the WebSocket is currently connected.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::Client;
+    ///
+    /// if client.is_connected() {
+    ///     println!("validated ledger {}", client.validated_ledger_index().await?);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn is_connected(&self) -> bool {
         self.shared.connected.load(Ordering::Relaxed)
     }
 
     /// Get the URL this client is connected to.
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::XrplWsClient;
+    ///
+    /// let client = XrplWsClient::connect("wss://s.altnet.rippletest.net:51233").await?;
+    /// assert_eq!(client.url(), "wss://s.altnet.rippletest.net:51233");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn url(&self) -> &str {
         &self.url
     }
@@ -762,6 +1108,22 @@ impl XrplWsClient {
 /// [`WsEvent::ResubscribeFailed`]. A receiver that falls more than 1,024
 /// events behind gets [`WsEvent::Missed`] with the count, instead of the
 /// stream ending.
+///
+/// ```no_run
+/// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::stream::WsEvent;
+///
+/// let mut ledgers = client.subscribe_ledger().await?;
+/// while let Some(event) = ledgers.recv().await {
+///     match event {
+///         WsEvent::Ledger(ledger) => println!("ledger {}", ledger.ledger_index),
+///         WsEvent::Missed(n) => println!("fell behind: {n} events dropped"),
+///         _ => {} // the connection's own events
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 pub struct Subscription {
     rx: broadcast::Receiver<WsEvent>,
     filter: Box<dyn Fn(&WsEvent) -> bool + Send + Sync>,
@@ -787,6 +1149,18 @@ impl Subscription {
     }
 
     /// The next event; `None` once the client is dropped.
+    ///
+    /// ```no_run
+    /// # async fn run(client: xrpl_client::XrplWsClient) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::stream::WsEvent;
+    ///
+    /// let mut ledgers = client.subscribe_ledger().await?;
+    /// if let Some(WsEvent::Ledger(ledger)) = ledgers.recv().await {
+    ///     println!("ledger {} closed with {:?} transactions", ledger.ledger_index, ledger.txn_count);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn recv(&mut self) -> Option<WsEvent> {
         loop {
             match self.rx.recv().await {

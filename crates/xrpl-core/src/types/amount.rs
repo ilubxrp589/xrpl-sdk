@@ -6,6 +6,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use alloc::string::{String, ToString};
 
 /// Maximum XRP in drops (100 billion XRP = 10^17 drops).
+///
+/// ```
+/// use xrpl_core::types::{Amount, MAX_XRP_DROPS};
+///
+/// assert_eq!(MAX_XRP_DROPS, 100_000_000_000 * 1_000_000);
+/// assert!(Amount::xrp(MAX_XRP_DROPS).is_ok());
+/// assert!(Amount::xrp(MAX_XRP_DROPS + 1).is_err());
+/// ```
 pub const MAX_XRP_DROPS: u64 = 100_000_000_000_000_000;
 
 /// IOU mantissa minimum (normalized).
@@ -19,6 +27,16 @@ pub const IOU_EXPONENT_MAX: i8 = 80;
 
 /// Custom floating-point representation for IOU amounts.
 /// Mantissa is normalized to [10^15, 10^16).
+///
+/// ```
+/// use xrpl_core::types::IouAmount;
+///
+/// let value = IouAmount::from_decimal("1.5")?;
+/// assert_eq!((value.mantissa, value.exponent), (1_500_000_000_000_000, -15));
+/// assert!(!value.is_negative);
+/// assert_eq!(value.to_string(), "1.5");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IouAmount {
     /// The significant digits.
@@ -31,6 +49,14 @@ pub struct IouAmount {
 
 impl IouAmount {
     /// Create a zero IOU amount.
+    ///
+    /// ```
+    /// use xrpl_core::types::IouAmount;
+    ///
+    /// let zero = IouAmount::zero();
+    /// assert!(zero.is_zero());
+    /// assert_eq!(zero.to_decimal(), "0");
+    /// ```
     pub fn zero() -> Self {
         Self {
             mantissa: 0,
@@ -40,12 +66,32 @@ impl IouAmount {
     }
 
     /// Returns true if this is zero.
+    ///
+    /// ```
+    /// use xrpl_core::types::IouAmount;
+    ///
+    /// assert!(IouAmount::from_decimal("0.0")?.is_zero());
+    /// assert!(IouAmount::from_decimal("1e-96")?.is_zero()); // below the smallest token amount
+    /// assert!(!IouAmount::from_decimal("0.001")?.is_zero());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_zero(&self) -> bool {
         self.mantissa == 0
     }
 
     /// Create and normalize an IOU amount from mantissa and exponent, as
     /// `rippled` does (see [`IouAmount::from_decimal`] for the rules).
+    ///
+    /// ```
+    /// use xrpl_core::types::IouAmount;
+    ///
+    /// let value = IouAmount::new(15, -1)?; // 15 × 10^-1
+    /// assert_eq!((value.mantissa, value.exponent), (1_500_000_000_000_000, -15));
+    /// assert_eq!(value.to_decimal(), "1.5");
+    /// assert!(IouAmount::new(-42, 0)?.is_negative);
+    /// assert!(IouAmount::new(1, 96).is_err()); // above 9999999999999999e80
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -115,6 +161,17 @@ impl IouAmount {
     /// (`rippled`'s JSON reader takes at most a `u64` of digits; the SDK
     /// writes binary, so a longer value reaches the ledger as written.)
     ///
+    /// ```
+    /// use xrpl_core::types::IouAmount;
+    ///
+    /// assert_eq!(IouAmount::from_decimal("-1e-3")?.to_decimal(), "-0.001");
+    /// // Seventeen digits: a tie, rounded to the even sixteenth digit.
+    /// let rounded = IouAmount::from_decimal("12345678901234565")?;
+    /// assert_eq!((rounded.mantissa, rounded.exponent), (1_234_567_890_123_456, 1));
+    /// assert!(IouAmount::from_decimal(".5").is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidAmount`](crate::CoreError::InvalidAmount) if `s` is
@@ -145,7 +202,19 @@ impl IouAmount {
         Self::normalize(parts.negative, m, e)
     }
 
-    /// Convert to decimal string representation.
+    /// Convert to decimal string representation, as `rippled` writes a token
+    /// value: plain decimal, unless the (normalized) exponent is neither 0
+    /// nor within -25 to -5, when it is `<mantissa>e<exponent>`.
+    ///
+    /// ```
+    /// use xrpl_core::types::IouAmount;
+    ///
+    /// assert_eq!(IouAmount::from_decimal("123.456")?.to_decimal(), "123.456");
+    /// assert_eq!(IouAmount::from_decimal("-0.001")?.to_decimal(), "-0.001");
+    /// let large = IouAmount::new(1_000_000_000_000_000, 12)?;
+    /// assert_eq!(large.to_decimal(), "1000000000000000e12");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn to_decimal(&self) -> String {
         if self.is_zero() {
             return "0".to_string();
@@ -211,7 +280,20 @@ impl<'de> Deserialize<'de> for IouAmount {
 }
 
 /// XRPL amount — XRP (drops), an IOU (value + currency + issuer), or an MPT
-/// (integer value + MPTokenIssuanceID).
+/// (integer value + MPTokenIssuanceID). It (de)serializes as `rippled`'s
+/// JSON: a string of drops, or an object.
+///
+/// ```
+/// use xrpl_core::types::Amount;
+///
+/// let xrp = Amount::xrp(1_000_000)?;
+/// let usd = Amount::token("1.5", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+/// let mpt = Amount::mpt(100, "0000012FFD9EE5DA93AC614B4DB94D7E0FCE415CA51BED47")?;
+/// assert_eq!(serde_json::to_value(&xrp).unwrap(), "1000000");
+/// assert_eq!(serde_json::to_value(&usd).unwrap()["value"], "1.5");
+/// assert_eq!(serde_json::to_value(&mpt).unwrap()["value"], "100");
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Amount {
     /// XRP amount in drops. 1 XRP = 1,000,000 drops.
@@ -241,6 +323,15 @@ impl Amount {
     ///
     /// [`CoreError::InvalidAmount`](crate::CoreError::InvalidAmount) if `drops`
     /// is above 10^17 (100 billion XRP).
+    ///
+    /// ```
+    /// use xrpl_core::types::{Amount, MAX_XRP_DROPS};
+    ///
+    /// assert_eq!(Amount::xrp(12)?, Amount::Xrp(12));
+    /// assert_eq!(Amount::xrp(1_500_000)?.to_string(), "1.5 XRP");
+    /// assert!(Amount::xrp(MAX_XRP_DROPS + 1).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn xrp(drops: u64) -> Result<Self, crate::CoreError> {
         if drops > MAX_XRP_DROPS {
             return Err(crate::CoreError::InvalidAmount(format!(
@@ -251,6 +342,14 @@ impl Amount {
     }
 
     /// Returns true if this is an XRP amount.
+    ///
+    /// ```
+    /// use xrpl_core::types::Amount;
+    ///
+    /// assert!(Amount::xrp(10)?.is_xrp());
+    /// assert!(!Amount::token("10", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?.is_xrp());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_xrp(&self) -> bool {
         matches!(self, Amount::Xrp(_))
     }
@@ -314,6 +413,18 @@ impl Amount {
     /// An MPT amount: `value` in the issuance's smallest unit (an
     /// `AssetScale` of 2 makes 12345 mean 123.45), and its
     /// MPTokenIssuanceID (48 hex digits).
+    ///
+    /// ```
+    /// use xrpl_core::types::Amount;
+    ///
+    /// let amount = Amount::mpt(12345, "0000012FFD9EE5DA93AC614B4DB94D7E0FCE415CA51BED47")?;
+    /// assert_eq!(
+    ///     serde_json::to_value(&amount).unwrap(),
+    ///     serde_json::json!({"mpt_issuance_id": "0000012FFD9EE5DA93AC614B4DB94D7E0FCE415CA51BED47", "value": "12345"})
+    /// );
+    /// assert!(Amount::mpt(1, "00").is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///

@@ -47,6 +47,22 @@ pub use metadata::{AffectedNode, DeliveredAmount, TransactionMetadata};
 pub trait ToTxJson {
     /// The transaction as `rippled` JSON, `TransactionType` included.
     ///
+    /// ```
+    /// use xrpl_core::transaction::{models, ToTxJson};
+    /// use xrpl_core::types::Amount;
+    ///
+    /// let payment = models::Payment::new(
+    ///     "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     Amount::xrp(1_000_000)?,
+    /// );
+    /// let json = payment.to_tx_json()?;
+    /// assert_eq!(json["TransactionType"], "Payment");
+    /// assert_eq!(json["Destination"], "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// assert_eq!(json["Amount"], "1000000");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// A [`CoreError`](crate::CoreError) when a model fails its checks

@@ -11,7 +11,26 @@ use serde_json::Value;
 
 macro_rules! ledger_object_enum {
     ($($name:ident),*) => {
-        /// A ledger entry, typed by its `LedgerEntryType`.
+        /// A ledger entry, typed by its `LedgerEntryType`. It (de)serializes
+        /// as `rippled`'s JSON for the entry; deserializing is lenient (see
+        /// [`LedgerObject::Unparsed`]), [`LedgerObject::from_value`] is strict.
+        ///
+        /// ```
+        /// use xrpl_core::types::LedgerObject;
+        ///
+        /// // A mainnet Ticket, as `ledger_entry` returns it.
+        /// let json = serde_json::json!({
+        ///     "LedgerEntryType": "Ticket", "Flags": 0, "Account": "rs2a4RFPjW6P7zLJhKUwxBMMhGxNYMEU4M",
+        ///     "OwnerNode": "2", "TicketSequence": 68747193, "PreviousTxnLgrSeq": 70005648,
+        ///     "PreviousTxnID": "5EDB573C2A9BAAE67A65870FFCB77A77C63F28F3EAFB27CE30F6D10CB917084B",
+        ///     "index": "2A000DC511A7ED1F5BC863AFBE6C4A93EDE052BC32318DF066B59C17AE6270F1"
+        /// });
+        /// let entry: LedgerObject = serde_json::from_value(json.clone())?;
+        /// let LedgerObject::Ticket(ticket) = &entry else { panic!("not a Ticket") };
+        /// assert_eq!(ticket.ticket_sequence, 68747193);
+        /// assert_eq!(serde_json::to_value(&entry)?, json);
+        /// # Ok::<(), serde_json::Error>(())
+        /// ```
         #[allow(clippy::upper_case_acronyms, clippy::large_enum_variant)]
         #[derive(Debug, Clone, PartialEq)]
         #[non_exhaustive]
@@ -38,6 +57,22 @@ macro_rules! ledger_object_enum {
 
         impl LedgerObject {
             /// The `LedgerEntryType` name.
+            ///
+            /// ```
+            /// use xrpl_core::types::LedgerObject;
+            ///
+            /// # let json = serde_json::json!({
+            /// #     "LedgerEntryType": "Ticket", "Flags": 0, "Account": "rs2a4RFPjW6P7zLJhKUwxBMMhGxNYMEU4M",
+            /// #     "OwnerNode": "2", "TicketSequence": 68747193, "PreviousTxnLgrSeq": 70005648,
+            /// #     "PreviousTxnID": "5EDB573C2A9BAAE67A65870FFCB77A77C63F28F3EAFB27CE30F6D10CB917084B",
+            /// #     "index": "2A000DC511A7ED1F5BC863AFBE6C4A93EDE052BC32318DF066B59C17AE6270F1"
+            /// # });
+            /// // `json`: a mainnet Ticket entry, as `ledger_entry` returns it.
+            /// assert_eq!(LedgerObject::from_value(json)?.entry_type(), "Ticket");
+            /// let future = serde_json::json!({"LedgerEntryType": "Future"});
+            /// assert_eq!(LedgerObject::from_value(future)?.entry_type(), "Future");
+            /// # Ok::<(), serde_json::Error>(())
+            /// ```
             pub fn entry_type(&self) -> &str {
                 match self {
                     $(LedgerObject::$name(_) => stringify!($name),)*
@@ -53,6 +88,25 @@ macro_rules! ledger_object_enum {
             /// with a field its struct does not have (which would be lost on
             /// the way back), or a field of the wrong shape, is an error; an
             /// unknown type is `Other`.
+            ///
+            /// ```
+            /// use xrpl_core::types::LedgerObject;
+            ///
+            /// # let json = serde_json::json!({
+            /// #     "LedgerEntryType": "Ticket", "Flags": 0, "Account": "rs2a4RFPjW6P7zLJhKUwxBMMhGxNYMEU4M",
+            /// #     "OwnerNode": "2", "TicketSequence": 68747193, "PreviousTxnLgrSeq": 70005648,
+            /// #     "PreviousTxnID": "5EDB573C2A9BAAE67A65870FFCB77A77C63F28F3EAFB27CE30F6D10CB917084B",
+            /// #     "index": "2A000DC511A7ED1F5BC863AFBE6C4A93EDE052BC32318DF066B59C17AE6270F1"
+            /// # });
+            /// // `json`: a mainnet Ticket entry, as `ledger_entry` returns it.
+            /// assert!(matches!(LedgerObject::from_value(json.clone())?, LedgerObject::Ticket(_)));
+            /// let mut changed = json.clone();
+            /// changed["NoSuchField"] = 1.into();
+            /// assert!(LedgerObject::from_value(changed).is_err());
+            /// let future = serde_json::json!({"LedgerEntryType": "Future"});
+            /// assert!(matches!(LedgerObject::from_value(future)?, LedgerObject::Other(_)));
+            /// # Ok::<(), serde_json::Error>(())
+            /// ```
             ///
             /// # Errors
             ///
@@ -78,6 +132,21 @@ macro_rules! ledger_object_enum {
             }
 
             /// Back to rippled's JSON, `LedgerEntryType` included.
+            ///
+            /// ```
+            /// use xrpl_core::types::LedgerObject;
+            ///
+            /// # let json = serde_json::json!({
+            /// #     "LedgerEntryType": "Ticket", "Flags": 0, "Account": "rs2a4RFPjW6P7zLJhKUwxBMMhGxNYMEU4M",
+            /// #     "OwnerNode": "2", "TicketSequence": 68747193, "PreviousTxnLgrSeq": 70005648,
+            /// #     "PreviousTxnID": "5EDB573C2A9BAAE67A65870FFCB77A77C63F28F3EAFB27CE30F6D10CB917084B",
+            /// #     "index": "2A000DC511A7ED1F5BC863AFBE6C4A93EDE052BC32318DF066B59C17AE6270F1"
+            /// # });
+            /// // `json`: a mainnet Ticket entry, as `ledger_entry` returns it.
+            /// let entry = LedgerObject::from_value(json.clone())?;
+            /// assert_eq!(entry.to_value()?, json);
+            /// # Ok::<(), serde_json::Error>(())
+            /// ```
             ///
             /// # Errors
             ///

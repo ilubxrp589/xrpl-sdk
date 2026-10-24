@@ -54,6 +54,18 @@ impl Mnemonic {
     /// Read a phrase: 12, 15, 18, 21 or 24 words from the BIP-39 English
     /// list, in any case, separated by any whitespace.
     ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// let typed = "Abandon abandon abandon abandon abandon abandon\n\
+    ///              abandon abandon abandon abandon abandon ABOUT";
+    /// let mnemonic = Mnemonic::parse(typed)?;
+    /// assert_eq!(mnemonic.entropy(), &[0u8; 16]);
+    /// // Twelve words on the list, but the checksum does not match.
+    /// assert!(Mnemonic::parse(&["abandon"; 12].join(" ")).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidMnemonic`] if the word count is not one of those,
@@ -111,6 +123,19 @@ impl Mnemonic {
     /// The phrase for `entropy`: 16, 20, 24, 28 or 32 bytes give 12, 15, 18,
     /// 21 or 24 words.
     ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// let mnemonic = Mnemonic::from_entropy(&[0; 16])?;
+    /// assert_eq!(
+    ///     mnemonic.phrase(),
+    ///     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    /// );
+    /// assert_eq!(Mnemonic::from_entropy(&[0; 32])?.word_count(), 24);
+    /// assert!(Mnemonic::from_entropy(&[0; 15]).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidMnemonic`] for any other length.
@@ -146,6 +171,17 @@ impl Mnemonic {
     /// operating system's random source. 24 words hold 256 bits; 12 hold 128,
     /// the same as an XRPL seed.
     ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// let mnemonic = Mnemonic::generate(24)?;
+    /// assert_eq!(mnemonic.word_count(), 24);
+    /// assert_eq!(mnemonic.entropy().len(), 32);
+    /// assert_eq!(Mnemonic::parse(mnemonic.phrase())?, mnemonic);
+    /// assert!(Mnemonic::generate(13).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidMnemonic`] for any other word count.
@@ -173,16 +209,45 @@ impl Mnemonic {
     }
 
     /// The phrase in its standard form: lower case, single spaces.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// let mnemonic: Mnemonic = "ABANDON  abandon abandon abandon abandon abandon \
+    ///                           abandon abandon abandon abandon abandon  About".parse()?;
+    /// assert_eq!(
+    ///     mnemonic.phrase(),
+    ///     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    /// );
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn phrase(&self) -> &str {
         &self.phrase
     }
 
     /// The number of words.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// assert_eq!(Mnemonic::from_entropy(&[0; 16])?.word_count(), 12);
+    /// assert_eq!(Mnemonic::from_entropy(&[0; 20])?.word_count(), 15);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn word_count(&self) -> usize {
         self.entropy.len() / 4 * 3
     }
 
     /// The entropy the phrase holds (16 to 32 bytes).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// let mnemonic = Mnemonic::generate(12)?;
+    /// assert_eq!(mnemonic.entropy().len(), 16);
+    /// assert_eq!(Mnemonic::from_entropy(mnemonic.entropy())?, mnemonic);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn entropy(&self) -> &[u8] {
         &self.entropy
     }
@@ -191,6 +256,17 @@ impl Mnemonic {
     /// `"mnemonic"` and `passphrase` (NFKD), 2048 rounds. Pass `""` for no
     /// passphrase. A different passphrase gives a different, equally valid
     /// wallet, so a mistyped one is not an error. The seed is wiped on drop.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::mnemonic::Mnemonic;
+    ///
+    /// // The first BIP-39 reference vector (passphrase "TREZOR").
+    /// let mnemonic = Mnemonic::from_entropy(&[0; 16])?;
+    /// let bip39_seed = mnemonic.to_seed("TREZOR");
+    /// assert_eq!(hex::encode(&bip39_seed[..8]), "c55257c360c07c72");
+    /// assert_ne!(*mnemonic.to_seed(""), *bip39_seed);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn to_seed(&self, passphrase: &str) -> Zeroizing<[u8; 64]> {
         let mut salt = Zeroizing::new(String::from("mnemonic"));
         salt.extend(passphrase.nfkd());

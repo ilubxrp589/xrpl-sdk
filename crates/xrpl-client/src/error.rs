@@ -3,6 +3,22 @@
 
 /// Everything a client call can fail with. New variants may be added in
 /// minor releases (`#[non_exhaustive]`): match with a `_` arm.
+///
+/// ```
+/// use xrpl_client::ClientError;
+///
+/// /// What to tell a user.
+/// fn explain(err: &ClientError) -> String {
+///     match err {
+///         ClientError::RpcError { code, .. } if code == "actNotFound" => "no such account".into(),
+///         ClientError::FeeTooHigh { fee_drops, .. } => format!("the network is busy: {fee_drops} drops"),
+///         other => other.to_string(),
+///     }
+/// }
+/// let err = ClientError::FeeTooHigh { fee_drops: 3_000_000, max_fee_drops: 2_000_000 };
+/// assert_eq!(explain(&err), "the network is busy: 3000000 drops");
+/// assert_eq!(err.to_string(), "the fee 3000000 drops is above the cap of 2000000 drops");
+/// ```
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ClientError {
@@ -161,6 +177,14 @@ impl From<serde_json::Error> for ClientError {
 
 /// What part of an exchange with the server failed: see
 /// [`ClientError::Transport`].
+///
+/// ```
+/// use xrpl_client::{ClientError, TransportErrorKind};
+///
+/// let err = ClientError::Transport { kind: TransportErrorKind::Connect, message: "connection refused".into() };
+/// assert_eq!(err.to_string(), "could not connect: connection refused");
+/// assert!(matches!(err, ClientError::Transport { kind: TransportErrorKind::Connect, .. }));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum TransportErrorKind {

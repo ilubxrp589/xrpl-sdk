@@ -10,7 +10,6 @@ use subtle::ConstantTimeEq;
 #[cfg(not(feature = "std"))]
 use alloc::{
     string::{String, ToString},
-    vec,
     vec::Vec,
 };
 
@@ -138,6 +137,15 @@ fn base58_decode(s: &str) -> Result<Vec<u8>, CoreError> {
 
 /// Encode a 20-byte account ID to a classic address with base58check.
 /// Prefix: `0x00`, checksum appended.
+///
+/// ```
+/// use xrpl_core::address::encode_account_id;
+///
+/// let mut account_id = [0u8; 20];
+/// hex::decode_to_slice("B5F762798A53D543A014CAF8B297CFF8F2F937E8", &mut account_id)?;
+/// assert_eq!(encode_account_id(&account_id), "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+/// # Ok::<(), hex::FromHexError>(())
+/// ```
 pub fn encode_account_id(bytes: &[u8; 20]) -> String {
     let mut payload = Vec::with_capacity(25);
     payload.push(0x00); // account ID prefix
@@ -149,6 +157,16 @@ pub fn encode_account_id(bytes: &[u8; 20]) -> String {
 
 /// Decode a classic address to a 20-byte account ID.
 /// Validates prefix `0x00` and checksum.
+///
+/// ```
+/// use xrpl_core::address::decode_account_id;
+///
+/// let account_id = decode_account_id("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+/// assert_eq!(hex::encode_upper(account_id), "B5F762798A53D543A014CAF8B297CFF8F2F937E8");
+/// // A typo breaks the checksum.
+/// assert!(decode_account_id("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTx").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -202,6 +220,17 @@ const X_ADDRESS_TEST: [u8; 2] = [0x04, 0x93];
 /// Encode an account ID and optional tag as an X-address (XLS-5d): prefix,
 /// account ID, flag (1 = tag present), the tag as 4 little-endian bytes,
 /// 4 reserved zero bytes (64-bit tags), then the base58check checksum.
+///
+/// ```
+/// use xrpl_core::address::{decode_account_id, decode_x_address, encode_x_address};
+///
+/// let account_id = decode_account_id("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+/// let mainnet = encode_x_address(&account_id, Some(12345), false);
+/// assert!(mainnet.starts_with('X'));
+/// assert!(encode_x_address(&account_id, Some(12345), true).starts_with('T'));
+/// assert_eq!(decode_x_address(&mainnet)?.tag, Some(12345));
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub fn encode_x_address(account_id: &[u8; 20], tag: Option<u32>, test: bool) -> String {
     let mut payload = Vec::with_capacity(35);
     payload.extend_from_slice(if test {
@@ -249,6 +278,18 @@ pub struct XAddress {
 impl XAddress {
     /// An X-address for `account_id`, with `tag`, for a test network or
     /// mainnet.
+    ///
+    /// ```
+    /// use xrpl_core::address::XAddress;
+    /// use xrpl_core::types::AccountId;
+    ///
+    /// let account = AccountId::from_address("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// let x = XAddress::new(account, Some(7), true);
+    /// let text = x.to_string();
+    /// assert!(text.starts_with('T'));
+    /// assert_eq!(text.parse::<XAddress>()?, x);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn new(account_id: AccountId, tag: Option<u32>, test_network: bool) -> Self {
         XAddress {
             account_id,
@@ -258,6 +299,14 @@ impl XAddress {
     }
 
     /// The account's classic address (`r…`).
+    ///
+    /// ```
+    /// use xrpl_core::address::{classic_to_x_address, XAddress};
+    ///
+    /// let x: XAddress = classic_to_x_address("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", None, false)?.parse()?;
+    /// assert_eq!(x.classic_address(), "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn classic_address(&self) -> String {
         encode_account_id(&self.account_id.0)
     }
@@ -285,6 +334,18 @@ impl core::str::FromStr for XAddress {
 
 /// Decode an X-address. Rejects unknown prefixes and flags, 64-bit tags,
 /// and tag bytes without the tag flag.
+///
+/// ```
+/// use xrpl_core::address::{classic_to_x_address, decode_x_address};
+///
+/// let x = classic_to_x_address("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", Some(42), true)?;
+/// let decoded = decode_x_address(&x)?;
+/// assert_eq!(decoded.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+/// assert_eq!((decoded.tag, decoded.test_network), (Some(42), true));
+/// // A classic address is not an X-address.
+/// assert!(decode_x_address("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -340,6 +401,16 @@ pub fn decode_x_address(x_address: &str) -> Result<XAddress, CoreError> {
 }
 
 /// Classic address (+ optional tag) → X-address.
+///
+/// ```
+/// use xrpl_core::address::{classic_to_x_address, decode_x_address};
+///
+/// let x = classic_to_x_address("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", None, false)?;
+/// assert!(x.starts_with('X'));
+/// assert_eq!(decode_x_address(&x)?.tag, None);
+/// assert!(classic_to_x_address("not an address", None, false).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -402,6 +473,16 @@ impl core::str::FromStr for KeyType {
 /// Encode a 16-byte seed to base58check.
 /// Ed25519 prefix: [0x01, 0xE1, 0x4B] → starts with "sEd"
 /// Secp256k1 prefix: `0x21` → starts with "s"
+///
+/// ```
+/// use xrpl_core::address::{decode_seed, encode_seed, KeyType};
+///
+/// let (bytes, key_type) = decode_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// assert_eq!(encode_seed(&bytes, key_type), "sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r");
+/// // The same 16 bytes as a secp256k1 seed: another prefix, another string.
+/// assert!(!encode_seed(&bytes, KeyType::Secp256k1).starts_with("sEd"));
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 pub fn encode_seed(bytes: &[u8; 16], key_type: KeyType) -> String {
     let prefix: &[u8] = match key_type {
         KeyType::Ed25519 => &[0x01, 0xE1, 0x4B],
@@ -422,6 +503,18 @@ pub fn encode_seed(bytes: &[u8; 16], key_type: KeyType) -> String {
 /// Errors say only what kind of mistake the string has: never a character
 /// of it or a checksum computed from it, which would put part of a secret
 /// into a log.
+///
+/// ```
+/// use xrpl_core::address::{decode_seed, KeyType};
+///
+/// let (bytes, key_type) = decode_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+/// assert_eq!(key_type, KeyType::Secp256k1);
+/// assert_eq!(bytes.len(), 16);
+/// // An address is not a seed.
+/// let err = decode_seed("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1").unwrap_err();
+/// assert!(err.to_string().contains("not a seed"));
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

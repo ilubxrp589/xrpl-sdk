@@ -9,6 +9,14 @@ use crate::CoreError;
 
 /// The reserve an account must hold, in drops: the base reserve plus one
 /// owner reserve per object it owns. Saturates instead of overflowing.
+///
+/// ```
+/// use xrpl_core::utils::reserve::total_reserve_drops;
+///
+/// // Mainnet's reserves (FeeSettings): 1 XRP, and 0.2 XRP per object owned.
+/// assert_eq!(total_reserve_drops(1_000_000, 200_000, 3), 1_600_000);
+/// assert_eq!(total_reserve_drops(1_000_000, 200_000, 0), 1_000_000);
+/// ```
 pub fn total_reserve_drops(
     reserve_base_drops: u64,
     reserve_inc_drops: u64,
@@ -19,6 +27,14 @@ pub fn total_reserve_drops(
 
 /// What the account can spend, in drops: its balance above the reserve, or
 /// 0 when the balance is below it.
+///
+/// ```
+/// use xrpl_core::utils::reserve::available_balance_drops;
+///
+/// // 10 XRP, owning 3 objects, at mainnet's reserves (1 XRP + 0.2 XRP each).
+/// assert_eq!(available_balance_drops(10_000_000, 1_000_000, 200_000, 3), 8_400_000);
+/// assert_eq!(available_balance_drops(1_000_000, 1_000_000, 200_000, 1), 0);
+/// ```
 pub fn available_balance_drops(
     balance_drops: u64,
     reserve_base_drops: u64,
@@ -39,6 +55,15 @@ pub fn available_balance_drops(
 /// not 1,000,999). A negative, non-finite or fractional-drop value is an
 /// error.
 ///
+/// ```
+/// use xrpl_core::utils::reserve::reserve_xrp_to_drops;
+///
+/// assert_eq!(reserve_xrp_to_drops(0.2)?, 200_000);
+/// assert_eq!(reserve_xrp_to_drops(1.001)?, 1_001_000); // not 1_000_999
+/// assert!(reserve_xrp_to_drops(-1.0).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// [`CoreError::InvalidAmount`] for such a value, or one above 100 billion XRP.
@@ -51,6 +76,14 @@ pub fn reserve_xrp_to_drops(xrp: f64) -> Result<u64, CoreError> {
 }
 
 /// Parse an XRP balance string (in drops, as returned by rippled) to u64.
+///
+/// ```
+/// use xrpl_core::utils::reserve::parse_drops;
+///
+/// assert_eq!(parse_drops("17229982")?, 17_229_982);
+/// assert!(parse_drops("17.2").is_err()); // drops are whole
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

@@ -8,6 +8,16 @@ use crate::types::LedgerIndex;
 use serde_json::{json, Value};
 
 /// A public test network with a faucet.
+///
+/// ```
+/// use xrpl_client::faucet::FaucetNetwork;
+/// use xrpl_client::XrplHttpClient;
+///
+/// let network = FaucetNetwork::Testnet;
+/// let client = XrplHttpClient::new(network.rpc_url())?;
+/// assert_ne!(network.rpc_url(), FaucetNetwork::Devnet.rpc_url());
+/// # Ok::<(), xrpl_client::ClientError>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaucetNetwork {
     /// The XRP Ledger Testnet (altnet).
@@ -18,6 +28,13 @@ pub enum FaucetNetwork {
 
 impl FaucetNetwork {
     /// The faucet's account-funding endpoint.
+    ///
+    /// ```
+    /// use xrpl_client::faucet::FaucetNetwork;
+    ///
+    /// assert_eq!(FaucetNetwork::Testnet.faucet_url(), "https://faucet.altnet.rippletest.net/accounts");
+    /// assert_eq!(FaucetNetwork::Devnet.faucet_url(), "https://faucet.devnet.rippletest.net/accounts");
+    /// ```
     pub fn faucet_url(self) -> &'static str {
         match self {
             FaucetNetwork::Testnet => "https://faucet.altnet.rippletest.net/accounts",
@@ -26,6 +43,13 @@ impl FaucetNetwork {
     }
 
     /// A public JSON-RPC server on the network.
+    ///
+    /// ```
+    /// use xrpl_client::faucet::FaucetNetwork;
+    ///
+    /// assert_eq!(FaucetNetwork::Testnet.rpc_url(), "https://s.altnet.rippletest.net:51234");
+    /// assert_eq!(FaucetNetwork::Devnet.rpc_url(), "https://s.devnet.rippletest.net:51234");
+    /// ```
     pub fn rpc_url(self) -> &'static str {
         match self {
             FaucetNetwork::Testnet => "https://s.altnet.rippletest.net:51234",
@@ -34,6 +58,13 @@ impl FaucetNetwork {
     }
 
     /// A public WebSocket server on the network.
+    ///
+    /// ```
+    /// use xrpl_client::faucet::FaucetNetwork;
+    ///
+    /// assert_eq!(FaucetNetwork::Testnet.ws_url(), "wss://s.altnet.rippletest.net:51233");
+    /// assert_eq!(FaucetNetwork::Devnet.ws_url(), "wss://s.devnet.rippletest.net:51233");
+    /// ```
     pub fn ws_url(self) -> &'static str {
         match self {
             FaucetNetwork::Testnet => "wss://s.altnet.rippletest.net:51233",
@@ -43,6 +74,16 @@ impl FaucetNetwork {
 }
 
 /// What the faucet sent.
+///
+/// ```no_run
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::faucet::{fund, FaucetNetwork};
+///
+/// let funding = fund(FaucetNetwork::Testnet, "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").await?;
+/// println!("{} XRP to {} in {:?}", funding.amount_xrp, funding.address, funding.transaction_hash);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FaucetFunding {
     /// The funded classic address.
@@ -56,6 +97,19 @@ pub struct FaucetFunding {
 /// Ask `network`'s faucet to send test XRP to `address`. Returns once the
 /// faucet has submitted the payment, not once it is validated (see
 /// [`fund_and_wait`]).
+///
+/// ```no_run
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::faucet::{fund, FaucetNetwork};
+/// use xrpl_core::crypto::{Keypair, Seed};
+///
+/// // A new account: only its address goes to the faucet.
+/// let keys = Keypair::from_seed(&Seed::generate())?;
+/// let funding = fund(FaucetNetwork::Testnet, &keys.classic_address()).await?;
+/// println!("sent {} XRP; not validated yet", funding.amount_xrp);
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Errors
 ///
@@ -132,6 +186,23 @@ async fn validated_balance(client: &XrplHttpClient, address: &str) -> Result<u64
 /// [`fund`], then wait (up to about 40 seconds) until a validated ledger on
 /// the network shows the account's balance grown by the faucet's payment
 /// (an account that already existed is funded too, not just found).
+///
+/// ```no_run
+/// # async fn run() -> Result<(), xrpl_client::ClientError> {
+/// use xrpl_client::faucet::{fund_and_wait, FaucetNetwork};
+/// use xrpl_client::types::LedgerIndex;
+/// use xrpl_client::{Client, XrplHttpClient};
+/// use xrpl_core::crypto::{Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::generate())?;
+/// fund_and_wait(FaucetNetwork::Testnet, &keys.classic_address()).await?;
+/// // A validated ledger holds the account now.
+/// let client = XrplHttpClient::new(FaucetNetwork::Testnet.rpc_url())?;
+/// let info = client.account_info(&keys.classic_address(), LedgerIndex::Validated).await?;
+/// println!("{}", info.account_data.balance);
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Errors
 ///

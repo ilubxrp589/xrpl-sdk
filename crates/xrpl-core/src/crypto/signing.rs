@@ -16,6 +16,16 @@ use alloc::{string::String, vec::Vec};
 /// An XRPL seed: 16 secret bytes and the key type they derive (`s…` in
 /// base58, `sEd…` for Ed25519). The bytes are wiped on drop, and `Debug`
 /// shows only the key type, so a seed cannot reach a log by `{:?}`.
+///
+/// ```
+/// use xrpl_core::crypto::{KeyType, Seed};
+///
+/// let seed = Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+/// assert_eq!(seed.key_type(), KeyType::Ed25519);
+/// assert_eq!(seed.derive_keypair()?.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+/// assert_eq!(format!("{seed:?}"), r#"Seed { key_type: Ed25519, bytes: "[REDACTED]" }"#);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Clone, zeroize::ZeroizeOnDrop)]
 pub struct Seed {
     bytes: [u8; 16],
@@ -26,12 +36,29 @@ pub struct Seed {
 impl Seed {
     /// Generate a random seed (default: Ed25519) from the operating system's
     /// random source.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::generate();
+    /// assert_eq!(seed.key_type(), KeyType::Ed25519);
+    /// assert!(seed.to_base58().starts_with("sEd"));
+    /// ```
     #[cfg(feature = "std")]
     pub fn generate() -> Self {
         Self::generate_with_type(KeyType::Ed25519)
     }
 
     /// Generate a random seed with a specific key type.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::generate_with_type(KeyType::Secp256k1);
+    /// assert_eq!(seed.key_type(), KeyType::Secp256k1);
+    /// assert_eq!(seed.derive_keypair()?.key_type(), KeyType::Secp256k1);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     #[cfg(feature = "std")]
     pub fn generate_with_type(key_type: KeyType) -> Self {
         Self {
@@ -41,11 +68,29 @@ impl Seed {
     }
 
     /// A seed from its 16 bytes and key type.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// // rippled's wallet_propose gives this account for the all-zero seed.
+    /// let seed = Seed::from_bytes([0; 16], KeyType::Secp256k1);
+    /// assert_eq!(seed.derive_keypair()?.classic_address(), "rGCkuB7PBr5tNy68tPEABEtcdno4hE6Y7f");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn from_bytes(bytes: [u8; 16], key_type: KeyType) -> Self {
         Self { bytes, key_type }
     }
 
     /// Decode from base58check string.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// assert_eq!(seed.key_type(), KeyType::Secp256k1);
+    /// assert!(Seed::from_base58("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1").is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -57,21 +102,54 @@ impl Seed {
     }
 
     /// Encode to base58check (`s…`), in a string wiped on drop.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::Seed;
+    ///
+    /// let seed = Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// assert_eq!(seed.to_base58().as_str(), "sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn to_base58(&self) -> Zeroizing<String> {
         Zeroizing::new(address::encode_seed(&self.bytes, self.key_type))
     }
 
     /// The 16 secret bytes.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::Seed;
+    ///
+    /// let seed = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// let again = Seed::from_bytes(*seed.as_bytes(), seed.key_type());
+    /// assert_eq!(again.to_base58(), seed.to_base58());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn as_bytes(&self) -> &[u8; 16] {
         &self.bytes
     }
 
     /// The key type the seed derives.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// assert_eq!(Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?.key_type(), KeyType::Ed25519);
+    /// assert_eq!(Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?.key_type(), KeyType::Secp256k1);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn key_type(&self) -> KeyType {
         self.key_type
     }
 
     /// Derive a keypair from this seed.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::Seed;
+    ///
+    /// let keys = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?.derive_keypair()?;
+    /// assert_eq!(keys.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -106,6 +184,17 @@ impl Seed {
 
     /// This seed as secret numbers (eight blocks of six digits), in a string
     /// wiped on drop. They hold the 16 bytes only, not the key type.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// let numbers = seed.to_secret_numbers();
+    /// assert_eq!(numbers.split(' ').count(), 8);
+    /// let again = Seed::from_secret_numbers(&numbers, KeyType::Secp256k1)?;
+    /// assert_eq!(again.to_base58(), seed.to_base58());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn to_secret_numbers(&self) -> Zeroizing<String> {
         super::secret_numbers::encode(&self.bytes)
     }
@@ -137,6 +226,17 @@ impl Seed {
     /// This seed as an RFC 1751 key (twelve words, as `wallet_propose`'s
     /// `master_key`), in a string wiped on drop. The words hold the 16 bytes
     /// only, not the key type.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Seed};
+    ///
+    /// let seed = Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// let words = seed.to_rfc1751();
+    /// assert_eq!(words.split(' ').count(), 12);
+    /// let again = Seed::from_rfc1751(&words, KeyType::Ed25519)?;
+    /// assert_eq!(again.to_base58(), seed.to_base58());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn to_rfc1751(&self) -> Zeroizing<String> {
         super::rfc1751::encode(&self.bytes)
     }
@@ -154,6 +254,17 @@ impl fmt::Debug for Seed {
 /// An XRPL key pair. The secret key is wiped on drop and never shown by
 /// `Debug`; the public key always belongs to the secret key (every
 /// constructor derives it).
+///
+/// ```
+/// use xrpl_core::crypto::{Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// assert_eq!(keys.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+/// let signature = keys.sign_message(b"hello")?;
+/// assert!(keys.verify_message(b"hello", &signature)?);
+/// assert!(format!("{keys:?}").contains(r#"private_key: "[REDACTED]""#));
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[derive(Clone, zeroize::ZeroizeOnDrop)]
 pub struct Keypair {
     private_key: Vec<u8>,
@@ -165,6 +276,18 @@ pub struct Keypair {
 
 impl Keypair {
     /// Derive a keypair from a seed.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// assert_eq!(
+    ///     hex::encode_upper(keys.public_key()),
+    ///     "030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D435",
+    /// );
+    /// assert_eq!(keys.classic_address(), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -216,6 +339,16 @@ impl Keypair {
 
     /// A keypair from a 32-byte secret key; the public key is derived from it.
     ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// let again = Keypair::from_private_key(KeyType::Secp256k1, keys.private_key())?;
+    /// assert_eq!(again.public_key(), keys.public_key());
+    /// assert!(Keypair::from_private_key(KeyType::Ed25519, &[1; 31]).is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidKeyLength`] if `private_key` is not 32 bytes; for
@@ -235,27 +368,73 @@ impl Keypair {
 
     /// The public key as it appears on the ledger: 33 bytes (0xED + point
     /// for Ed25519, compressed for secp256k1).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// assert_eq!(
+    ///     hex::encode_upper(keys.public_key()),
+    ///     "ED01FA53FA5A7E77798F882ECE20B1ABC00BB358A9E55A202D0D0676BD0CE37A63",
+    /// );
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn public_key(&self) -> &[u8] {
         &self.public_key
     }
 
     /// The 32-byte secret key. Treat it as you treat the seed.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{ed25519, Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// assert_eq!(keys.private_key().len(), 32);
+    /// assert_eq!(ed25519::public_key(keys.private_key())?, keys.public_key());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn private_key(&self) -> &[u8] {
         &self.private_key
     }
 
     /// The key type.
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{KeyType, Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// assert_eq!(keys.key_type(), KeyType::Ed25519);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn key_type(&self) -> KeyType {
         self.key_type
     }
 
     /// Derive the 20-byte account ID from the public key.
     /// account_id = RIPEMD160(SHA256(public_key))
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed};
+    /// use xrpl_core::types::AccountId;
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// assert_eq!(keys.account_id(), AccountId::from_address("rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1")?);
+    /// assert_eq!(keys.account_id(), AccountId::from_public_key(keys.public_key()));
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn account_id(&self) -> AccountId {
         AccountId::from_bytes(public_key_to_account_id(&self.public_key))
     }
 
     /// Get the classic address (base58check encoded account ID).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// assert_eq!(keys.classic_address(), "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD");
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn classic_address(&self) -> String {
         self.account_id().to_address()
     }
@@ -264,6 +443,15 @@ impl Keypair {
     /// (`PublicKey.cpp` `verify`): Ed25519 signs the message itself;
     /// secp256k1 signs SHA-512Half(message). Use this for any message,
     /// including XRPL signing data (a hash prefix plus serialized fields).
+    ///
+    /// ```
+    /// use xrpl_core::crypto::{verify_signing_data, Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// let signature = keys.sign_message(b"I own this account")?;
+    /// assert!(verify_signing_data(keys.public_key(), b"I own this account", &signature)?);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -280,6 +468,16 @@ impl Keypair {
     /// Whether `signature` is this key's [`Keypair::sign_message`] signature
     /// over `message`.
     ///
+    /// ```
+    /// use xrpl_core::crypto::{Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// let signature = keys.sign_message(b"pay 10 XRP")?;
+    /// assert!(keys.verify_message(b"pay 10 XRP", &signature)?);
+    /// assert!(!keys.verify_message(b"pay 99 XRP", &signature)?);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::SigningFailed`] for a secp256k1 key when `signature` is
@@ -290,6 +488,20 @@ impl Keypair {
 
     /// Sign XRPL signing data (a hash prefix plus serialized fields) the way
     /// rippled verifies it: the same as [`Keypair::sign_message`].
+    ///
+    /// ```
+    /// use xrpl_core::codec::encode_for_signing;
+    /// use xrpl_core::crypto::{verify_signing_data, Keypair, Seed};
+    ///
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+    /// let tx = serde_json::json!({"TransactionType": "AccountSet",
+    ///     "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "Fee": "12", "Sequence": 1,
+    ///     "SigningPubKey": hex::encode_upper(keys.public_key())});
+    /// let data = encode_for_signing(&tx)?;
+    /// let signature = keys.sign_signing_data(&data)?;
+    /// assert!(verify_signing_data(keys.public_key(), &data, &signature)?);
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -313,6 +525,24 @@ impl fmt::Debug for Keypair {
 /// (or any message), as `rippled` checks it: the key type is the key's
 /// first byte (0xED for Ed25519), Ed25519 over the data itself, secp256k1
 /// over SHA-512Half of it.
+///
+/// This checks a payment `rippled` 3.4.1 signed:
+///
+/// ```
+/// use xrpl_core::codec::{decode_transaction_binary, encode_for_signing};
+/// use xrpl_core::crypto::verify_signing_data;
+///
+/// let blob = hex::decode(
+///     "120000220000000024000000016140000000000F424068400000000000000C7321030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D43574473045022100BC95504DC72DDBDAA0F5EAA973EC07E057FD9A3E7500AC3CF07454C68219985E02200B0992C47857A867F5664BB6F74E62F086A59A0C31848E0FB3819127E8EC0A1281148049717CC948789F32F267ADC2582484E3DFA6988314B5F762798A53D543A014CAF8B297CFF8F2F937E8",
+/// )?;
+/// let tx = decode_transaction_binary(&blob)?;
+/// let public_key = hex::decode(tx["SigningPubKey"].as_str().unwrap_or_default())?;
+/// let signature = hex::decode(tx["TxnSignature"].as_str().unwrap_or_default())?;
+/// let data = encode_for_signing(&tx)?;
+/// assert!(verify_signing_data(&public_key, &data, &signature)?);
+/// assert!(!verify_signing_data(&public_key, b"other data", &signature)?);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -368,6 +598,17 @@ fn generate_random_bytes_16() -> [u8; 16] {
 
 /// Derive a 20-byte AccountID from a public key.
 /// account_id = RIPEMD160(SHA256(public_key))
+///
+/// ```
+/// use xrpl_core::address::encode_account_id;
+/// use xrpl_core::crypto::signing::public_key_to_account_id;
+///
+/// let public_key =
+///     hex::decode("030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D435")?;
+/// let account_id = public_key_to_account_id(&public_key);
+/// assert_eq!(encode_account_id(&account_id), "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+/// # Ok::<(), hex::FromHexError>(())
+/// ```
 pub fn public_key_to_account_id(public_key: &[u8]) -> [u8; 20] {
     let sha = Sha256::digest(public_key);
     let ripemd = Ripemd160::digest(sha);
@@ -377,6 +618,16 @@ pub fn public_key_to_account_id(public_key: &[u8]) -> [u8; 20] {
 }
 
 /// SHA512-half: first 32 bytes of SHA512.
+///
+/// ```
+/// use xrpl_core::crypto::sha512_half;
+///
+/// // SHA-512 of no bytes starts cf83e135…
+/// assert_eq!(
+///     hex::encode(sha512_half(b"")),
+///     "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce",
+/// );
+/// ```
 pub fn sha512_half(data: &[u8]) -> [u8; 32] {
     let digest: [u8; 64] = Sha512::digest(data).into();
     let mut out = [0u8; 32];
@@ -387,6 +638,21 @@ pub fn sha512_half(data: &[u8]) -> [u8; 32] {
 
 /// The most signers a multi-signed transaction may carry (`rippled`'s
 /// `STTx::maxMultiSigners`).
+///
+/// ```
+/// use xrpl_core::crypto::{verify_transaction, MAX_MULTISIGNERS};
+/// use serde_json::json;
+///
+/// assert_eq!(MAX_MULTISIGNERS, 32);
+/// let signer = json!({"Signer": {"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///     "SigningPubKey": "", "TxnSignature": ""}});
+/// let tx = json!({"TransactionType": "AccountSet", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Fee": "12", "Sequence": 1, "SigningPubKey": "",
+///     "Signers": vec![signer; MAX_MULTISIGNERS + 1]});
+/// // One signer too many: rippled refuses it, whatever the signatures.
+/// assert!(!verify_transaction(&tx)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 #[cfg(feature = "std")]
 pub const MAX_MULTISIGNERS: usize = 32;
 
@@ -395,6 +661,26 @@ pub const MAX_MULTISIGNERS: usize = 32;
 /// transaction's signing data ([`encode_for_signing`](crate::codec::encode_for_signing))
 /// and sets `TxnSignature`. Returns the signed transaction; `tx_json` is
 /// left as it was.
+///
+/// The signature is deterministic, so this is the blob `rippled` 3.4.1's
+/// `sign` returns for the same transaction and seed:
+///
+/// ```
+/// use xrpl_core::codec::encode_transaction_json;
+/// use xrpl_core::crypto::{sign_transaction, verify_transaction, Keypair, Seed};
+///
+/// let keys = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// let tx = serde_json::json!({"TransactionType": "Payment",
+///     "Account": "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1", "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Amount": "1000000", "Fee": "12", "Sequence": 1, "Flags": 0});
+/// let signed = sign_transaction(&tx, &keys)?;
+/// assert!(verify_transaction(&signed)?);
+/// assert_eq!(
+///     hex::encode_upper(encode_transaction_json(&signed)?),
+///     "120000220000000024000000016140000000000F424068400000000000000C7321030D58EB48B4420B1F7B9DF55087E0E29FEF0E8468F9A6825B01CA2C361042D43574473045022100BC95504DC72DDBDAA0F5EAA973EC07E057FD9A3E7500AC3CF07454C68219985E02200B0992C47857A867F5664BB6F74E62F086A59A0C31848E0FB3819127E8EC0A1281148049717CC948789F32F267ADC2582484E3DFA6988314B5F762798A53D543A014CAF8B297CFF8F2F937E8",
+/// );
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -418,6 +704,30 @@ pub fn sign_transaction<K: SigningKey + ?Sized>(
 /// signing service). The signature is checked against the key's public key
 /// before it is set, so a key that signs the wrong thing is an error here,
 /// not a refusal from the network.
+///
+/// ```
+/// use xrpl_core::crypto::{sign_transaction_async, verify_transaction, Keypair, Seed};
+///
+/// # async fn run() -> Result<(), xrpl_core::CoreError> {
+/// // Any `SigningKey` is an `AsyncSigningKey`; a KMS key would go here.
+/// let key = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// let tx = serde_json::json!({"TransactionType": "AccountSet",
+///     "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD", "Fee": "12", "Sequence": 1});
+/// let signed = sign_transaction_async(&tx, &key).await?;
+/// assert!(verify_transaction(&signed)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
 ///
 /// # Errors
 ///
@@ -486,6 +796,22 @@ fn with_signature(
 /// `Signers`. The transaction is signed with an empty `SigningPubKey` (a
 /// missing one counts as empty), as `rippled`'s `sign_for` does.
 ///
+/// ```
+/// use xrpl_core::crypto::{sign_for_multisigning, verify_transaction, Keypair, Seed};
+/// use serde_json::json;
+///
+/// // rU6K7V… signs for rHb9CJ… (whether it may is the signer list's to say).
+/// let signer = Keypair::from_seed(&Seed::from_base58("sp5fghtJtpUorTwvof1NpDXAzNwf5")?)?;
+/// let tx = json!({"TransactionType": "AccountSet", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Fee": "24", "Sequence": 1, "SigningPubKey": ""});
+/// let entry = sign_for_multisigning(&tx, &signer.classic_address(), &signer)?;
+/// assert_eq!(entry.account, "rU6K7V3Po4snVhBBaU29sesqs2qTQJWDw1");
+/// let mut multisigned = tx.clone();
+/// multisigned["Signers"] = json!([{"Signer": entry}]);
+/// assert!(verify_transaction(&multisigned)?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
 /// # Errors
 ///
 /// The errors of
@@ -512,6 +838,32 @@ pub fn sign_for_multisigning<K: SigningKey + ?Sized>(
 
 /// [`sign_for_multisigning`] with an [`AsyncSigningKey`]; the signature is
 /// checked against the key's public key, as in [`sign_transaction_async`].
+///
+/// ```
+/// use xrpl_core::crypto::{sign_for_multisigning_async, verify_transaction, Keypair, Seed};
+/// use serde_json::json;
+///
+/// # async fn run() -> Result<(), xrpl_core::CoreError> {
+/// let key = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+/// let tx = json!({"TransactionType": "AccountSet", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+///     "Fee": "24", "Sequence": 1, "SigningPubKey": ""});
+/// let entry = sign_for_multisigning_async(&tx, "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD", &key).await?;
+/// let mut multisigned = tx.clone();
+/// multisigned["Signers"] = json!([{"Signer": entry}]);
+/// assert!(verify_transaction(&multisigned)?);
+/// # Ok(())
+/// # }
+/// # fn block_on<F: core::future::Future>(f: F) -> F::Output {
+/// #     use core::task::{Context, Poll, Waker};
+/// #     let mut f = core::pin::pin!(f);
+/// #     loop {
+/// #         if let Poll::Ready(v) = f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+/// #             return v;
+/// #         }
+/// #     }
+/// # }
+/// # block_on(run()).unwrap();
+/// ```
 ///
 /// # Errors
 ///

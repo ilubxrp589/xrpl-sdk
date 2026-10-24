@@ -19,6 +19,16 @@ use alloc::{format, string::String};
 
 /// The eight blocks of `seed`, separated by single spaces. The string is
 /// wiped on drop.
+///
+/// ```
+/// use xrpl_core::crypto::secret_numbers;
+///
+/// // Each block is 65535 and its check digit, 65535 × (2n + 1) mod 9.
+/// assert_eq!(
+///     secret_numbers::encode(&[0xFF; 16]).as_str(),
+///     "655356 655350 655353 655356 655350 655353 655356 655350",
+/// );
+/// ```
 pub fn encode(seed: &[u8; 16]) -> Zeroizing<String> {
     let mut out = Zeroizing::new(String::with_capacity(8 * 7));
     for (n, pair) in (0u32..).zip(seed.chunks_exact(2)) {
@@ -48,6 +58,20 @@ pub fn encode(seed: &[u8; 16]) -> Zeroizing<String> {
 /// Every character that is not a digit is skipped, so spaces, dashes, line
 /// breaks and Xaman's row letters (`A 399150 B 474506 …`) may stay. The
 /// bytes are wiped on drop.
+///
+/// ```
+/// use xrpl_core::crypto::secret_numbers;
+///
+/// let numbers = "399150 474506 009147 088773 432160 282843 253738 605430";
+/// let seed = secret_numbers::decode(numbers)?;
+/// assert_eq!(secret_numbers::encode(&seed).as_str(), numbers);
+/// // Xaman's row letters and line breaks are skipped.
+/// let typed = "A 399150\nB 474506\nC 009147\nD 088773\nE 432160\nF 282843\nG 253738\nH 605430";
+/// assert_eq!(*secret_numbers::decode(typed)?, *seed);
+/// // A wrong digit fails its block's check digit.
+/// assert!(secret_numbers::decode("399150 474506 009147 088773 432160 282843 253738 605431").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

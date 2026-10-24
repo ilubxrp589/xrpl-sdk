@@ -6,15 +6,37 @@ use crate::CoreError;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// 2000-01-01T00:00:00Z in Unix seconds: ledger time zero.
+///
+/// ```
+/// use xrpl_core::utils::time::{ripple_time_to_unix, RIPPLE_EPOCH_UNIX};
+///
+/// assert_eq!(ripple_time_to_unix(0), RIPPLE_EPOCH_UNIX);
+/// assert_eq!(RIPPLE_EPOCH_UNIX, 946_684_800);
+/// ```
 pub const RIPPLE_EPOCH_UNIX: i64 = 946_684_800;
 
 /// Ledger time → Unix seconds.
+///
+/// ```
+/// use xrpl_core::utils::time::ripple_time_to_unix;
+///
+/// // Mainnet ledger 107852951 closed at 846088140 (2026-10-23T16:29:00Z).
+/// assert_eq!(ripple_time_to_unix(846_088_140), 1_792_772_940);
+/// ```
 pub fn ripple_time_to_unix(ripple_time: u32) -> i64 {
     i64::from(ripple_time) + RIPPLE_EPOCH_UNIX
 }
 
 /// Unix seconds → ledger time. Errors before 2000 or after the last second a
 /// `u32` ledger time can hold (2136-02-07T06:28:15Z).
+///
+/// ```
+/// use xrpl_core::utils::time::unix_to_ripple_time;
+///
+/// assert_eq!(unix_to_ripple_time(1_792_772_940)?, 846_088_140); // 2026-10-23T16:29:00Z
+/// assert!(unix_to_ripple_time(0).is_err()); // 1970 is before ledger time
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -31,11 +53,31 @@ pub fn unix_to_ripple_time(unix_seconds: i64) -> Result<u32, CoreError> {
 }
 
 /// Ledger time → `SystemTime`.
+///
+/// ```
+/// use std::time::{Duration, UNIX_EPOCH};
+/// use xrpl_core::utils::time::ripple_time_to_system_time;
+///
+/// let closed = ripple_time_to_system_time(846_088_140); // 2026-10-23T16:29:00Z
+/// assert_eq!(closed, UNIX_EPOCH + Duration::from_secs(1_792_772_940));
+/// ```
 pub fn ripple_time_to_system_time(ripple_time: u32) -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(ripple_time_to_unix(ripple_time) as u64)
 }
 
 /// `SystemTime` → ledger time, truncated to the second.
+///
+/// ```
+/// use std::time::{Duration, SystemTime, UNIX_EPOCH};
+/// use xrpl_core::utils::time::system_time_to_ripple_time;
+///
+/// let time = UNIX_EPOCH + Duration::from_millis(1_792_772_940_500);
+/// assert_eq!(system_time_to_ripple_time(time)?, 846_088_140);
+/// // Ten minutes from now, for an Expiration.
+/// let expiration = system_time_to_ripple_time(SystemTime::now() + Duration::from_secs(600))?;
+/// assert!(expiration > system_time_to_ripple_time(SystemTime::now())?);
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -69,6 +111,15 @@ pub fn ripple_time_to_iso8601(ripple_time: u32) -> String {
 
 /// ISO 8601 in UTC (`"2024-06-01T12:00:00Z"`, `"…:00.250Z"`, `"…:00+00:00"`)
 /// → ledger time. A fraction of a second is dropped.
+///
+/// ```
+/// use xrpl_core::utils::time::iso8601_to_ripple_time;
+///
+/// assert_eq!(iso8601_to_ripple_time("2026-10-23T16:29:00Z")?, 846_088_140);
+/// assert_eq!(iso8601_to_ripple_time("2026-10-23T16:29:00.750+00:00")?, 846_088_140);
+/// assert!(iso8601_to_ripple_time("2026-10-23T18:29:00+02:00").is_err()); // UTC only
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///

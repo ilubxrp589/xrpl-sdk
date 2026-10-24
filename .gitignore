@@ -14,3 +14,4 @@ fuzz/artifacts/
 # AI context files
 CLAUDE.md
 **/CLAUDE.md
+__pycache__/

@@ -4,6 +4,16 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 /// Parsed field definition from definitions.json.
+///
+/// ```
+/// use xrpl_core::codec::lookup_field_def;
+///
+/// let def = lookup_field_def("TxnSignature").expect("rippled defines TxnSignature");
+/// assert_eq!((def.name.as_str(), def.type_code, def.field_code), ("TxnSignature", 7, 4));
+/// assert!(def.is_vl_encoded && def.is_serialized);
+/// // A signature does not sign itself.
+/// assert!(!def.is_signing);
+/// ```
 #[derive(Debug, Clone)]
 pub struct FieldDef {
     /// The name.
@@ -57,6 +67,19 @@ static LEDGER_ENTRY_TYPES: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
             }
             Some((name.clone(), u16::try_from(code).ok()?))
         })
+        .collect()
+});
+
+/// Transaction result name → code (`TRANSACTION_RESULTS`): `tesSUCCESS` 0,
+/// the `tec` codes from 100, the others negative.
+static TRANSACTION_RESULTS: LazyLock<HashMap<String, i32>> = LazyLock::new(|| {
+    let defs = parse_definitions();
+    let Some(results) = defs.get("TRANSACTION_RESULTS").and_then(|v| v.as_object()) else {
+        return HashMap::new();
+    };
+    results
+        .iter()
+        .filter_map(|(name, val)| Some((name.clone(), i32::try_from(val.as_i64()?).ok()?)))
         .collect()
 });
 
@@ -153,19 +176,52 @@ pub(crate) const UINT64_BASE_TEN: &[&str] = &[
 ];
 
 /// rippled 3.4.1's `server_definitions` result, as embedded in this crate.
+///
+/// ```
+/// use xrpl_core::codec::definitions::DEFINITIONS_JSON;
+///
+/// let definitions: serde_json::Value = serde_json::from_str(DEFINITIONS_JSON)?;
+/// assert_eq!(definitions["TRANSACTION_TYPES"]["Payment"], 0);
+/// assert_eq!(definitions["TYPES"]["AccountID"], 8);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 pub const DEFINITIONS_JSON: &str = include_str!("definitions.json");
 
 /// Look up a field definition by name.
+///
+/// ```
+/// use xrpl_core::codec::lookup_field_def;
+///
+/// let account = lookup_field_def("Account").expect("rippled defines Account");
+/// assert_eq!((account.type_code, account.field_code), (8, 1));
+/// assert!(lookup_field_def("Acount").is_none());
+/// ```
 pub fn lookup_field_def(name: &str) -> Option<&'static FieldDef> {
     FIELD_MAP.get(name)
 }
 
 /// Look up a field definition by (type_code, field_code).
+///
+/// ```
+/// use xrpl_core::codec::lookup_field_def_by_id;
+///
+/// let field = lookup_field_def_by_id(2, 27).expect("rippled defines (2, 27)");
+/// assert_eq!(field.name, "LastLedgerSequence");
+/// ```
 pub fn lookup_field_def_by_id(type_code: u16, field_code: u16) -> Option<&'static FieldDef> {
     FIELD_BY_ID.get(&(type_code, field_code))
 }
 
 /// Convert transaction type name to numeric code.
+///
+/// ```
+/// use xrpl_core::codec::transaction_type_code;
+///
+/// assert_eq!(transaction_type_code("Payment")?, 0);
+/// assert_eq!(transaction_type_code("TrustSet")?, 20);
+/// assert!(transaction_type_code("Paymnet").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -178,6 +234,15 @@ pub fn transaction_type_code(name: &str) -> Result<u16, CoreError> {
 }
 
 /// Convert ledger entry type name to numeric code.
+///
+/// ```
+/// use xrpl_core::codec::definitions::ledger_entry_type_code;
+///
+/// assert_eq!(ledger_entry_type_code("AccountRoot")?, 0x61); // 'a'
+/// assert_eq!(ledger_entry_type_code("Offer")?, 0x6F); // 'o'
+/// assert!(ledger_entry_type_code("Payment").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -209,6 +274,14 @@ static GRANULAR_PERMISSIONS: LazyLock<HashMap<&'static str, u32>> = LazyLock::ne
 });
 
 /// The granular permission named by a PermissionValue code, if it is one.
+///
+/// ```
+/// use xrpl_core::codec::definitions::granular_permission_name;
+///
+/// assert_eq!(granular_permission_name(65537), Some("TrustlineAuthorize"));
+/// // 1 is a whole transaction type (Payment), not a granular permission.
+/// assert_eq!(granular_permission_name(1), None);
+/// ```
 pub fn granular_permission_name(code: u32) -> Option<&'static str> {
     GRANULAR_PERMISSIONS
         .iter()
@@ -218,6 +291,15 @@ pub fn granular_permission_name(code: u32) -> Option<&'static str> {
 
 /// Resolve a PermissionValue string to its u32 code.
 /// Checks granular permissions first, then falls back to transaction type + 1.
+///
+/// ```
+/// use xrpl_core::codec::definitions::permission_value_code;
+///
+/// assert_eq!(permission_value_code("TrustlineAuthorize")?, 65537);
+/// assert_eq!(permission_value_code("Payment")?, 1); // Payment is type 0
+/// assert!(permission_value_code("Nothing").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -234,6 +316,48 @@ pub fn permission_value_code(name: &str) -> Result<u32, CoreError> {
     Err(CoreError::CodecError(format!(
         "unknown PermissionValue: {name}"
     )))
+}
+
+/// The code of a transaction result (engine result), as `rippled` 3.4.1
+/// defines it: `tesSUCCESS` is 0, the `tec` codes (failed, in a ledger,
+/// fee charged) run from 100, and the others (never in a ledger) are
+/// negative.
+///
+/// ```
+/// use xrpl_core::codec::definitions::transaction_result_code;
+///
+/// assert_eq!(transaction_result_code("tesSUCCESS")?, 0);
+/// assert_eq!(transaction_result_code("tecPATH_DRY")?, 128);
+/// assert_eq!(transaction_result_code("tefPAST_SEQ")?, -190);
+/// assert!(transaction_result_code("tesNOTHING").is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
+///
+/// # Errors
+///
+/// [`CoreError::CodecError`] if `rippled` defines no result named `name`.
+pub fn transaction_result_code(name: &str) -> Result<i32, CoreError> {
+    TRANSACTION_RESULTS
+        .get(name)
+        .copied()
+        .ok_or_else(|| CoreError::CodecError(format!("unknown transaction result: {name}")))
+}
+
+/// The name of a transaction result code (`0` is `tesSUCCESS`), if `rippled`
+/// 3.4.1 defines one.
+///
+/// ```
+/// use xrpl_core::codec::definitions::transaction_result_name;
+///
+/// assert_eq!(transaction_result_name(0), Some("tesSUCCESS"));
+/// assert_eq!(transaction_result_name(128), Some("tecPATH_DRY"));
+/// assert_eq!(transaction_result_name(99), None);
+/// ```
+pub fn transaction_result_name(code: i32) -> Option<&'static str> {
+    TRANSACTION_RESULTS
+        .iter()
+        .find(|(_, &c)| c == code)
+        .map(|(name, _)| name.as_str())
 }
 
 #[cfg(test)]

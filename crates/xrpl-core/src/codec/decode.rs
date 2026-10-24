@@ -88,16 +88,25 @@ fn ledger_entry_type_name(code: u16) -> Option<&'static str> {
     LEDGER_ENTRY_TYPE_NAMES.get(&code).map(|s| s.as_str())
 }
 
-/// Decode a binary-encoded XRPL transaction (or ledger object) back to JSON.
-///
-/// This is the inverse of `encode_transaction_json`. It reads the canonical
-/// binary format and reconstructs the JSON representation, converting numeric
-/// type codes back to string names where appropriate.
 /// Maximum recursion depth for nested STObject/STArray decoding.
 /// Prevents stack overflow from malicious or malformed deeply-nested input.
 const MAX_DECODE_DEPTH: usize = 16;
 
 /// Decode a serialized transaction or ledger entry into `rippled`'s JSON.
+///
+/// ```
+/// use xrpl_core::codec::{decode_transaction_binary, encode_transaction_json};
+///
+/// let entry = serde_json::json!({"LedgerEntryType": "AccountRoot",
+///     "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Balance": "148446663", "Flags": 0,
+///     "OwnerCount": 0, "Sequence": 336, "PreviousTxnLgrSeq": 14091160,
+///     "PreviousTxnID": "0D5FB50FA65C9FE1538FD7E398FFFE9D1908DFA4576D8D7A020040686F93C77D"});
+/// let bytes = encode_transaction_json(&entry)?;
+/// assert_eq!(decode_transaction_binary(&bytes)?, entry);
+/// // A truncated entry is refused.
+/// assert!(decode_transaction_binary(&bytes[..bytes.len() - 1]).is_err());
+/// # Ok::<(), xrpl_core::CoreError>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -206,7 +215,7 @@ fn decode_field_value(
     depth: usize,
 ) -> Result<(Value, usize), CoreError> {
     match tc {
-        Some(TypeCode::UInt8) => decode_uint8(buf),
+        Some(TypeCode::UInt8) => decode_uint8(buf, field_name),
         Some(TypeCode::UInt16) => decode_uint16(buf, field_name),
         Some(TypeCode::UInt32) => decode_uint32(buf, field_name),
         Some(TypeCode::UInt64) => decode_uint64(buf, field_name),
@@ -236,10 +245,18 @@ fn decode_field_value(
     }
 }
 
-fn decode_uint8(buf: &[u8]) -> Result<(Value, usize), CoreError> {
+/// A UInt8; for `TransactionResult`, the result's name (`tesSUCCESS`), as
+/// `rippled` writes it (`STUInt8::getJson`), or the number for a code it
+/// does not define.
+fn decode_uint8(buf: &[u8], field_name: &str) -> Result<(Value, usize), CoreError> {
     let &b = buf
         .first()
         .ok_or_else(|| CoreError::CodecError("buffer too short for UInt8".to_string()))?;
+    if field_name == "TransactionResult" {
+        if let Some(name) = super::definitions::transaction_result_name(i32::from(b)) {
+            return Ok((Value::String(name.to_string()), 1));
+        }
+    }
     Ok((Value::Number(b.into()), 1))
 }
 
@@ -974,6 +991,39 @@ mod tests {
         let bytes = hex::decode(blob).unwrap();
         assert_eq!(decode_transaction_binary(&bytes).unwrap(), rippled);
         assert_eq!(encode_transaction_json(&rippled).unwrap(), bytes);
+    }
+
+    /// `TransactionResult` reads and writes by name, as `rippled` does
+    /// (`STUInt8::getJson`, `STParsedJSON`): `tes` and `tec` names fit the
+    /// byte; any other name, or one `rippled` does not define, is refused.
+    #[test]
+    fn transaction_results_by_name_as_rippled_writes_them() {
+        use crate::codec::encode_transaction_json;
+        let meta = |result: Value| json!({"TransactionIndex": 3, "TransactionResult": result, "AffectedNodes": []});
+        for (name, byte) in [
+            ("tesSUCCESS", 0u8),
+            ("tecPATH_DRY", 128),
+            ("tecUNFUNDED_OFFER", 103),
+        ] {
+            let bytes = encode_transaction_json(&meta(json!(name))).unwrap();
+            assert_eq!(bytes, encode_transaction_json(&meta(json!(byte))).unwrap());
+            assert_eq!(
+                decode_transaction_binary(&bytes).unwrap()["TransactionResult"],
+                name
+            );
+        }
+        for refused in ["terRETRY", "tefPAST_SEQ", "tesNOTHING"] {
+            assert!(
+                encode_transaction_json(&meta(json!(refused))).is_err(),
+                "{refused}"
+            );
+        }
+        // A byte rippled names no result for stays a number.
+        let bytes = encode_transaction_json(&meta(json!(99))).unwrap();
+        assert_eq!(
+            decode_transaction_binary(&bytes).unwrap()["TransactionResult"],
+            99
+        );
     }
 
     #[test]

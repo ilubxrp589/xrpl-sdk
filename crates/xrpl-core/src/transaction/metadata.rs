@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 ///     "TransactionIndex": 3,
 ///     "AffectedNodes": [{"ModifiedNode": {
 ///         "LedgerEntryType": "AccountRoot",
-///         "LedgerIndex": "13F1A95D7AAB7108D5CE7EEAF504B2894B8C674E6D68499076441C4837282BF8",
+///         "LedgerIndex": "2B6AC232AA4C4BE41BF49D2459FA4A0347E1B543A4C92FCEE0821C0201E2E9A8",
 ///         "FinalFields": {"Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Balance": "990"},
 ///         "PreviousFields": {"Balance": "1000"}
 ///     }}],
@@ -90,6 +90,33 @@ impl TransactionMetadata {
     /// Whether the transaction succeeded (`tesSUCCESS`). A `tec` result is
     /// in the ledger too, with its fee charged, but did not do what it was
     /// sent for.
+    ///
+    /// ```
+    /// use xrpl_core::transaction::metadata::TransactionMetadata;
+    ///
+    /// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+    /// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+    /// #     "AffectedNodes": [
+    /// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+    /// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+    /// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+    /// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+    /// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+    /// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+    /// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+    /// #             "PreviousTxnLgrSeq": 10424064}}
+    /// #     ]
+    /// # }))?;
+    /// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+    /// // paymentXrpCreateAccount fixture): one CreatedNode, one ModifiedNode.
+    /// assert!(meta.is_success());
+    /// let mut failed = meta.clone();
+    /// failed.transaction_result = "tecUNFUNDED_PAYMENT".into();
+    /// assert!(!failed.is_success());
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn is_success(&self) -> bool {
         self.transaction_result == "tesSUCCESS"
     }
@@ -98,6 +125,17 @@ impl TransactionMetadata {
 /// What a Payment delivered, as `rippled` reports it: an amount, or
 /// `"unavailable"` for a transaction in a ledger from before 2014-01-20,
 /// when the ledger did not yet record it.
+///
+/// ```
+/// use xrpl_core::transaction::metadata::DeliveredAmount;
+/// use xrpl_core::types::Amount;
+///
+/// let delivered: DeliveredAmount = serde_json::from_value(serde_json::json!("15"))?;
+/// assert_eq!(delivered, DeliveredAmount::Amount(Amount::Xrp(15)));
+/// let old: DeliveredAmount = serde_json::from_value(serde_json::json!("unavailable"))?;
+/// assert_eq!(old, DeliveredAmount::Unavailable);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DeliveredAmount {
@@ -131,6 +169,22 @@ impl<'de> Deserialize<'de> for DeliveredAmount {
 /// A ledger entry a transaction created, changed or deleted. The fields are
 /// the entry's own, as JSON (an entry's fields before and after are partial:
 /// only those that changed, or that it has).
+///
+/// ```
+/// use xrpl_core::transaction::metadata::AffectedNode;
+///
+/// // An owner directory a TrustSet deleted (xrpl.js's trustlineDelete fixture).
+/// let node: AffectedNode = serde_json::from_value(serde_json::json!({"DeletedNode": {
+///     "LedgerEntryType": "DirectoryNode",
+///     "LedgerIndex": "84C8F98961F2F10CB1B5C4FB649C18B05A9D3FC20C3A78B75C86CD30D7EAC39C",
+///     "FinalFields": {"Flags": 0, "Owner": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K",
+///         "RootIndex": "84C8F98961F2F10CB1B5C4FB649C18B05A9D3FC20C3A78B75C86CD30D7EAC39C"}
+/// }}))?;
+/// assert!(matches!(node, AffectedNode::DeletedNode(_)));
+/// assert_eq!(node.ledger_entry_type(), "DirectoryNode");
+/// assert_eq!(node.final_fields().unwrap()["Owner"], "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum AffectedNode {
@@ -144,6 +198,31 @@ pub enum AffectedNode {
 
 impl AffectedNode {
     /// The entry's type (`AccountRoot`, `RippleState`, `Offer`, …).
+    ///
+    /// ```
+    /// use xrpl_core::transaction::metadata::TransactionMetadata;
+    ///
+    /// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+    /// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+    /// #     "AffectedNodes": [
+    /// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+    /// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+    /// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+    /// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+    /// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+    /// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+    /// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+    /// #             "PreviousTxnLgrSeq": 10424064}}
+    /// #     ]
+    /// # }))?;
+    /// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+    /// // paymentXrpCreateAccount fixture): one CreatedNode, one ModifiedNode.
+    /// let types: Vec<&str> = meta.affected_nodes.iter().map(|n| n.ledger_entry_type()).collect();
+    /// assert_eq!(types, ["AccountRoot", "AccountRoot"]);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn ledger_entry_type(&self) -> &str {
         match self {
             AffectedNode::CreatedNode(n) => &n.ledger_entry_type,
@@ -153,6 +232,33 @@ impl AffectedNode {
     }
 
     /// The entry's ID (`LedgerIndex`).
+    ///
+    /// ```
+    /// use xrpl_core::hashes::keylet;
+    /// use xrpl_core::transaction::metadata::TransactionMetadata;
+    ///
+    /// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+    /// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+    /// #     "AffectedNodes": [
+    /// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+    /// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+    /// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+    /// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+    /// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+    /// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+    /// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+    /// #             "PreviousTxnLgrSeq": 10424064}}
+    /// #     ]
+    /// # }))?;
+    /// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+    /// // paymentXrpCreateAccount fixture): one CreatedNode, one ModifiedNode.
+    /// // The AccountRoot the payment created has the new account's ID.
+    /// let created = &meta.affected_nodes[0];
+    /// assert_eq!(*created.ledger_index(), keylet::account("rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K")?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn ledger_index(&self) -> &Hash256 {
         match self {
             AffectedNode::CreatedNode(n) => &n.ledger_index,
@@ -162,6 +268,32 @@ impl AffectedNode {
     }
 
     /// A created entry's fields (`NewFields`).
+    ///
+    /// ```
+    /// use xrpl_core::transaction::metadata::TransactionMetadata;
+    ///
+    /// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+    /// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+    /// #     "AffectedNodes": [
+    /// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+    /// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+    /// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+    /// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+    /// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+    /// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+    /// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+    /// #             "PreviousTxnLgrSeq": 10424064}}
+    /// #     ]
+    /// # }))?;
+    /// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+    /// // paymentXrpCreateAccount fixture): one CreatedNode, one ModifiedNode.
+    /// let created = meta.affected_nodes[0].new_fields().unwrap();
+    /// assert_eq!(created["Balance"], "100000000");
+    /// assert!(meta.affected_nodes[1].new_fields().is_none()); // changed, not created
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn new_fields(&self) -> Option<&Map<String, Value>> {
         match self {
             AffectedNode::CreatedNode(n) => n.new_fields.as_ref(),
@@ -171,6 +303,32 @@ impl AffectedNode {
 
     /// A changed or deleted entry's fields after the transaction
     /// (`FinalFields`).
+    ///
+    /// ```
+    /// use xrpl_core::transaction::metadata::TransactionMetadata;
+    ///
+    /// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+    /// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+    /// #     "AffectedNodes": [
+    /// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+    /// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+    /// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+    /// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+    /// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+    /// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+    /// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+    /// #             "PreviousTxnLgrSeq": 10424064}}
+    /// #     ]
+    /// # }))?;
+    /// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+    /// // paymentXrpCreateAccount fixture): one CreatedNode, one ModifiedNode.
+    /// let after = meta.affected_nodes[1].final_fields().unwrap();
+    /// assert_eq!(after["Balance"], "339903994");
+    /// assert!(meta.affected_nodes[0].final_fields().is_none()); // created
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn final_fields(&self) -> Option<&Map<String, Value>> {
         match self {
             AffectedNode::ModifiedNode(n) => n.final_fields.as_ref(),
@@ -181,6 +339,33 @@ impl AffectedNode {
 
     /// The values the transaction changed, as they were before
     /// (`PreviousFields`).
+    ///
+    /// ```
+    /// use xrpl_core::transaction::metadata::TransactionMetadata;
+    ///
+    /// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+    /// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+    /// #     "AffectedNodes": [
+    /// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+    /// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+    /// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+    /// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+    /// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+    /// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+    /// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+    /// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+    /// #             "PreviousTxnLgrSeq": 10424064}}
+    /// #     ]
+    /// # }))?;
+    /// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+    /// // paymentXrpCreateAccount fixture): one CreatedNode, one ModifiedNode.
+    /// let before = meta.affected_nodes[1].previous_fields().unwrap();
+    /// // 100.012 XRP more than after: the 100 XRP sent and the 0.012 XRP fee.
+    /// assert_eq!(before["Balance"], "439915994");
+    /// assert!(!before.contains_key("Account")); // only what changed
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn previous_fields(&self) -> Option<&Map<String, Value>> {
         match self {
             AffectedNode::ModifiedNode(n) => n.previous_fields.as_ref(),
@@ -191,6 +376,21 @@ impl AffectedNode {
 }
 
 /// An entry a transaction created.
+///
+/// ```
+/// use xrpl_core::transaction::metadata::AffectedNode;
+///
+/// // The account a Payment created (xrpl.js's paymentXrpCreateAccount fixture).
+/// let node: AffectedNode = serde_json::from_value(serde_json::json!({"CreatedNode": {
+///     "LedgerEntryType": "AccountRoot",
+///     "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+///     "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}
+/// }}))?;
+/// let AffectedNode::CreatedNode(created) = node else { panic!("not created") };
+/// assert_eq!(created.ledger_entry_type, "AccountRoot");
+/// assert_eq!(created.new_fields.unwrap()["Balance"], "100000000");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CreatedNode {
@@ -207,6 +407,33 @@ pub struct CreatedNode {
 }
 
 /// An entry a transaction changed.
+///
+/// ```
+/// use xrpl_core::transaction::metadata::{AffectedNode, TransactionMetadata};
+///
+/// # let meta: TransactionMetadata = serde_json::from_value(serde_json::json!({
+/// #     "TransactionResult": "tesSUCCESS", "TransactionIndex": 3,
+/// #     "AffectedNodes": [
+/// #         {"CreatedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "C24354B286600B8F28E51233B4AC41A3B4DDD0FDC9BCF96BB171573F6B40A4AE",
+/// #             "NewFields": {"Account": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K", "Balance": "100000000", "Sequence": 1}}},
+/// #         {"ModifiedNode": {"LedgerEntryType": "AccountRoot",
+/// #             "LedgerIndex": "E9A39B0BA8703D5FFD05D9EAD01EE6C0E7A15CF33C2C6B7269107BD2BD535818",
+/// #             "FinalFields": {"Account": "rKmBGxocj9Abgy25J51Mk1iqFzW9aVF9Tc", "Balance": "339903994",
+/// #                 "Flags": 0, "OwnerCount": 0, "Sequence": 9},
+/// #             "PreviousFields": {"Balance": "439915994", "Sequence": 8},
+/// #             "PreviousTxnID": "0E6CF1A13C6A804BE50B08C1D0446C7405D8461254CC6B62337CA9FEA4DF13EC",
+/// #             "PreviousTxnLgrSeq": 10424064}}
+/// #     ]
+/// # }))?;
+/// // `meta`: a Payment that created an account with 100 XRP (xrpl.js's
+/// // paymentXrpCreateAccount fixture); the sender's AccountRoot changed.
+/// let AffectedNode::ModifiedNode(sender) = &meta.affected_nodes[1] else { panic!("not modified") };
+/// assert_eq!(sender.previous_txn_lgr_seq, Some(10424064));
+/// let before = sender.previous_fields.as_ref().unwrap();
+/// assert_eq!(before["Sequence"], 8);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ModifiedNode {
@@ -248,6 +475,22 @@ pub struct ModifiedNode {
 }
 
 /// An entry a transaction deleted.
+///
+/// ```
+/// use xrpl_core::transaction::metadata::AffectedNode;
+///
+/// // An owner directory a TrustSet deleted (xrpl.js's trustlineDelete fixture).
+/// let node: AffectedNode = serde_json::from_value(serde_json::json!({"DeletedNode": {
+///     "LedgerEntryType": "DirectoryNode",
+///     "LedgerIndex": "84C8F98961F2F10CB1B5C4FB649C18B05A9D3FC20C3A78B75C86CD30D7EAC39C",
+///     "FinalFields": {"Flags": 0, "Owner": "rLDYrujdKUfVx28T9vRDAbyJ7G2WVXKo4K",
+///         "RootIndex": "84C8F98961F2F10CB1B5C4FB649C18B05A9D3FC20C3A78B75C86CD30D7EAC39C"}
+/// }}))?;
+/// let AffectedNode::DeletedNode(deleted) = node else { panic!("not deleted") };
+/// assert_eq!(deleted.ledger_entry_type, "DirectoryNode");
+/// assert!(deleted.previous_fields.is_none());
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DeletedNode {

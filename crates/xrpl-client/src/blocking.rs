@@ -38,6 +38,25 @@ use serde_json::Value;
 use std::future::Future;
 
 /// A [`Client`] that blocks: each method waits for the server's answer.
+///
+/// ```
+/// # use serde_json::{json, Value};
+/// # use xrpl_client::{Transport, TransportFuture};
+/// # struct Canned(Value);
+/// # impl Transport for Canned {
+/// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+/// #         let answer = self.0.clone();
+/// #         Box::pin(async move { Ok(answer) })
+/// #     }
+/// # }
+/// use xrpl_client::blocking::BlockingClient;
+///
+/// // Any transport: here one that answers every request with the same fees.
+/// let fees = json!({"drops": {"base_fee": "10", "median_fee": "5000", "minimum_fee": "10", "open_ledger_fee": "12"}});
+/// let client = BlockingClient::with_client(Canned(fees))?;
+/// assert_eq!(client.fee()?.drops.open_ledger_fee, "12");
+/// # Ok::<(), xrpl_client::ClientError>(())
+/// ```
 pub struct BlockingClient<C: Client = XrplHttpClient> {
     inner: C,
     runtime: tokio::runtime::Runtime,
@@ -54,6 +73,17 @@ impl<C: Client + std::fmt::Debug> std::fmt::Debug for BlockingClient<C> {
 impl BlockingClient<XrplHttpClient> {
     /// A blocking JSON-RPC client for the server at `url`.
     ///
+    /// ```
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::client::DEFAULT_MAX_FEE_DROPS;
+    /// use xrpl_client::Transport;
+    ///
+    /// // Nothing is sent until the first call.
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// assert_eq!(client.inner().max_fee_drops(), DEFAULT_MAX_FEE_DROPS);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::Transport`] (`Setup`) if the HTTP stack or the runtime
@@ -69,7 +99,7 @@ impl<C: Client> BlockingClient<C> {
     ///
     /// # Errors
     ///
-    /// [`ClientError::UnexpectedResponse`] if the runtime cannot start.
+    /// [`ClientError::Transport`] (`Setup`) if the runtime cannot start.
     pub fn with_client(inner: C) -> Result<Self, ClientError> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -84,12 +114,43 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// The async client underneath.
+    ///
+    /// ```
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::{Transport, XrplHttpClient};
+    ///
+    /// let http = XrplHttpClient::new("https://s.altnet.rippletest.net:51234")?.with_max_fee_drops(100_000);
+    /// let client = BlockingClient::with_client(http)?;
+    /// assert_eq!(client.inner().max_fee_drops(), 100_000);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     pub fn inner(&self) -> &C {
         &self.inner
     }
 
     /// Run any async method of the client to completion:
     /// `client.run(|c| c.account_lines_all(addr, ledger))`.
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Canned(Value);
+    /// # impl Transport for Canned {
+    /// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = self.0.clone();
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    /// use xrpl_client::Client;
+    ///
+    /// // A transport whose every answer is a last page with no trust lines.
+    /// let client = BlockingClient::with_client(Canned(json!({"lines": []})))?;
+    /// let lines = client.run(|c| c.account_lines_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated))?;
+    /// assert!(lines.is_empty());
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     ///
     /// # Panics
     ///
@@ -101,6 +162,25 @@ impl<C: Client> BlockingClient<C> {
 
     /// Run any future to completion on this client's runtime (for example a
     /// `faucet` call).
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Canned(Value);
+    /// # impl Transport for Canned {
+    /// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = self.0.clone();
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::Client;
+    ///
+    /// // Any future, such as a faucet call; here the async client's own.
+    /// let client = BlockingClient::with_client(Canned(json!({"ledger_current_index": 7})))?;
+    /// assert_eq!(client.block_on(client.inner().ledger_current())?, 7);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
     ///
     /// # Panics
     ///
@@ -123,6 +203,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::request`]: any typed request.
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::requests::LedgerClosedRequest;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let closed = client.request(&LedgerClosedRequest::new())?;
+    /// println!("ledger {} ({}) closed", closed.ledger_index, closed.ledger_hash);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -135,6 +227,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::request_all`]: every page of a paginated request.
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::requests::AccountObjectsRequest;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let objects = client.request_all(AccountObjectsRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"))?;
+    /// println!("{} ledger entries", objects.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -150,6 +254,24 @@ impl<C: Client> BlockingClient<C> {
     /// [`Client::pages`]: the pages of a paginated request one at a time, as
     /// an iterator, with no page limit. Inside an async runtime it yields
     /// one [`ClientError::InsideAsyncRuntime`] and ends.
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::requests::AccountTxRequest;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// // The newest 1,000 or so transactions, page by page.
+    /// let mut seen = 0;
+    /// for page in client.pages(AccountTxRequest::new("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")) {
+    ///     seen += page?.len();
+    ///     if seen >= 1_000 {
+    ///         break;
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn pages<'a, R: Paginated + 'a>(
         &'a self,
         req: R,
@@ -170,6 +292,17 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::raw_request`]: any method, JSON in and out.
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let closed = client.raw_request("ledger_closed", serde_json::json!({}))?;
+    /// println!("ledger {} closed", closed["ledger_index"]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -181,6 +314,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_info`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let info = client.account_info("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?;
+    /// println!("{}, next sequence {}", info.account_data.balance, info.account_data.sequence);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -198,6 +343,19 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_lines`] (one page).
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// for line in client.account_lines("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?.lines {
+    ///     println!("{} {} with {}", line.balance, line.currency, line.account);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -214,6 +372,16 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::fee`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// println!("open ledger fee: {} drops", client.fee()?.drops.open_ledger_fee);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -225,6 +393,24 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::ledger_current`].
     ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::{Transport, TransportFuture};
+    /// # struct Canned(Value);
+    /// # impl Transport for Canned {
+    /// #     fn send_raw<'a>(&'a self, _: &'a str, _: Value) -> TransportFuture<'a> {
+    /// #         let answer = self.0.clone();
+    /// #         Box::pin(async move { Ok(answer) })
+    /// #     }
+    /// # }
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// // A transport that answers as a server whose open ledger is 7.
+    /// let client = BlockingClient::with_client(Canned(json!({"ledger_current_index": 7})))?;
+    /// assert_eq!(client.ledger_current()?, 7);
+    /// # Ok::<(), xrpl_client::ClientError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -235,6 +421,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::ledger`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let ledger = client.ledger(LedgerIndex::Validated)?;
+    /// println!("ledger {:?}: {:?}", ledger.ledger_index, ledger.ledger_hash);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -248,6 +446,17 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::server_info`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let info = client.server_info()?.info;
+    /// println!("{:?} on network {:?}", info.build_version, info.network_id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -258,6 +467,17 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::tx`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let tx = client.tx("E17E9EB903392000BC727251524391893D147E280B64F02EE0B5B9CFE7968CDA")?;
+    /// println!("{:?} in ledger {:?}", tx.transaction_result(), tx.ledger_index);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -271,6 +491,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::autofill`]: `Sequence`, `Fee`, `LastLedgerSequence` (and a
     /// `Batch`'s inner transactions).
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let mut tx = serde_json::json!({"TransactionType": "AccountSet", "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD"});
+    /// client.autofill(&mut tx)?;
+    /// println!("Sequence {}, Fee {}, LastLedgerSequence {}", tx["Sequence"], tx["Fee"], tx["LastLedgerSequence"]);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -287,6 +519,19 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::autofill_for_multisigning`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// // For two signers: the fee is three times the open-ledger fee.
+    /// let mut tx = serde_json::json!({"TransactionType": "AccountSet", "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"});
+    /// client.autofill_for_multisigning(&mut tx, 2)?;
+    /// assert_eq!(tx["SigningPubKey"], "");
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// As [`BlockingClient::autofill`].
@@ -300,6 +545,19 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::autofill_batch`]: the inner-transaction part of
     /// [`BlockingClient::autofill`] for a `Batch`.
+    ///
+    /// ```no_run
+    /// # fn run(mut batch: serde_json::Value) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// // `batch`: a Batch with its Sequence and RawTransactions; price it at the
+    /// // open-ledger fee, for no multi-signers of its own.
+    /// let open_ledger_fee = client.fee()?.drops.open_ledger_fee.parse().ok();
+    /// client.autofill_batch(&mut batch, "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD", open_ledger_fee, 0)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -323,6 +581,18 @@ impl<C: Client> BlockingClient<C> {
     /// [`Client::verified_ledger`]: a ledger with its transactions, checked
     /// against its hash.
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let ledger = client.verified_ledger(LedgerIndex::Validated)?;
+    /// println!("ledger {} ({}): {} transactions", ledger.header.ledger_index, ledger.hash, ledger.transactions.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -338,6 +608,16 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::validated_ledger_index`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// println!("ledger {} is validated", client.validated_ledger_index()?);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -350,6 +630,22 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::simulate`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let payment = serde_json::json!({
+    ///     "TransactionType": "Payment",
+    ///     "Account": "rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD",
+    ///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    ///     "Amount": "1000000",
+    /// });
+    /// println!("{}", client.simulate(&payment)?.engine_result);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -361,6 +657,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::submit`]: a signed blob, once.
+    ///
+    /// ```no_run
+    /// # fn run(tx_blob: &str) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// // `tx_blob`: a signed transaction, in hex.
+    /// let preliminary = client.submit(tx_blob)?;
+    /// println!("sent {:?}; not final until a validated ledger holds it", preliminary.hash());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -375,6 +683,17 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::submit_multisigned`].
     ///
+    /// ```no_run
+    /// # fn run(tx_json: serde_json::Value) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// // `tx_json`: the transaction with its `Signers` and an empty `SigningPubKey`.
+    /// println!("sent {:?}", client.submit_multisigned(&tx_json)?.hash());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// As [`BlockingClient::submit`].
@@ -383,6 +702,23 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::submit_and_wait`]: submit, then wait for the final outcome.
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_core::crypto::{sign_transaction, Keypair, Seed};
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let keys = Keypair::from_seed(&Seed::from_base58("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?)?;
+    /// let mut tx = serde_json::json!({"TransactionType": "Payment", "Account": keys.classic_address(),
+    ///     "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "1000000"});
+    /// client.autofill(&mut tx)?;
+    /// let blob = xrpl_core::codec::encode_transaction_json(&sign_transaction(&tx, &keys)?)?;
+    /// let result = client.submit_and_wait(&hex::encode_upper(blob))?;
+    /// println!("validated in ledger {:?}", result.ledger_index);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -401,6 +737,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_channels`] (one page).
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let page = client.account_channels("rLUEXYuLiQptky37CqLcm9USQpPiz5rkpD", None, LedgerIndex::Validated)?;
+    /// println!("{} channels", page.channels.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -418,6 +766,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_currencies`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let currencies = client.account_currencies("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?;
+    /// println!("receives {:?}", currencies.receive_currencies);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -433,6 +793,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_lines_all`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let lines = client.account_lines_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?;
+    /// println!("{} trust lines", lines.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -452,6 +824,19 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_nfts`] (one page).
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// for nft in client.account_nfts("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?.account_nfts {
+    ///     println!("{}", nft.nf_token_id);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -467,6 +852,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_nfts_all`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let nfts = client.account_nfts_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?;
+    /// println!("{} NFTs", nfts.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -485,6 +882,20 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_objects`] (one page).
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// // The first page of the account's escrows.
+    /// let account = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+    /// let page = client.account_objects(account, Some("escrow"), LedgerIndex::Validated, None, None)?;
+    /// println!("{} escrows", page.account_objects.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -505,6 +916,19 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_objects_all`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let account = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+    /// let checks = client.account_objects_all(account, Some("check"), LedgerIndex::Validated)?;
+    /// println!("{} checks", checks.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -524,6 +948,19 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_offers`] (one page).
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// for offer in client.account_offers("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?.offers {
+    ///     println!("#{}: {:?} for {:?}", offer.seq, offer.taker_gets, offer.taker_pays);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -539,6 +976,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_offers_all`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let offers = client.account_offers_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)?;
+    /// println!("{} open offers", offers.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -558,6 +1007,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::account_tx`] (one page).
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// for tx in client.account_tx("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?.transactions {
+    ///     println!("{:?}: {:?}", tx.hash(), tx.transaction_result());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -568,6 +1029,17 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::account_tx_all`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let history = client.account_tx_all("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// println!("{} transactions", history.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -581,6 +1053,19 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::amm_info`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// let pool = client.amm_info(&Asset::xrp(), &usd)?.amm;
+    /// println!("{:?} and {:?}", pool.amount, pool.amount2);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -597,6 +1082,19 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::balances`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// for amount in client.balances("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", LedgerIndex::Validated)? {
+    ///     println!("{amount}");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -615,6 +1113,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::book_offers`] (one page).
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// println!("{} offers", client.book_offers(&Asset::xrp(), &usd)?.offers.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -629,6 +1139,19 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::order_book`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let usd = Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// let book = client.order_book(&Asset::xrp(), &usd, 10)?;
+    /// println!("bid {:?}, ask {:?}", book.best_bid(), book.best_ask());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -645,6 +1168,18 @@ impl<C: Client> BlockingClient<C> {
 
     /// [`Client::gateway_balances`].
     ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let balances = client.gateway_balances("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", None, LedgerIndex::Validated)?;
+    /// println!("{:?}", balances.obligations);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
@@ -660,6 +1195,18 @@ impl<C: Client> BlockingClient<C> {
     }
 
     /// [`Client::ledger_entry`].
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_client::types::LedgerIndex;
+    ///
+    /// let client = BlockingClient::new("https://s.altnet.rippletest.net:51234")?;
+    /// let id = xrpl_core::hashes::keylet::account("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// println!("{:?}", client.ledger_entry(&id.to_string(), LedgerIndex::Validated)?.node);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///

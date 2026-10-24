@@ -5,6 +5,21 @@ use alloc::{boxed::Box, string::String};
 
 /// Everything a core function can fail with. New variants may be added
 /// in minor releases (`#[non_exhaustive]`): match with a `_` arm.
+///
+/// ```
+/// use xrpl_core::address::decode_account_id;
+/// use xrpl_core::CoreError;
+///
+/// // The last character mistyped.
+/// match decode_account_id("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTx") {
+///     Err(CoreError::InvalidChecksum { .. }) => {}
+///     Err(other) => panic!("another error: {other}"),
+///     Ok(_) => panic!("a typo was accepted"),
+/// }
+/// let err = decode_account_id("0OIl").unwrap_err();
+/// assert!(matches!(err, CoreError::InvalidBase58(_)));
+/// assert!(err.to_string().starts_with("invalid base58"));
+/// ```
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum CoreError {

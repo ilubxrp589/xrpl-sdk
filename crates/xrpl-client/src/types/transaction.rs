@@ -11,6 +11,22 @@ use xrpl_core::CoreError;
 /// and [`submit_multisigned`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/submit_multisigned):
 /// the preliminary result of applying the transaction to the open ledger.
 /// Only a validated ledger makes a result final.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::SubmitResult;
+///
+/// let submitted: SubmitResult = serde_json::from_value(json!({
+///     "engine_result": "tesSUCCESS", "engine_result_code": 0,
+///     "engine_result_message": "The transaction was applied. Only final in a validated ledger.",
+///     "accepted": true, "applied": true, "broadcast": true, "queued": false,
+///     "open_ledger_cost": "10", "validated_ledger_index": 21768525
+/// }))?;
+/// // Applied to the open ledger: not final until a validated ledger holds it.
+/// assert_eq!(submitted.engine_result, "tesSUCCESS");
+/// assert_eq!(submitted.applied, Some(true));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SubmitResult {
@@ -69,6 +85,25 @@ pub struct SubmitResult {
 /// The transaction stays JSON (`tx_json`), so a field or type from a newer
 /// `rippled` never stops an answer from being read; [`TxResult::transaction`]
 /// gives it typed.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::TxResult;
+///
+/// let tx: TxResult = serde_json::from_value(json!({
+///     "tx_json": {
+///         "TransactionType": "OfferCreate", "Account": "rMsXVzCug7nUsMYFGPXBTWY732fRZqxgfY"
+///     },
+///     "hash": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F",
+///     "ctid": "C66D60E0000B0000",
+///     "ledger_index": 107831520, "close_time_iso": "2026-10-22T17:11:41Z", "validated": true,
+///     "meta": {"AffectedNodes": [], "TransactionIndex": 11, "TransactionResult": "tesSUCCESS"}
+/// }))?;
+/// assert_eq!(tx.transaction_result(), Some("tesSUCCESS"));
+/// assert_eq!(tx.validated, Some(true)); // final
+/// assert_eq!(tx.tx_json.unwrap()["TransactionType"], "OfferCreate");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct TxResult {
@@ -106,11 +141,47 @@ pub struct TxResult {
 
 impl TxResult {
     /// The transaction's ID.
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::TxResult;
+    ///
+    /// let tx: TxResult = serde_json::from_value(json!({
+    ///     "hash": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F",
+    ///     "ctid": "C66D60E0000B0000",
+    ///     "ledger_index": 107831520, "close_time_iso": "2026-10-22T17:11:41Z", "validated": true,
+    ///     "meta": {"AffectedNodes": [], "TransactionIndex": 11, "TransactionResult": "tesSUCCESS"}
+    /// }))?;
+    /// assert_eq!(
+    ///     tx.hash(),
+    ///     Some("01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F"),
+    /// );
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn hash(&self) -> Option<&str> {
         self.hash.as_deref()
     }
 
     /// The final engine result, from the metadata (`tesSUCCESS`, `tec…`).
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::TxResult;
+    ///
+    /// let tx: TxResult = serde_json::from_value(json!({
+    ///     "hash": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F",
+    ///     "ctid": "C66D60E0000B0000",
+    ///     "ledger_index": 107831520, "close_time_iso": "2026-10-22T17:11:41Z", "validated": true,
+    ///     "meta": {"AffectedNodes": [], "TransactionIndex": 11, "TransactionResult": "tesSUCCESS"}
+    /// }))?;
+    /// assert_eq!(tx.transaction_result(), Some("tesSUCCESS"));
+    /// // No metadata (not in a ledger yet, or a binary answer): no result.
+    /// let pending: TxResult = serde_json::from_value(json!({
+    ///     "hash": "01A21E4D21563C67D8FB19F5E3B07096D8338011E6B79A3B2E97EF2F2C49371F"
+    /// }))?;
+    /// assert_eq!(pending.transaction_result(), None);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn transaction_result(&self) -> Option<&str> {
         Some(self.meta.as_ref()?.transaction_result.as_str())
     }
@@ -118,6 +189,21 @@ impl TxResult {
     /// What the transaction delivered (`delivered_amount`): check this, not
     /// a Payment's `Amount`, which a partial payment does not reach. See
     /// `xrpl_core::utils::delivered_amount`.
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::TxResult;
+    /// use xrpl_core::types::Amount;
+    ///
+    /// // A partial payment: up to 6.87161 XRP, of which 3.435805 arrived.
+    /// let tx: TxResult = serde_json::from_value(json!({
+    ///     "tx_json": {"TransactionType": "Payment", "DeliverMax": "6871610", "Flags": 131072},
+    ///     "meta": {"AffectedNodes": [], "TransactionIndex": 0, "TransactionResult": "tesSUCCESS",
+    ///         "DeliveredAmount": "3435805", "delivered_amount": "3435805"}
+    /// }))?;
+    /// assert_eq!(tx.delivered_amount(), Some(Amount::Xrp(3_435_805)));
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn delivered_amount(&self) -> Option<xrpl_core::types::Amount> {
         xrpl_core::utils::delivered_amount(self.meta.as_ref()?)
     }
@@ -125,6 +211,27 @@ impl TxResult {
     /// The transaction, typed ([`Tx`]), from `tx_json`. A Payment's
     /// `DeliverMax` (API version 2's name for its `Amount`) is read as its
     /// amount.
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::TxResult;
+    /// use xrpl_core::transaction::models::Tx;
+    /// use xrpl_core::types::Amount;
+    ///
+    /// let answer: TxResult = serde_json::from_value(json!({
+    ///     "hash": "D081D150B4132DE0C907ECF90DA9087EFC3F2D95EAB3D42ED59910B67BAD7D51",
+    ///     "tx_json": {
+    ///         "TransactionType": "Payment", "Account": "rUuF7Y6ENRCKCK9uiV5W8DNV4cPhDGkbmc",
+    ///         "Destination": "rPzCAtF7ujdg4ME5Hcozum9d2MzE9rSrng", "DestinationTag": 702456,
+    ///         "DeliverMax": "480000000", "Fee": "10", "Sequence": 105033442
+    ///     },
+    ///     "ledger_index": 107831520, "validated": true
+    /// }))?;
+    /// let Tx::Payment(payment) = answer.transaction()? else { panic!("not a Payment") };
+    /// assert_eq!(payment.amount, Amount::Xrp(480_000_000)); // from `DeliverMax`
+    /// assert_eq!(payment.destination_tag, Some(702456));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -154,6 +261,23 @@ impl SubmitResult {
     /// `tx_json` for `submit`, beside it for `submit_multisigned`). The ID
     /// can also be computed before submitting
     /// (`xrpl_core::hashes::hash_signed_tx_blob`).
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::types::SubmitResult;
+    /// # let answer = |fields: Value| -> serde_json::Result<SubmitResult> {
+    /// #     let mut v = json!({"engine_result": "tesSUCCESS", "engine_result_code": 0,
+    /// #         "engine_result_message": "The transaction was applied. Only final in a validated ledger."});
+    /// #     v.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
+    /// #     serde_json::from_value(v)
+    /// # };
+    /// // `answer(…)`: a `tesSUCCESS` answer with these fields.
+    /// let id = "14AF7EE2124F1C5177130EDE299CF841CEEA7164C7A9FE263922A2BB03DFF3E4";
+    /// // `submit` writes the hash in `tx_json`, `submit_multisigned` beside it.
+    /// assert_eq!(answer(json!({"tx_json": {"hash": id}}))?.hash(), Some(id));
+    /// assert_eq!(answer(json!({"hash": id, "tx_json": {}}))?.hash(), Some(id));
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn hash(&self) -> Option<&str> {
         self.hash
             .as_deref()
@@ -164,6 +288,24 @@ impl SubmitResult {
 /// [`simulate`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/simulate):
 /// what a transaction would do in the current open ledger, without
 /// submitting it (rippled 2.4+). Nothing is signed or sent to the network.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::SimulateResult;
+///
+/// let simulated: SimulateResult = serde_json::from_value(json!({
+///     "applied": false, "engine_result": "tesSUCCESS", "engine_result_code": 0,
+///     "engine_result_message": "The simulated transaction would have been applied.",
+///     "ledger_index": 107856072,
+///     "meta": {
+///         "AffectedNodes": [], "TransactionIndex": 223, "TransactionResult": "tesSUCCESS",
+///         "delivered_amount": "1"
+///     }
+/// }))?;
+/// assert_eq!(simulated.engine_result, "tesSUCCESS");
+/// assert!(!simulated.applied); // nothing was submitted
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SimulateResult {

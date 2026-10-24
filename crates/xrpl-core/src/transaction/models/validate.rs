@@ -313,6 +313,56 @@ pub(super) fn nf_token_accept_offer(tx: &NFTokenAcceptOffer) -> Result<(), CoreE
     Ok(())
 }
 
+/// `Batch` (`Batch::preflight`, and `STTx`, which refuses more than eight
+/// inner transactions when it reads one): exactly one mode
+/// (`ALL_OR_NOTHING`, `ONLY_ONE`, `UNTIL_FAILURE` or `INDEPENDENT`:
+/// `temINVALID_FLAG`); 2 to 8 inner transactions (`temARRAY_EMPTY`), none of
+/// them a Batch (`temINVALID_INNER_BATCH`), none with both a `Sequence` and
+/// a `TicketSequence` (`temSEQ_AND_TICKET`), each passing its own checks.
+/// What autofill fills in (an inner transaction's sequence, zero fee, empty
+/// signing key and `tfInnerBatchTxn` flag) is not checked here, since
+/// `sign_and_submit` checks a transaction before it fills it in.
+pub(super) fn batch(tx: &Batch) -> Result<(), CoreError> {
+    use crate::transaction::batch::{MAX_INNER_TRANSACTIONS, MIN_INNER_TRANSACTIONS};
+    let modes = BatchFlags::ALL_OR_NOTHING
+        | BatchFlags::ONLY_ONE
+        | BatchFlags::UNTIL_FAILURE
+        | BatchFlags::INDEPENDENT;
+    if (tx.flags().bits() & modes.bits()).count_ones() != 1 {
+        return Err(invalid(
+            "Batch",
+            "exactly one mode flag (ALL_OR_NOTHING, ONLY_ONE, UNTIL_FAILURE or INDEPENDENT)",
+        ));
+    }
+    let count = tx.raw_transactions.len();
+    if !(MIN_INNER_TRANSACTIONS..=MAX_INNER_TRANSACTIONS).contains(&count) {
+        return Err(invalid(
+            "Batch",
+            format!(
+                "holds {MIN_INNER_TRANSACTIONS} to {MAX_INNER_TRANSACTIONS} inner transactions, not {count}"
+            ),
+        ));
+    }
+    for inner in &tx.raw_transactions {
+        if matches!(inner, Tx::Batch(_)) {
+            return Err(invalid("Batch", "an inner transaction cannot be a Batch"));
+        }
+        if let Some(common) = inner.common() {
+            if common.ticket_sequence.is_some() && common.sequence.is_some_and(|s| s != 0) {
+                return Err(invalid(
+                    "Batch",
+                    format!(
+                        "an inner {} has both a Sequence and a TicketSequence",
+                        inner.transaction_type()
+                    ),
+                ));
+            }
+        }
+        inner.validate()?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
@@ -544,5 +594,51 @@ mod tests {
         assert!(Tx::Other(serde_json::json!({"TransactionType": "Future"}))
             .validate()
             .is_ok());
+    }
+
+    #[test]
+    fn batch() {
+        let pay = |from: &str, to: &str| -> Tx {
+            Payment::new(from, to, Amount::xrp(1_000_000).unwrap()).into()
+        };
+        let batch = |inner: Vec<Tx>| Batch::new(A, inner).with_flags(BatchFlags::ALL_OR_NOTHING);
+        // Before autofill: no inner sequence, fee or flag yet, and that is fine.
+        batch(vec![pay(A, B), pay(B, A)]).validate().unwrap();
+        batch(vec![pay(A, B); 8]).validate().unwrap();
+        refused(
+            batch(vec![pay(A, B)]).validate(),
+            "2 to 8 inner transactions, not 1",
+        );
+        refused(batch(vec![pay(A, B); 9]).validate(), "not 9");
+        refused(
+            Batch::new(A, vec![pay(A, B), pay(B, A)]).validate(),
+            "exactly one mode flag",
+        );
+        refused(
+            Batch::new(A, vec![pay(A, B), pay(B, A)])
+                .with_flags(BatchFlags::ALL_OR_NOTHING | BatchFlags::INDEPENDENT)
+                .validate(),
+            "exactly one mode flag",
+        );
+        let nested: Tx = batch(vec![pay(A, B), pay(B, A)]).into();
+        refused(
+            batch(vec![pay(A, B), nested]).validate(),
+            "cannot be a Batch",
+        );
+        let both: Tx = Payment::new(B, A, Amount::xrp(1).unwrap())
+            .with_sequence(5)
+            .with_ticket_sequence(9)
+            .into();
+        // with_ticket_sequence sets Sequence 0, as a ticketed transaction has.
+        batch(vec![pay(A, B), both.clone()]).validate().unwrap();
+        let mut both = both;
+        both.common_mut().unwrap().sequence = Some(5);
+        refused(
+            batch(vec![pay(A, B), both]).validate(),
+            "both a Sequence and a TicketSequence",
+        );
+        // Each inner transaction's own checks run too.
+        let vote: Tx = AMMVote::new(A, Asset::xrp(), Asset::token("USD", B).unwrap(), 1500).into();
+        refused(batch(vec![pay(A, B), vote]).validate(), "TradingFee");
     }
 }

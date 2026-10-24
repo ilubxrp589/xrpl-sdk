@@ -47,12 +47,30 @@ pub enum Asset {
 
 impl Asset {
     /// XRP.
+    ///
+    /// ```
+    /// use xrpl_core::types::Asset;
+    ///
+    /// assert!(Asset::xrp().is_xrp());
+    /// assert_eq!(serde_json::to_value(Asset::xrp()).unwrap(), serde_json::json!({"currency": "XRP"}));
+    /// ```
     pub fn xrp() -> Self {
         Asset::Xrp
     }
 
     /// A token: `currency` as people write it (`"USD"`, `"RLUSD"`, 40 hex
     /// digits) and its issuer's address.
+    ///
+    /// ```
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let usd = Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// assert_eq!(usd.to_string(), "USD.rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe");
+    /// let rlusd = Asset::token("RLUSD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?;
+    /// assert_eq!(serde_json::to_value(&rlusd).unwrap()["currency"], "524C555344000000000000000000000000000000");
+    /// assert!(Asset::token("XRP", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe").is_err());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -75,6 +93,15 @@ impl Asset {
 
     /// An MPT, by its `MPTokenIssuanceID` (48 hex digits).
     ///
+    /// ```
+    /// use xrpl_core::types::Asset;
+    ///
+    /// let mpt = Asset::mpt("000004C463C52827307480341125DA0577DEFC38405B0E3E")?;
+    /// assert_eq!(mpt.to_string(), "MPT:000004C463C52827307480341125DA0577DEFC38405B0E3E");
+    /// assert!(mpt < Asset::xrp()); // MPTs sort first
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// [`CoreError::InvalidHex`] for anything but 48 hex digits.
@@ -85,6 +112,14 @@ impl Asset {
     }
 
     /// Whether this is XRP.
+    ///
+    /// ```
+    /// use xrpl_core::types::Asset;
+    ///
+    /// assert!(Asset::xrp().is_xrp());
+    /// assert!(!Asset::token("USD", "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")?.is_xrp());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn is_xrp(&self) -> bool {
         matches!(self, Asset::Xrp)
     }
@@ -147,6 +182,15 @@ impl core::str::FromStr for Asset {
 
 impl Amount {
     /// The amount's asset (XRP, its token or its MPT), without the value.
+    ///
+    /// ```
+    /// use xrpl_core::types::{Amount, Asset};
+    ///
+    /// let usd = Amount::token("10", "USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?;
+    /// assert_eq!(usd.asset(), Asset::token("USD", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")?);
+    /// assert_eq!(Amount::xrp(5)?.asset(), Asset::xrp());
+    /// # Ok::<(), xrpl_core::CoreError>(())
+    /// ```
     pub fn asset(&self) -> Asset {
         match self {
             Amount::Xrp(_) => Asset::Xrp,
