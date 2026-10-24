@@ -7,6 +7,14 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+## [v0.8.2] (2026-10-24)
+
+A security release: secp256k1 keys are derived and signed on RustCrypto's
+constant-time fixes for RUSTSEC-2026-0387. Signatures do not change, and
+code that builds against 0.8.1 builds against 0.8.2 (checked with
+cargo-semver-checks). `halcyon-xrpl-core` now needs Rust 1.88, like the
+other crates. Update with `cargo update`.
+
 ### Security
 - **secp256k1 runs on RustCrypto's constant-time fixes
   ([RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)).**
@@ -32,6 +40,8 @@ may break the API, and says so under "Changed (breaking)").
 - **secp256k1 is faster** with `k256` 0.14: deriving keys from a seed
   114 µs → 57.60 µs, a signature 44.44 µs → 37.52 µs, signing a transaction
   48.84 µs → 42.24 µs ([benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md)).
+- **Each crate requires 0.8.2 of the others** (it was `0.8`), so the SDK,
+  client and CLI cannot resolve to a `halcyon-xrpl-core` without the fix.
 - On `wasm32`, the `wasm` feature also turns on the JavaScript backend of
   `getrandom` 0.4, which `k256` 0.14 brings in. (The SDK does not use its
   random numbers: seeds come from the operating system as before.)
@@ -1026,7 +1036,8 @@ Initial release.
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
 
-[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.2...HEAD
+[v0.8.2]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.1...v0.8.2
 [v0.8.1]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.0...v0.8.1
 [v0.8.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...v0.7.0
