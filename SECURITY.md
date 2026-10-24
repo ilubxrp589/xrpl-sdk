@@ -77,4 +77,14 @@ This section states what the code does; each claim is covered by tests.
 
 ## Known advisories
 
-None.
+- **[RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)**
+  (`crypto-bigint`, published 2026-10-23): operations meant to be
+  constant-time could branch on secret values, depending on the compiler
+  and CPU, and leak them through timing.
+  - **Affected:** 0.8.1 and older, for secp256k1 keys. They derive keys and
+    sign with `k256` 0.13, whose scalar arithmetic is `crypto-bigint` 0.5's.
+    Ed25519 keys (the default) are not affected.
+  - **Fixed in 0.8.2,** which uses `k256` 0.14 on `crypto-bigint` 0.7.6 and
+    needs Rust 1.88. Update with `cargo update -p halcyon-xrpl-core` (the
+    crate with the fix; the others need it from 0.8.2 on). Signatures are the
+    same as before.

@@ -1236,10 +1236,10 @@ mod tests {
         assert!(secp256k1::verify(keypair.public_key(), &m2, &sig).is_err());
         // Only rippled's 33-byte compressed public keys.
         let uncompressed = {
-            use k256::elliptic_curve::sec1::ToEncodedPoint;
+            use k256::elliptic_curve::sec1::ToSec1Point;
             k256::PublicKey::from_sec1_bytes(keypair.public_key())
                 .unwrap()
-                .to_encoded_point(false)
+                .to_sec1_point(false)
                 .as_bytes()
                 .to_vec()
         };

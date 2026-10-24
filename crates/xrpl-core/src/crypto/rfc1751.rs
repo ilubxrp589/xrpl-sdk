@@ -42,7 +42,7 @@ pub fn encode(seed: &[u8; 16]) -> Zeroizing<String> {
     let mut key = Zeroizing::new(*seed);
     key.reverse();
     let mut out = Zeroizing::new(String::with_capacity(12 * 5));
-    for half in key.chunks_exact(8) {
+    for half in key.as_chunks::<8>().0 {
         let mut block = 0u64;
         for byte in half {
             block = (block << 8) | u64::from(*byte);
@@ -89,9 +89,11 @@ pub fn decode(words: &str) -> Result<Zeroizing<[u8; 16]>, CoreError> {
     }
     let mut key = Zeroizing::new([0u8; 16]);
     for ((half, chunk), out) in list
-        .chunks_exact(6)
+        .as_chunks::<6>()
+        .0
+        .iter()
         .enumerate()
-        .zip(key.chunks_exact_mut(8))
+        .zip(key.as_chunks_mut::<8>().0)
     {
         let mut bits = 0u128;
         for (n, word) in chunk.iter().enumerate() {

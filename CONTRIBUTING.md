@@ -36,10 +36,10 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 ```
 
 CI runs these on Linux, macOS and Windows, plus the minimum supported Rust
-versions (1.85 for `halcyon-xrpl-core`, 1.88 for the rest), the `no_std` and
-`wasm32` builds (with the wasm tests in Node.js), the docs as docs.rs builds
-them, `cargo package`, a SemVer check against the latest release, a security
-audit of the dependencies and a short fuzzing run of every target.
+version (1.88), the `no_std` and `wasm32` builds (with the wasm tests in
+Node.js), the docs as docs.rs builds them, `cargo package`, a SemVer check
+against the latest release, a security audit of the dependencies and a short
+fuzzing run of every target.
 
 Add a line to [CHANGELOG.md](CHANGELOG.md) under **Unreleased**: what changed
 for someone using the SDK, in plain words. A breaking change says so and

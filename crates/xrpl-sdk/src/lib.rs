@@ -504,7 +504,7 @@
 //!
 //! ## Minimum supported Rust version
 //!
-//! Rust 1.88 (1.85 for `halcyon-xrpl-core` alone), checked in CI.
+//! Rust 1.88, for every crate, checked in CI.
 //!
 //! ## Safety
 //!

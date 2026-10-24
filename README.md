@@ -5,7 +5,7 @@
 [![CI](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/ci.yml)
 [![downloads](https://img.shields.io/crates/d/halcyon-xrpl-sdk.svg)](https://crates.io/crates/halcyon-xrpl-sdk)
 [![Fuzz](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/fuzz.yml/badge.svg)](https://github.com/ilubxrp589/xrpl-sdk/actions/workflows/fuzz.yml)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85%20core%20%C2%B7%201.88-orange.svg)](#minimum-supported-rust-version)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-orange.svg)](#minimum-supported-rust-version)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
@@ -40,9 +40,11 @@ halcyon-xrpl-client = "0.8"    # HTTP + WebSocket clients
 
 ### Minimum supported Rust version
 
-`halcyon-xrpl-core` builds on Rust 1.85 or later; `halcyon-xrpl-client`, `halcyon-xrpl-sdk` and
-`halcyon-xrpl-cli` on 1.88 or later. CI checks both with the locked dependencies, and raising
-either is a minor-version change, noted in the [changelog](https://github.com/ilubxrp589/xrpl-sdk/blob/main/CHANGELOG.md).
+Every crate builds on Rust 1.88 or later, checked in CI with the locked dependencies. Raising it
+is a minor-version change, noted in the [changelog](https://github.com/ilubxrp589/xrpl-sdk/blob/main/CHANGELOG.md),
+except when a security fix needs a newer Rust: then the patch release raises it and says so.
+0.8.2 did, for `halcyon-xrpl-core` (1.85 to 1.88), to take the fixes for RUSTSEC-2026-0387. On
+an older Rust, Cargo's MSRV-aware resolver (the default from edition 2024) stays on 0.8.1.
 
 ## Quick Start
 
@@ -296,9 +298,10 @@ Measured against xrpl-rust 1.3.0 on the same real mainnet transactions, after ch
 give identical results ([docs/BENCHMARKS.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md) has the method and every number):
 
 - encoding a transaction is 8 to 25 times faster, decoding 1.6 to 11.5 times faster;
-- deriving Ed25519 keys is 5 times faster, and signing a whole transaction 1.2 to 1.7 times faster;
+- deriving keys is 5 times faster (Ed25519) and 2 times faster (secp256k1), and signing a whole
+  transaction 1.4 to 1.7 times faster;
 - decoding an address takes the same time;
-- a bare secp256k1 signature is 1.5 times slower (pure-Rust `k256`, against the C library
+- a bare secp256k1 signature is 1.3 times slower (pure-Rust `k256`, against the C library
   libsecp256k1).
 
 ## License

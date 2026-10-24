@@ -45,7 +45,7 @@ welcome as GitHub issues.
 
 - [x] Fuzzing in CI: eight targets (nine since 0.7), seeded with real XRPL data, on every pull request and weekly
 - [x] Benchmarks against xrpl-rust on the same inputs ([docs/BENCHMARKS.md](docs/BENCHMARKS.md))
-- [x] A minimum supported Rust version, checked in CI (1.85 for core, 1.88 for the rest)
+- [x] A minimum supported Rust version, checked in CI (1.88; core needed 1.85 until 0.8.2)
 - [x] A parity report: every check against `rippled` 3.4.1 ([docs/PARITY.md](docs/PARITY.md))
 - [x] The codec reads and writes exactly what `rippled` does at the edges: `Number`, amounts,
       payment paths (including MPT path steps), each probed against `rippled` itself
