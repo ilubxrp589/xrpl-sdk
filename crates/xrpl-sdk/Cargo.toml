@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-sdk"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 rust-version = "1.88"
 description = "Rust SDK for the XRP Ledger (XRPL): wallets, signing, multisign, autofill and submit, HTTP and WebSocket clients, typed ledger objects, hashes, faucet; checked against rippled"

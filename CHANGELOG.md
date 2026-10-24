@@ -7,6 +7,14 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+## [v0.8.1] (2026-10-23)
+
+An example on every public item, the bugs writing them found, and faster
+encoding. Code that builds against 0.8.0 builds against 0.8.1 (checked
+with cargo-semver-checks). One behaviour changes, to match `rippled`:
+metadata decoded from binary writes `TransactionResult` by name
+(`"tesSUCCESS"`), where 0.8.0 wrote its number (`0`).
+
 ### Fixed
 - **A `Batch` is checked before it is signed.** `Batch::validate` (run by
   `Wallet::sign` and `sign_and_submit`) now refuses what `rippled` refuses
@@ -975,7 +983,8 @@ Initial release.
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
 
-[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.1...HEAD
+[v0.8.1]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.0...v0.8.1
 [v0.8.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.5.0...v0.6.0

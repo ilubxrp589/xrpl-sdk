@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-cli"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 rust-version = "1.88"
 description = "hxrpl: the XRP Ledger from the command line — wallets, faucet, queries, signing, sending, hashes, ledger entry IDs, live streams — on halcyon-xrpl-sdk"

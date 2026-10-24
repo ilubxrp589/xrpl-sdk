@@ -1,6 +1,6 @@
 [package]
 name = "halcyon-xrpl-client"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 rust-version = "1.88"
 description = "XRP Ledger clients: one async Client trait over HTTP JSON-RPC, WebSocket (subscriptions, auto-reconnect) and browser WebSocket, with typed requests and responses"
