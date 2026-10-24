@@ -7,7 +7,8 @@ tests/fixtures/streams) from real servers, in rippled's API version 2.
 
 `responses` sends each recorded request again, with the same parameters and
 `api_version: 2`, to a mainnet rippled (the Clio-only methods to a mainnet
-Clio) and writes the answer in its place. The Testnet recordings (marked
+Clio) and writes the answer in its place, with what identifies the server
+(its host name and node key) replaced (`"scrubbed"` lists the fields). The Testnet recordings (marked
 `"network": "testnet"`) are made by the SDK's live test instead
 (`XRPL_RECORD_DIR`). Only methods that read are sent: one that submits or
 signs is refused.
@@ -41,6 +42,27 @@ def write(path, value):
     path.write_text(json.dumps(value, indent=1) + "\n")
 
 
+# What identifies the recording server (an admin connection sees the real
+# host name; the node key ties the file to one server): replaced before a
+# recording is written. The values keep their shape, so the types are still
+# checked.
+SCRUB = {"hostid": "SCRUBBED", "pubkey_node": "n9_scrubbed_node_public_key"}
+
+
+def scrub(result):
+    """Replace the identifying fields of `server_info` / `server_state`; the
+    paths replaced."""
+    done = []
+    for section in ("info", "state"):
+        body = result.get(section)
+        if isinstance(body, dict):
+            for key, value in SCRUB.items():
+                if key in body:
+                    body[key] = value
+                    done.append(f"result.{section}.{key}")
+    return done
+
+
 def responses(args):
     for path in sorted((HERE / "rippled").glob("*.json")):
         recorded = json.loads(path.read_text())
@@ -56,8 +78,12 @@ def responses(args):
         result = post(url, method, params)
         if result.get("status") != "success":
             sys.exit(f"{path.name}: {result.get('error')}: {result.get('error_message')}")
-        write(path, {"method": method, "params": params, "result": result})
-        print(f"{path.name}: recorded")
+        scrubbed = scrub(result)
+        recorded = {"method": method, "params": params}
+        if scrubbed:
+            recorded["scrubbed"] = scrubbed
+        write(path, {**recorded, "result": result})
+        print(f"{path.name}: recorded" + (f" (scrubbed {', '.join(scrubbed)})" if scrubbed else ""))
 
 
 async def snapshot(websockets, url):

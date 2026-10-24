@@ -3,6 +3,9 @@
  "params": {
   "api_version": 2
  },
+ "scrubbed": [
+  "result.state.pubkey_node"
+ ],
  "result": {
   "state": {
    "build_version": "3.4.1",
@@ -141,7 +144,7 @@
      ]
     }
    ],
-   "pubkey_node": "n9LV6NfwNuH8WYR4HZTheGFhjGbuJB7VzANuXApH7iryMp4jAh4T",
+   "pubkey_node": "n9_scrubbed_node_public_key",
    "pubkey_validator": "none",
    "server_state": "full",
    "server_state_duration_us": "115098072556",

@@ -7,6 +7,12 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Docs and project
+- The recorded `server_info` and `server_state` answers no longer carry the
+  recording server's host name and node key: they are replaced, the file
+  says which (`"scrubbed"`), and `record_fixtures.py` does it on every
+  recording.
+
 ## [v0.8.1] (2026-10-23)
 
 An example on every public item, the bugs writing them found, and faster
