@@ -10,8 +10,8 @@
 
 Community-built Rust SDK for the XRP Ledger — binary codec, async HTTP and WebSocket clients, typed transactions, automatic reconnection.
 
-[Documentation](https://docs.rs/halcyon-xrpl-sdk) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) ·
-[How it is checked](#how-it-is-checked) · [Parity with rippled](docs/PARITY.md) · [Benchmarks](docs/BENCHMARKS.md)
+[Documentation](https://docs.rs/halcyon-xrpl-sdk) · [Changelog](https://github.com/ilubxrp589/xrpl-sdk/blob/main/CHANGELOG.md) · [Roadmap](https://github.com/ilubxrp589/xrpl-sdk/blob/main/ROADMAP.md) ·
+[How it is checked](#how-it-is-checked) · [Parity with rippled](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md) · [Benchmarks](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md)
 
 ## Crates
 
@@ -42,7 +42,7 @@ halcyon-xrpl-client = "0.8"    # HTTP + WebSocket clients
 
 `halcyon-xrpl-core` builds on Rust 1.85 or later; `halcyon-xrpl-client`, `halcyon-xrpl-sdk` and
 `halcyon-xrpl-cli` on 1.88 or later. CI checks both with the locked dependencies, and raising
-either is a minor-version change, noted in the [changelog](CHANGELOG.md).
+either is a minor-version change, noted in the [changelog](https://github.com/ilubxrp589/xrpl-sdk/blob/main/CHANGELOG.md).
 
 ## Quick Start
 
@@ -91,7 +91,7 @@ let ok = verify_payment_channel_claim(&channel, 1_000_000, &signature, &public_k
 
 ## Cookbook
 
-Runnable recipes in [`crates/xrpl-sdk/examples`](crates/xrpl-sdk/examples). Each one makes its own
+Runnable recipes in [`crates/xrpl-sdk/examples`](https://github.com/ilubxrp589/xrpl-sdk/tree/main/crates/xrpl-sdk/examples). Each one makes its own
 funded Testnet wallets, so `cargo run --example <name>` works with nothing to set up. Every recipe
 below was run against Testnet (and `watch_streams` against mainnet) before release.
 
@@ -129,7 +129,7 @@ hxrpl tx hash 120000220000000024…                         # a signed blob's ID
 Testnet unless told otherwise. Before it submits anything, `hxrpl` asks the server which network
 it is on: anywhere but Testnet or Devnet needs `--yes`, whatever `--network` or `--url` say, and a
 failed transaction exits non-zero. Seeds only from `XRPL_SEED` or `--seed-file`; new ones can go to
-a file (`--seed-out`, mode 0600). See [`crates/xrpl-cli`](crates/xrpl-cli).
+a file (`--seed-out`, mode 0600). See [`crates/xrpl-cli`](https://github.com/ilubxrp589/xrpl-sdk/tree/main/crates/xrpl-cli).
 
 ### Subscribe to Ledger Closes (WebSocket)
 
@@ -205,7 +205,7 @@ fn main() -> Result<(), xrpl_core::CoreError> {
   integer too large for its field is an error (never wrapped)
 - Ed25519 + Secp256k1 key derivation & signing, checked byte for byte against rippled's `sign` / `sign_for`
   and xrpl.js's keypair fixtures; secrets wiped on drop and never shown by `Debug`
-  ([docs/CRYPTO.md](docs/CRYPTO.md))
+  ([docs/CRYPTO.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/CRYPTO.md))
 - X-addresses (XLS-5d): encode/decode, and accepted by the codec in `Account` / `Destination`
 - All XRPL primitive types with serde support; amounts typed for XRP, IOU and MPT
 - Typed ledger objects for all 31 entry types, generated from rippled's own formats
@@ -275,7 +275,7 @@ fn main() -> Result<(), xrpl_core::CoreError> {
 ## How it is checked
 
 Everything that has to match the XRP Ledger is tested against the real thing, not against
-itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and how to repeat it.
+itself. [docs/PARITY.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/PARITY.md) has every check, with its numbers and how to repeat it.
 
 | What | Checked against |
 |------|-----------------|
@@ -293,7 +293,7 @@ itself. [docs/PARITY.md](docs/PARITY.md) has every check, with its numbers and h
 ## Performance
 
 Measured against xrpl-rust 1.3.0 on the same real mainnet transactions, after checking that both
-give identical results ([docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method and every number):
+give identical results ([docs/BENCHMARKS.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/BENCHMARKS.md) has the method and every number):
 
 - encoding a transaction is 8 to 25 times faster, decoding 1.6 to 11.5 times faster;
 - deriving Ed25519 keys is 5 times faster, and signing a whole transaction 1.2 to 1.7 times faster;

@@ -145,7 +145,7 @@ goes in the CHANGELOG.
 | Features | Clippy for the client and the SDK with no features, `http` only and `ws` only |
 | Definitions | The codec's definitions are the recorded `server_definitions` answer (`check_definitions.py --offline`) |
 | Benchmarks and examples | The benchmarks and the Cloudflare Worker example (outside the workspace) build |
-| Docs | `cargo doc` with warnings as errors, on stable and as docs.rs builds it (nightly, `--cfg docsrs`) |
+| Docs | `cargo doc` with warnings as errors, on stable and as docs.rs builds it (nightly, `--cfg docsrs`); every relative link in the crates' READMEs resolves on crates.io and on GitHub (`scripts/check_readme_links.py`) |
 | Licences and sources | `cargo-deny`: every dependency's licence is allowed, crates come from crates.io |
 | Security Audit | `cargo audit` against the RustSec database |
 | Live Testnet Tests | The live test (`--cfg xrpl_live_tests`), after pushes to `main` |

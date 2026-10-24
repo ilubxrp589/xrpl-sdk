@@ -12,6 +12,12 @@ may break the API, and says so under "Changed (breaking)").
   recording server's host name and node key: they are replaced, the file
   says which (`"scrubbed"`), and `record_fixtures.py` does it on every
   recording.
+- The README's links to the changelog, roadmap, parity, benchmarks and
+  cryptography documents, the examples and the CLI work on crates.io. Core,
+  client and SDK ship the repository's README, and crates.io resolved its
+  relative links from each crate's own directory, where those files are not
+  (`crates/xrpl-core/docs/BENCHMARKS.md`). They are now absolute, and CI
+  checks every relative README link both ways (`scripts/check_readme_links.py`).
 
 ## [v0.8.1] (2026-10-23)
 
