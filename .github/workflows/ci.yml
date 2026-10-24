@@ -84,7 +84,10 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
+      # Warnings fail here too: the no_std build is only checked in this job.
       - run: ${{ matrix.check }}
+        env:
+          RUSTFLAGS: -D warnings
 
   wasm:
     name: WASM build
