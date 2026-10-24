@@ -6,6 +6,20 @@ use serde_json::Value;
 /// [`vault_info`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/vault-methods/vault_info):
 /// a single-asset vault and its share issuance (SingleAssetVault amendment).
 /// The vault is kept as JSON until mainnet data lets it be checked typed.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::VaultInfoResult;
+///
+/// let answer: VaultInfoResult = serde_json::from_value(json!({
+///     "vault": {"LedgerEntryType": "Vault", "Owner": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+///         "Asset": {"currency": "XRP"}, "Sequence": 5},
+///     "validated": true
+/// }))?;
+/// // The vault stays JSON: read its fields by their `rippled` names.
+/// assert_eq!(answer.vault["Asset"], json!({"currency": "XRP"}));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VaultInfoResult {

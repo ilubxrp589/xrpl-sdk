@@ -9,6 +9,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// One NFT as Clio describes it (`nft_info`, and each entry of `nfts_by_issuer`).
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NftInfo;
+///
+/// // One entry of `nfts_by_issuer`.
+/// let nft: NftInfo = serde_json::from_value(json!({
+///     "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E31280C5C306441428",
+///     "owner": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "is_burned": true, "flags": 0, "transfer_fee": 0, "nft_taxon": 0, "nft_serial": 105124904,
+///     "ledger_index": 105126663
+/// }))?;
+/// assert!(nft.is_burned);
+/// assert_eq!(nft.nft_serial, 105124904);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NftInfo {
@@ -38,6 +55,24 @@ pub struct NftInfo {
 
 /// [`nft_info`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nft_info):
 /// an NFT, including burned ones.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NftInfoResult;
+///
+/// let info: NftInfoResult = serde_json::from_value(json!({
+///     "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3EE0FC28306441448",
+///     "owner": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "is_burned": false, "flags": 0, "transfer_fee": 0, "nft_taxon": 20260704,
+///     "nft_serial": 105124936,
+///     "ledger_index": 107830973, "validated": true
+/// }))?;
+/// // The NFT's fields sit beside `validated`, as Clio writes them.
+/// assert!(!info.nft.is_burned);
+/// assert_eq!(info.nft.owner, info.nft.issuer);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NftInfoResult {
@@ -51,6 +86,23 @@ pub struct NftInfoResult {
 
 /// [`nft_history`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nft_history):
 /// every transaction that touched an NFT.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NftHistoryResult;
+///
+/// let history: NftHistoryResult = serde_json::from_value(json!({
+///     "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E3EE0FC28306441448",
+///     "transactions": [{
+///         "hash": "B2F50181DBCEB606C3E48AC2F58A688F1CD58DDBB0A1053F2E132CAAD475C6B0",
+///         "ledger_index": 107830973, "validated": true,
+///         "meta": {"AffectedNodes": [], "TransactionIndex": 0, "TransactionResult": "tesSUCCESS"}
+///     }],
+///     "ledger_index_min": 32570, "ledger_index_max": 107856070, "validated": true
+/// }))?;
+/// assert_eq!(history.transactions[0].ledger_index, Some(107830973));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NftHistoryResult {
@@ -77,6 +129,27 @@ pub struct NftHistoryResult {
 
 /// [`nfts_by_issuer`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/nfts_by_issuer):
 /// every NFT an account issued.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NftsByIssuerResult;
+///
+/// let page: NftsByIssuerResult = serde_json::from_value(json!({
+///     "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "nfts": [{
+///         "nft_id": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E31280C5C306441428",
+///         "owner": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///         "issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///         "is_burned": true, "flags": 0, "transfer_fee": 0, "nft_taxon": 0,
+///         "nft_serial": 105124904
+///     }],
+///     "limit": 1, "marker": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E31280C5C306441428",
+///     "ledger_index": 107856070, "validated": true
+/// }))?;
+/// assert!(page.nfts[0].is_burned);
+/// assert!(page.marker.is_some()); // more NFTs on the next page
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NftsByIssuerResult {
@@ -103,6 +176,21 @@ pub struct NftsByIssuerResult {
 
 /// [`mpt_holders`](https://xrpl.org/docs/references/http-websocket-apis/clio-methods/mpt_holders):
 /// the holders of an MPT issuance.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::MptHoldersResult;
+///
+/// let page: MptHoldersResult = serde_json::from_value(json!({
+///     "mpt_issuance_id": "014C29552B3DD7A7E525987A2FAFF91EECF53984A1FC7906",
+///     "mptokens": [{"account": "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp", "flags": 0, "mpt_amount": "0",
+///         "mptoken_index": "6FE2938199A423B96F259B803ACF1C0865CAC409395C42B482B6B2DF697E49DB"}],
+///     "limit": 50, "ledger_index": 21768549, "validated": true
+/// }))?;
+/// assert_eq!(page.mptokens[0].account, "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp");
+/// assert_eq!(page.marker, None); // the last page
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MptHoldersResult {
@@ -125,6 +213,19 @@ pub struct MptHoldersResult {
 }
 
 /// One holder's `MPToken`.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::MptHolder;
+///
+/// let holder: MptHolder = serde_json::from_value(json!({
+///     "account": "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp", "flags": 0, "mpt_amount": "0",
+///     "mptoken_index": "6FE2938199A423B96F259B803ACF1C0865CAC409395C42B482B6B2DF697E49DB"
+/// }))?;
+/// assert_eq!(holder.mpt_amount.parse::<u64>()?, 0);
+/// assert_eq!(holder.locked_amount, None);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MptHolder {

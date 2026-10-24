@@ -11,6 +11,25 @@ use xrpl_core::types::{Amount, LedgerObject};
 /// [`account_info`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_info):
 /// an account's `AccountRoot`, its flags spelled out, and (when asked for) its
 /// signer lists and queued transactions.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountInfo;
+///
+/// let info: AccountInfo = serde_json::from_value(json!({
+///     "account_data": {
+///         "Account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "Balance": "99770260",
+///         "Flags": 2174353408u32,
+///         "OwnerCount": 19, "Sequence": 89926490
+///     },
+///     "account_flags": {"depositAuth": true, "requireDestinationTag": true},
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert_eq!(info.account_data.balance_drops(), Some(99_770_260));
+/// assert!(info.account_flags.unwrap().require_destination_tag);
+/// assert_eq!(info.ledger_index, Some(107831520));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountInfo {
@@ -44,6 +63,22 @@ pub struct AccountInfo {
 /// `TransferRate`, `NFTokenMinter`, …) are in `other`, under their
 /// `rippled` names. For the whole entry typed, parse it as
 /// [`xrpl_core::types::LedgerObject`].
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountData;
+///
+/// let data: AccountData = serde_json::from_value(json!({
+///     "Account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "Balance": "99770260",
+///     "Flags": 2174353408u32,
+///     "OwnerCount": 19, "Sequence": 89926490, "LedgerEntryType": "AccountRoot",
+///     "Domain": "68747470733A2F2F726970706C652E636F6D2F"
+/// }))?;
+/// assert_eq!((data.sequence, data.owner_count), (89926490, 19));
+/// // The optional fields, under their `rippled` names.
+/// assert_eq!(data.other["Domain"], "68747470733A2F2F726970706C652E636F6D2F");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountData {
@@ -89,6 +124,19 @@ pub struct AccountData {
 impl AccountData {
     /// The XRP balance in drops (`None` only if the server sent a balance
     /// that is not XRP, which an account root never has).
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::AccountData;
+    ///
+    /// let data: AccountData = serde_json::from_value(json!({
+    ///     "Account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "Balance": "99770260",
+    ///     "Flags": 2174353408u32,
+    ///     "OwnerCount": 19, "Sequence": 89926490
+    /// }))?;
+    /// assert_eq!(data.balance_drops(), Some(99_770_260)); // 99.77026 XRP
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn balance_drops(&self) -> Option<u64> {
         match self.balance {
             xrpl_core::types::Amount::Xrp(drops) => Some(drops),
@@ -98,6 +146,19 @@ impl AccountData {
 }
 
 /// The account's flags, one boolean each, as `rippled` spells them.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountFlags;
+///
+/// let flags: AccountFlags = serde_json::from_value(json!({
+///     "defaultRipple": true, "depositAuth": true, "disallowIncomingXRP": true, "noFreeze": false
+/// }))?;
+/// assert!(flags.default_ripple && flags.deposit_auth && flags.disallow_incoming_xrp);
+/// // A flag the server leaves out reads as `false`.
+/// assert!(!flags.global_freeze);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
@@ -150,6 +211,17 @@ pub struct AccountFlags {
 }
 
 /// What the account has in the transaction queue.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::QueueData;
+///
+/// // Nothing queued: only the count.
+/// let queue: QueueData = serde_json::from_value(json!({"txn_count": 0}))?;
+/// assert_eq!(queue.txn_count, 0);
+/// assert_eq!(queue.lowest_sequence, None);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct QueueData {
@@ -174,6 +246,23 @@ pub struct QueueData {
 
 /// [`account_lines`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_lines):
 /// an account's trust lines.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountLinesResult;
+///
+/// let page: AccountLinesResult = serde_json::from_value(json!({
+///     "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+///     "lines": [{"account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "balance": "689748.581365565",
+///         "currency": "524C555344000000000000000000000000000000", "limit": "10000000000",
+///         "limit_peer": "0"}],
+///     "marker": "2DE7C6A023569FD79077E9907D39289E2A8FBC2D3D8F24C42F05B1E13F455E7D,1",
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert_eq!(page.lines[0].balance, "689748.581365565");
+/// assert!(page.marker.is_some()); // more lines on the next page
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountLinesResult {
@@ -204,6 +293,22 @@ pub struct AccountLinesResult {
 
 /// One trust line, from the requesting account's side: `balance` is positive
 /// when the peer (`account`) owes the requester.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::TrustLine;
+///
+/// let line: TrustLine = serde_json::from_value(json!({
+///     "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "balance": "689748.581365565",
+///     "currency": "524C555344000000000000000000000000000000", "limit": "10000000000",
+///     "limit_peer": "0",
+///     "no_ripple": true, "quality_in": 0, "quality_out": 0
+/// }))?;
+/// // Positive: the peer (here the token's issuer) owes the requesting account.
+/// assert!(line.balance.parse::<f64>()? > 0.0);
+/// assert_eq!(line.no_ripple, Some(true));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct TrustLine {
@@ -251,6 +356,27 @@ pub struct TrustLine {
 
 /// [`account_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_offers):
 /// an account's open DEX offers.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountOffersResult;
+///
+/// let page: AccountOffersResult = serde_json::from_value(json!({
+///     "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+///     "offers": [{"flags": 131072, "seq": 109300221, "quality": "81388.26",
+///         "taker_gets": {
+///             "currency": "BTC", "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B", "value": "0.12329"
+///         },
+///         "taker_pays": {
+///             "currency": "524C555344000000000000000000000000000000",
+///             "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "10034.3585754"
+///         }}],
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert_eq!(page.offers[0].seq, 109300221);
+/// assert_eq!(page.marker, None); // the last page
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountOffersResult {
@@ -280,6 +406,28 @@ pub struct AccountOffersResult {
 }
 
 /// One offer of `account_offers`.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountOffer;
+/// use xrpl_core::types::Amount;
+///
+/// let offer: AccountOffer =
+///     serde_json::from_value(json!({"flags": 131072, "seq": 109300221, "quality": "81388.26",
+///     "taker_gets": {
+///         "currency": "BTC", "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B", "value": "0.12329"
+///     },
+///     "taker_pays": {
+///         "currency": "524C555344000000000000000000000000000000",
+///         "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "10034.3585754"
+///     }}))?;
+/// assert_eq!(offer.seq, 109300221);
+/// assert_eq!(
+///     offer.taker_gets,
+///     Amount::token("0.12329", "BTC", "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B")?,
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountOffer {
@@ -301,6 +449,23 @@ pub struct AccountOffer {
 
 /// [`account_nfts`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_nfts):
 /// the NFTs an account holds.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountNftsResult;
+///
+/// let page: AccountNftsResult = serde_json::from_value(json!({
+///     "account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "account_nfts": [{"Flags": 0, "Issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///         "NFTokenID": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E30B759CB90644143E",
+///         "NFTokenTaxon": 20260704, "nft_serial": 105124926}],
+///     "limit": 1, "marker": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E30B759CB90644143E",
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert_eq!(page.account_nfts[0].nf_token_taxon, 20260704);
+/// assert!(page.marker.is_some()); // more NFTs on the next page
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountNftsResult {
@@ -331,6 +496,22 @@ pub struct AccountNftsResult {
 
 /// One NFT held by the account. `xrpl_core::utils::parse_nftoken_id` splits
 /// its ID into issuer, taxon, flags, fee and serial.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NFToken;
+/// use xrpl_core::utils::parse_nftoken_id;
+///
+/// let nft: NFToken =
+///     serde_json::from_value(json!({"Flags": 0, "Issuer": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe",
+///     "NFTokenID": "0000000047D6BDCD766717B67A937E83CFEF22B1760537E30B759CB90644143E",
+///     "NFTokenTaxon": 20260704, "nft_serial": 105124926}))?;
+/// // The ID holds the issuer, the taxon and the serial.
+/// let parts = parse_nftoken_id(&nft.nf_token_id)?;
+/// assert_eq!(parts.issuer, nft.issuer);
+/// assert_eq!((parts.taxon, parts.sequence), (nft.nf_token_taxon, nft.nft_serial));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NFToken {
@@ -362,6 +543,24 @@ pub struct NFToken {
 
 /// [`account_tx`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_tx)
 /// (also the shape of Clio's `nft_history`): transactions that affected an account.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountTxResult;
+///
+/// let page: AccountTxResult = serde_json::from_value(json!({
+///     "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+///     "transactions": [{
+///         "hash": "E3879013B23ED035EA7003ACE67552D7391CD3C8610446EFC3170F83259BD9AD",
+///         "ledger_index": 107856059, "validated": true,
+///         "meta": {"AffectedNodes": [], "TransactionIndex": 48, "TransactionResult": "tesSUCCESS"}
+///     }],
+///     "marker": {"ledger": 107856058, "seq": 39}, "validated": true
+/// }))?;
+/// assert_eq!(page.transactions[0].transaction_result(), Some("tesSUCCESS"));
+/// assert!(page.marker.is_some()); // older transactions on the next page
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountTxResult {
@@ -389,6 +588,35 @@ pub struct AccountTxResult {
 
 /// [`account_objects`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_objects):
 /// the ledger entries an account owns, typed.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::{AccountObjectsResult, LedgerObject};
+///
+/// # let offer = json!({
+/// #     "Account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+/// #     "BookDirectory": "DF621DB57C3AB113425E453CA295781CDA9A324848B162C8591CEA38189E6400",
+/// #     "BookNode": "0", "Flags": 131072, "LedgerEntryType": "Offer", "OwnerNode": "1",
+/// #     "PreviousTxnID": "5A12F3A0389812CAD8CF62C1FBDB7EECF1F8E547B7FD42F01A2101D89ABE4D94",
+/// #     "PreviousTxnLgrSeq": 107831509, "Sequence": 109300221,
+/// #     "TakerGets": {
+/// #         "currency": "BTC", "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B", "value": "0.12329"
+/// #     },
+/// #     "TakerPays": {
+/// #         "currency": "524C555344000000000000000000000000000000",
+/// #         "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "10034.3585754"
+/// #     },
+/// #     "index": "0DE14C9E60C9A0C2CBA219DC9812888254214F490203C9BB618CA15667C66AD8"
+/// # });
+/// // `offer`: an `Offer` entry, as `rippled` writes it.
+/// let page: AccountObjectsResult = serde_json::from_value(json!({
+///     "account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns", "account_objects": [offer],
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert_eq!(page.account_objects[0].entry_type(), "Offer");
+/// assert!(matches!(page.account_objects[0], LedgerObject::Offer(_)));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountObjectsResult {
@@ -418,6 +646,20 @@ pub struct AccountObjectsResult {
 
 /// [`account_currencies`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_currencies):
 /// currencies the account can send and receive, from its trust lines.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AccountCurrenciesResult;
+///
+/// let currencies: AccountCurrenciesResult = serde_json::from_value(json!({
+///     "receive_currencies": ["BTC", "ETH", "524C555344000000000000000000000000000000"],
+///     "send_currencies": ["BTC", "ETH", "524C555344000000000000000000000000000000"],
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// // Codes longer than three characters come as hex ("RLUSD").
+/// assert!(currencies.send_currencies.iter().any(|c| c == "524C555344000000000000000000000000000000"));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountCurrenciesResult {
@@ -441,6 +683,25 @@ pub struct AccountCurrenciesResult {
 
 /// [`account_channels`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_channels):
 /// payment channels where the account is the source.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::{AccountChannelsResult, PaymentChannel};
+///
+/// # let channel = json!({
+/// #     "account": "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W", "amount": "2000000", "balance": "500000",
+/// #     "channel_id": "0433E751D6847198DD4D8226D9EACD609D80597AF575FA05F9AAA5C8A882CDF5",
+/// #     "destination_account": "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp", "settle_delay": 60,
+/// #     "public_key_hex": "ED5392518D18161CC0501B8FD2B8AEFA959E81DB43DD5A4B4810AAEC38AD42A29B"
+/// # });
+/// // `channel`: one payment channel (see `PaymentChannel`).
+/// let page: AccountChannelsResult = serde_json::from_value(json!({
+///     "account": "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W", "channels": [channel],
+///     "ledger_index": 21768537, "validated": true
+/// }))?;
+/// assert_eq!(page.channels[0].destination_account, "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountChannelsResult {
@@ -469,6 +730,22 @@ pub struct AccountChannelsResult {
 }
 
 /// One payment channel. Amounts are XRP in drops.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::PaymentChannel;
+///
+/// let channel: PaymentChannel = serde_json::from_value(json!({
+///     "account": "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W", "amount": "2000000", "balance": "500000",
+///     "channel_id": "0433E751D6847198DD4D8226D9EACD609D80597AF575FA05F9AAA5C8A882CDF5",
+///     "destination_account": "rMAdJ2PxkGkGtmt7XbTZiMczcZ4BA1E2wp", "settle_delay": 60,
+///     "public_key_hex": "ED5392518D18161CC0501B8FD2B8AEFA959E81DB43DD5A4B4810AAEC38AD42A29B"
+/// }))?;
+/// // What is left to claim, in drops.
+/// let left = channel.amount.parse::<u64>()? - channel.balance.parse::<u64>()?;
+/// assert_eq!(left, 1_500_000);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PaymentChannel {
@@ -506,6 +783,20 @@ pub struct PaymentChannel {
 
 /// [`gateway_balances`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/gateway_balances):
 /// what an issuer owes (`obligations`, by currency) and holds.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::GatewayBalancesResult;
+///
+/// let issuer: GatewayBalancesResult = serde_json::from_value(json!({
+///     "account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+///     "obligations": {"524C555344000000000000000000000000000000": "921782606.8615378"},
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// let issued = issuer.obligations.unwrap();
+/// assert_eq!(issued["524C555344000000000000000000000000000000"], "921782606.8615378");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GatewayBalancesResult {
@@ -541,6 +832,17 @@ pub struct GatewayBalancesResult {
 }
 
 /// One balance of `gateway_balances`.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::GatewayBalance;
+///
+/// let balance: GatewayBalance = serde_json::from_value(json!({
+///     "currency": "524C555344000000000000000000000000000000", "value": "689748.581365565"
+/// }))?;
+/// assert_eq!(balance.value, "689748.581365565");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GatewayBalance {
@@ -553,6 +855,17 @@ pub struct GatewayBalance {
 /// [`noripple_check`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/noripple_check):
 /// trust-line settings that do not suit the account's role, and (when asked)
 /// the transactions that would fix them.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NoRippleCheckResult;
+///
+/// let check: NoRippleCheckResult = serde_json::from_value(json!({
+///     "problems": [], "transactions": [], "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert!(check.problems.is_empty()); // nothing to fix
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NoRippleCheckResult {

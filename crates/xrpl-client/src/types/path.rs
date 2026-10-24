@@ -8,6 +8,27 @@ use xrpl_core::types::Amount;
 
 /// [`book_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_offers):
 /// an order book, best offer first.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::BookOffersResult;
+/// use xrpl_core::types::Amount;
+///
+/// let book: BookOffersResult = serde_json::from_value(json!({
+///     "offers": [{
+///         "Account": "rLhB6qhWbVsRSRePxPLhXJFtpk2uLqpsQD", "Flags": 0, "Sequence": 107449413,
+///         "TakerGets": "14120000",
+///         "TakerPays": {
+///             "currency": "524C555344000000000000000000000000000000",
+///             "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "18.385652"
+///         },
+///         "owner_funds": "559663972", "quality": "0.0000013021"
+///     }],
+///     "ledger_index": 107856070, "validated": true
+/// }))?;
+/// assert_eq!(book.offers[0].taker_gets, Amount::Xrp(14_120_000));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BookOffersResult {
@@ -70,32 +91,162 @@ pub struct OrderBook {
 
 impl OrderBook {
     /// An ask's price: what it asks in `quote` per `base` it sells.
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::{BookOffer, OrderBook};
+    ///
+    /// // Selling 10 XRP for 5 USD: 0.5 USD per XRP.
+    /// let ask: BookOffer = serde_json::from_value(json!({
+    ///     "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+    ///     "TakerGets": "10000000",
+    ///     "TakerPays": {
+    ///         "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "5"
+    ///     }
+    /// }))?;
+    /// assert_eq!(OrderBook::ask_price(&ask), 0.5);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn ask_price(offer: &BookOffer) -> f64 {
         offer.taker_pays.to_f64() / offer.taker_gets.to_f64()
     }
 
     /// A bid's price: what it pays in `quote` per `base` it buys.
+    ///
+    /// ```
+    /// use serde_json::json;
+    /// use xrpl_client::types::{BookOffer, OrderBook};
+    ///
+    /// // Paying 4.5 USD for 10 XRP: 0.45 USD per XRP.
+    /// let bid: BookOffer = serde_json::from_value(json!({
+    ///     "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+    ///     "TakerGets": {
+    ///         "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": "4.5"
+    ///     },
+    ///     "TakerPays": "10000000"
+    /// }))?;
+    /// assert_eq!(OrderBook::bid_price(&bid), 0.45);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn bid_price(offer: &BookOffer) -> f64 {
         offer.taker_gets.to_f64() / offer.taker_pays.to_f64()
     }
 
     /// The lowest price anyone sells `base` at.
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::types::OrderBook;
+    /// # let usd = |v: &str| json!({
+    /// #     "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": v
+    /// # });
+    /// # let offer = |gets: Value, pays: Value| {
+    /// #     json!({"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+    /// #         "TakerGets": gets, "TakerPays": pays})
+    /// # };
+    /// # let book: OrderBook = serde_json::from_value(json!({
+    /// #     "base": {"currency": "XRP"},
+    /// #     "quote": {"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"},
+    /// #     "asks": [offer(json!("10000000"), usd("5")), offer(json!("10000000"), usd("6"))],
+    /// #     "bids": [offer(usd("4.5"), json!("10000000"))],
+    /// #     "ledger_index": 107856070, "validated": true
+    /// # }))?;
+    /// // `book`: XRP priced in USD. Its best ask sells 10 XRP for 5 USD, its
+    /// // best bid buys 10 XRP for 4.5 USD.
+    /// assert_eq!(book.best_ask(), Some(0.5));
+    /// assert_eq!(book.best_ask(), book.asks.first().map(OrderBook::ask_price));
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn best_ask(&self) -> Option<f64> {
         self.asks.first().map(Self::ask_price)
     }
 
     /// The highest price anyone buys `base` at.
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::types::OrderBook;
+    /// # let usd = |v: &str| json!({
+    /// #     "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": v
+    /// # });
+    /// # let offer = |gets: Value, pays: Value| {
+    /// #     json!({"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+    /// #         "TakerGets": gets, "TakerPays": pays})
+    /// # };
+    /// # let book: OrderBook = serde_json::from_value(json!({
+    /// #     "base": {"currency": "XRP"},
+    /// #     "quote": {"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"},
+    /// #     "asks": [offer(json!("10000000"), usd("5")), offer(json!("10000000"), usd("6"))],
+    /// #     "bids": [offer(usd("4.5"), json!("10000000"))],
+    /// #     "ledger_index": 107856070, "validated": true
+    /// # }))?;
+    /// // `book`: XRP priced in USD. Its best ask sells 10 XRP for 5 USD, its
+    /// // best bid buys 10 XRP for 4.5 USD.
+    /// assert_eq!(book.best_bid(), Some(0.45));
+    /// assert_eq!(book.best_bid(), book.bids.first().map(OrderBook::bid_price));
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn best_bid(&self) -> Option<f64> {
         self.bids.first().map(Self::bid_price)
     }
 
     /// The best ask less the best bid (negative when the book is crossed,
     /// which the ledger settles as soon as an offer crosses).
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::types::OrderBook;
+    /// # let usd = |v: &str| json!({
+    /// #     "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": v
+    /// # });
+    /// # let offer = |gets: Value, pays: Value| {
+    /// #     json!({"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+    /// #         "TakerGets": gets, "TakerPays": pays})
+    /// # };
+    /// # let book: OrderBook = serde_json::from_value(json!({
+    /// #     "base": {"currency": "XRP"},
+    /// #     "quote": {"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"},
+    /// #     "asks": [offer(json!("10000000"), usd("5")), offer(json!("10000000"), usd("6"))],
+    /// #     "bids": [offer(usd("4.5"), json!("10000000"))],
+    /// #     "ledger_index": 107856070, "validated": true
+    /// # }))?;
+    /// // `book`: XRP priced in USD. Its best ask sells 10 XRP for 5 USD, its
+    /// // best bid buys 10 XRP for 4.5 USD.
+    /// assert!((book.spread().unwrap() - 0.05).abs() < 1e-12);
+    /// // No spread while either side is empty.
+    /// let mut one_sided = book.clone();
+    /// one_sided.bids.clear();
+    /// assert_eq!(one_sided.spread(), None);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn spread(&self) -> Option<f64> {
         Some(self.best_ask()? - self.best_bid()?)
     }
 
     /// Halfway between the best bid and the best ask.
+    ///
+    /// ```
+    /// # use serde_json::{json, Value};
+    /// # use xrpl_client::types::OrderBook;
+    /// # let usd = |v: &str| json!({
+    /// #     "currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "value": v
+    /// # });
+    /// # let offer = |gets: Value, pays: Value| {
+    /// #     json!({"Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Flags": 0, "Sequence": 1,
+    /// #         "TakerGets": gets, "TakerPays": pays})
+    /// # };
+    /// # let book: OrderBook = serde_json::from_value(json!({
+    /// #     "base": {"currency": "XRP"},
+    /// #     "quote": {"currency": "USD", "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"},
+    /// #     "asks": [offer(json!("10000000"), usd("5")), offer(json!("10000000"), usd("6"))],
+    /// #     "bids": [offer(usd("4.5"), json!("10000000"))],
+    /// #     "ledger_index": 107856070, "validated": true
+    /// # }))?;
+    /// // `book`: XRP priced in USD. Its best ask sells 10 XRP for 5 USD, its
+    /// // best bid buys 10 XRP for 4.5 USD.
+    /// assert!((book.midpoint().unwrap() - 0.475).abs() < 1e-12);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
     pub fn midpoint(&self) -> Option<f64> {
         Some((self.best_ask()? + self.best_bid()?) / 2.0)
     }
@@ -103,6 +254,26 @@ impl OrderBook {
 
 /// One offer of an order book: its `Offer` entry plus what the owner can
 /// actually fund.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::{BookOffer, OrderBook};
+///
+/// let offer: BookOffer = serde_json::from_value(json!({
+///     "Account": "rLhB6qhWbVsRSRePxPLhXJFtpk2uLqpsQD", "Flags": 0, "Sequence": 107449413,
+///     "TakerGets": "14120000",
+///     "TakerPays": {
+///         "currency": "524C555344000000000000000000000000000000",
+///         "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "18.385652"
+///     },
+///     "owner_funds": "559663972", "quality": "0.0000013021", "BookNode": "0"
+/// }))?;
+/// // It sells 14.12 XRP for 18.385652 RLUSD: 1.3021 RLUSD per XRP.
+/// assert!((OrderBook::ask_price(&offer) - 1.3021).abs() < 1e-9);
+/// assert_eq!(offer.owner_funds.as_deref(), Some("559663972"));
+/// assert_eq!(offer.other["BookNode"], "0"); // the rest of the `Offer` entry
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BookOffer {
@@ -155,6 +326,26 @@ pub struct BookOffer {
 
 /// [`amm_info`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/amm_info):
 /// an automated market maker's pool.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AmmInfoResult;
+///
+/// let answer: AmmInfoResult = serde_json::from_value(json!({
+///     "amm": {
+///         "account": "rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3",
+///         "amount": "1849156969805",
+///         "amount2": {
+///             "currency": "524C555344000000000000000000000000000000",
+///             "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "2406585.019629636"
+///         },
+///         "trading_fee": 205
+///     },
+///     "ledger_index": 107856070, "validated": true
+/// }))?;
+/// assert_eq!(answer.amm.trading_fee, Some(205)); // 0.205%
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AmmInfoResult {
@@ -175,6 +366,27 @@ pub struct AmmInfoResult {
 }
 
 /// An AMM pool.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AmmInfo;
+/// use xrpl_core::types::Amount;
+///
+/// let pool: AmmInfo = serde_json::from_value(json!({
+///     "account": "rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3",
+///     "amount": "1849156969805",
+///     "amount2": {
+///         "currency": "524C555344000000000000000000000000000000",
+///         "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "2406585.019629636"
+///     },
+///     "trading_fee": 205
+/// }))?;
+/// assert_eq!(pool.amount, Some(Amount::Xrp(1_849_156_969_805)));
+/// // The pool's price of XRP: about 1.30 RLUSD.
+/// let price = pool.amount2.unwrap().to_f64() / pool.amount.unwrap().to_f64();
+/// assert!((1.30..1.31).contains(&price));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AmmInfo {
@@ -208,6 +420,23 @@ pub struct AmmInfo {
 }
 
 /// The AMM's auction slot: who holds the discounted fee, until when.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AuctionSlot;
+///
+/// let slot: AuctionSlot = serde_json::from_value(json!({
+///     "account": "r4uKh2rHuarMZdAgSBYqqicX7MxPBegttw",
+///     "auth_accounts": [{"account": "rNy92d5CrBQ1eC5HUokq1LDfcuLPvTfh4X"}],
+///     "discounted_fee": 20, "expiration": "2026-03-02T17:05:00+0000",
+///     "price": {"currency": "03B245BE580EC4F4386A751C084489EC4B514A2F",
+///         "issuer": "rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3", "value": "131482.3939333034"},
+///     "time_interval": 20
+/// }))?;
+/// assert_eq!(slot.discounted_fee, 20); // 0.02% for the holder
+/// assert_eq!(slot.auth_accounts.unwrap()[0].account, "rNy92d5CrBQ1eC5HUokq1LDfcuLPvTfh4X");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AuctionSlot {
@@ -229,6 +458,16 @@ pub struct AuctionSlot {
 /// An account the auction slot holder authorised, as `amm_info` writes it
 /// (`{"account": …}`; a transaction's `AuthAccounts` entry is
 /// [`xrpl_core::transaction::models::AuthAccount`]).
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AuctionSlotAccount;
+///
+/// let authorized: AuctionSlotAccount =
+///     serde_json::from_value(json!({"account": "rNy92d5CrBQ1eC5HUokq1LDfcuLPvTfh4X"}))?;
+/// assert_eq!(authorized.account, "rNy92d5CrBQ1eC5HUokq1LDfcuLPvTfh4X");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AuctionSlotAccount {
@@ -237,6 +476,18 @@ pub struct AuctionSlotAccount {
 }
 
 /// A liquidity provider's trading-fee vote.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::VoteSlot;
+///
+/// let vote: VoteSlot = serde_json::from_value(json!({
+///     "account": "rJ4XeEzorvsQp6un4h9CjtANEsB3Qcc8iA", "trading_fee": 300, "vote_weight": 2936
+/// }))?;
+/// // A vote for 0.3%, from 2.936% of the LP tokens.
+/// assert_eq!((vote.trading_fee, vote.vote_weight), (300, 2936));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct VoteSlot {
@@ -250,6 +501,25 @@ pub struct VoteSlot {
 
 /// [`book_changes`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_changes):
 /// each order book's open, high, low, close and volume in one ledger.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::BookChangesResult;
+///
+/// let changes: BookChangesResult = serde_json::from_value(json!({
+///     "type": "bookChanges", "changes": [{
+///         "currency_a": "XRP_drops",
+///         "currency_b": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
+///         "volume_a": "862124", "volume_b": "1.13149388782",
+///         "open": "762031", "high": "762031", "low": "761187.2459410326",
+///         "close": "761202.9106741559"
+///     }],
+///     "ledger_index": 107831526, "ledger_time": 846004322, "validated": true
+/// }))?;
+/// assert_eq!(changes.kind.as_deref(), Some("bookChanges"));
+/// assert_eq!(changes.changes[0].currency_a, "XRP_drops");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BookChangesResult {
@@ -274,6 +544,25 @@ pub struct BookChangesResult {
 
 /// One book's trading in the ledger. Currencies are `XRP_drops` or
 /// `issuer/currency`; rates are B per A.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::BookChange;
+///
+/// let change: BookChange = serde_json::from_value(json!({
+///     "currency_a": "XRP_drops",
+///     "currency_b": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
+///     "volume_a": "862124", "volume_b": "1.13149388782",
+///     "open": "762031", "high": "762031", "low": "761187.2459410326", "close": "761202.9106741559"
+/// }))?;
+/// // XRP against RLUSD (`issuer/currency`), in this ledger.
+/// assert_eq!(
+///     change.currency_b,
+///     "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De/524C555344000000000000000000000000000000",
+/// );
+/// assert_eq!(change.volume_a, "862124"); // drops
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BookChange {
@@ -300,6 +589,21 @@ pub struct BookChange {
 
 /// [`deposit_authorized`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/deposit_authorized):
 /// whether one account may pay another directly.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::DepositAuthorizedResult;
+///
+/// let answer: DepositAuthorizedResult = serde_json::from_value(json!({
+///     "deposit_authorized": false,
+///     "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+///     "destination_account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+///     "ledger_index": 107831520, "validated": true
+/// }))?;
+/// // The destination has DepositAuth set, and has not preauthorized this source.
+/// assert!(!answer.deposit_authorized);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DepositAuthorizedResult {
@@ -328,6 +632,19 @@ pub struct DepositAuthorizedResult {
 
 /// [`get_aggregate_price`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/get_aggregate_price):
 /// statistics over several price oracles' prices for one pair.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::AggregatePriceResult;
+///
+/// let price: AggregatePriceResult = serde_json::from_value(json!({
+///     "entire_set": {"mean": "0.74", "size": 1, "standard_deviation": "0"},
+///     "median": "0.74", "time": 1792785775, "ledger_current_index": 21768546, "validated": false
+/// }))?;
+/// assert_eq!(price.median, "0.74");
+/// assert!(price.trimmed_set.is_none()); // the request had no `trim`
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AggregatePriceResult {
@@ -355,6 +672,17 @@ pub struct AggregatePriceResult {
 }
 
 /// Mean, count and standard deviation of a set of prices.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::PriceStats;
+///
+/// let stats: PriceStats = serde_json::from_value(json!({
+///     "mean": "0.74", "size": 1, "standard_deviation": "0"
+/// }))?;
+/// assert_eq!((stats.mean.as_str(), stats.size), ("0.74", 1));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PriceStats {
@@ -369,6 +697,21 @@ pub struct PriceStats {
 /// [`nft_buy_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/nft_buy_offers)
 /// and [`nft_sell_offers`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/nft_sell_offers):
 /// the open offers for one NFT.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NftOffersResult;
+///
+/// let page: NftOffersResult = serde_json::from_value(json!({
+///     "nft_id": "000801F42B3DD7A7E525987A2FAFF91EECF53984A1FC79061A7C53EB014C2951",
+///     "offers": [{
+///         "amount": "1", "flags": 1, "owner": "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W",
+///         "nft_offer_index": "83C136C3A2BE2115D5C9D0B36B3BD99B71F6580B824D6FF7705A018344B97E37"
+///     }]
+/// }))?;
+/// assert_eq!(page.offers[0].owner, "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NftOffersResult {
@@ -397,6 +740,20 @@ pub struct NftOffersResult {
 }
 
 /// One NFT offer.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::NftOffer;
+/// use xrpl_core::types::Amount;
+///
+/// let offer: NftOffer = serde_json::from_value(json!({
+///     "amount": "1", "flags": 1, "owner": "rhAe93ohNJkzvgD2rutsfnayqccnnJgS8W",
+///     "nft_offer_index": "83C136C3A2BE2115D5C9D0B36B3BD99B71F6580B824D6FF7705A018344B97E37"
+/// }))?;
+/// assert_eq!(offer.amount, Amount::Xrp(1));
+/// assert_eq!(offer.flags & 1, 1); // a sell offer
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct NftOffer {
@@ -418,6 +775,34 @@ pub struct NftOffer {
 
 /// [`ripple_path_find`](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/ripple_path_find):
 /// ways to deliver an amount, and what each costs the sender.
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::RipplePathFindResult;
+/// use xrpl_core::types::Amount;
+///
+/// # let alternative = json!({
+/// #     "paths_computed": [
+/// #         [
+/// #             {"account": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "type": 1},
+/// #             {"currency": "XRP", "type": 16}
+/// #         ]
+/// #     ],
+/// #     "source_amount": {
+/// #         "currency": "524C555344000000000000000000000000000000",
+/// #         "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns", "value": "1.31362"
+/// #     }
+/// # });
+/// // `alternative`: one way to pay, 1.31362 RLUSD (see `PathAlternative`).
+/// let found: RipplePathFindResult = serde_json::from_value(json!({
+///     "alternatives": [alternative],
+///     "destination_account": "rfYiNfgLefTAZGfEyun1EjG68mTtC75vDe", "destination_amount": "1000000",
+///     "full_reply": true, "ledger_index": 107831520, "validated": true
+/// }))?;
+/// assert_eq!(found.destination_amount, Amount::Xrp(1_000_000));
+/// assert_eq!(found.alternatives[0].source_amount["value"], "1.31362");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct RipplePathFindResult {
@@ -453,6 +838,35 @@ pub struct RipplePathFindResult {
 /// An answer of [`path_find`](crate::requests::PathFindRequest): the first
 /// one, each update (as [`WsEvent::PathFind`](crate::stream::WsEvent::PathFind)),
 /// and the last (`closed`).
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::PathFindResult;
+///
+/// # let alternative = json!({
+/// #     "paths_computed": [
+/// #         [{
+/// #             "currency": "524C555344000000000000000000000000000000",
+/// #             "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "type": 48
+/// #         }]
+/// #     ],
+/// #     "source_amount": "767241"
+/// # });
+/// // `alternative`: one way to pay, 0.767241 XRP (see `PathAlternative`).
+/// let first: PathFindResult = serde_json::from_value(json!({
+///     "alternatives": [alternative],
+///     "source_account": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+///     "destination_account": "rpYNm4xpK7aPC9EVqdpkdrTZjCLUVGc4kA",
+///     "destination_amount": {
+///         "currency": "524C555344000000000000000000000000000000",
+///         "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", "value": "1"
+///     },
+///     "full_reply": false, "id": 2
+/// }))?;
+/// assert!(!first.full_reply); // an update completes the search
+/// assert_eq!(first.alternatives[0].source_amount, json!("767241")); // drops
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PathFindResult {
@@ -477,6 +891,27 @@ pub struct PathFindResult {
 
 /// One way to pay: the paths to put in the Payment's `Paths`, and the most it
 /// costs (`SendMax`).
+///
+/// ```
+/// use serde_json::json;
+/// use xrpl_client::types::PathAlternative;
+///
+/// let way: PathAlternative = serde_json::from_value(json!({
+///     "paths_computed": [[
+///         {"account": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B", "type": 1},
+///         {"currency": "XRP", "type": 16}
+///     ]],
+///     "source_amount": {
+///         "currency": "BTC", "issuer": "rURtT5MMFzSUR54MAq9MKfzBoezTBZbKns",
+///         "value": "0.00001624579066564171"
+///     }
+/// }))?;
+/// let step = &way.paths_computed[0][0];
+/// assert_eq!(step.account.as_deref(), Some("rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"));
+/// // More digits than a ledger amount holds: kept as JSON.
+/// assert_eq!(way.source_amount["value"], "0.00001624579066564171");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PathAlternative {
