@@ -605,7 +605,10 @@ mod tests {
         // Before autofill: no inner sequence, fee or flag yet, and that is fine.
         batch(vec![pay(A, B), pay(B, A)]).validate().unwrap();
         batch(vec![pay(A, B); 8]).validate().unwrap();
-        refused(batch(vec![pay(A, B)]).validate(), "2 to 8 inner transactions, not 1");
+        refused(
+            batch(vec![pay(A, B)]).validate(),
+            "2 to 8 inner transactions, not 1",
+        );
         refused(batch(vec![pay(A, B); 9]).validate(), "not 9");
         refused(
             Batch::new(A, vec![pay(A, B), pay(B, A)]).validate(),
@@ -618,7 +621,10 @@ mod tests {
             "exactly one mode flag",
         );
         let nested: Tx = batch(vec![pay(A, B), pay(B, A)]).into();
-        refused(batch(vec![pay(A, B), nested]).validate(), "cannot be a Batch");
+        refused(
+            batch(vec![pay(A, B), nested]).validate(),
+            "cannot be a Batch",
+        );
         let both: Tx = Payment::new(B, A, Amount::xrp(1).unwrap())
             .with_sequence(5)
             .with_ticket_sequence(9)
@@ -627,7 +633,10 @@ mod tests {
         batch(vec![pay(A, B), both.clone()]).validate().unwrap();
         let mut both = both;
         both.common_mut().unwrap().sequence = Some(5);
-        refused(batch(vec![pay(A, B), both]).validate(), "both a Sequence and a TicketSequence");
+        refused(
+            batch(vec![pay(A, B), both]).validate(),
+            "both a Sequence and a TicketSequence",
+        );
         // Each inner transaction's own checks run too.
         let vote: Tx = AMMVote::new(A, Asset::xrp(), Asset::token("USD", B).unwrap(), 1500).into();
         refused(batch(vec![pay(A, B), vote]).validate(), "TradingFee");
