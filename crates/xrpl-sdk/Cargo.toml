@@ -91,6 +91,14 @@ name = "mpt"
 required-features = ["http"]
 
 [[example]]
+name = "lending"
+required-features = ["http"]
+
+[[example]]
+name = "vault"
+required-features = ["http"]
+
+[[example]]
 name = "multisign"
 required-features = ["http"]
 

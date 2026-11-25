@@ -7,6 +7,60 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+Lending (XLS-66) and vaults (XLS-65): the counterparty's signature on a
+`LoanSet`, and a cookbook recipe for each; and `url` 2.5.9 in the lockfile
+for a new advisory. No API breaks against 0.8.2; one behaviour changes
+(`verify_transaction`, below).
+
+### Added
+- **`transaction::loan`: the counterparty's signature on a `LoanSet`.** A
+  loan needs the borrower's and the loan broker owner's signatures in one
+  transaction: one sends it, the other approves it with a
+  `CounterpartySignature`. `sign_as_counterparty` (and `_async` for a remote
+  key) adds a single signature; for a counterparty with a signer list, each
+  member signs with `sign_for_counterparty` and `add_counterparty_signers`
+  puts their signatures in the order `rippled` requires.
+  `verify_counterparty_signature` checks one offline, and
+  `counterparty_signing_data` / `counterparty_multisigning_data` give the
+  bytes to hand a remote signer. The signing functions refuse a `LoanSet`
+  whose `SigningPubKey`, `Fee` or `Sequence` is not set yet, since the
+  counterparty signs them, and a `Batch` inner `LoanSet`, whose counterparty
+  approves with a `BatchSigner` instead.
+  - **Signing rules (`SigningRules`).** Since the `fixCleanup3_4_0`
+    amendment the counterparty signs with its own prefixes (`"CPT\0"`,
+    `"CPM\0"`), so a signature cannot move between roles; before it, with
+    the sender's. `SigningRules::Current` (the default) is right for
+    Mainnet, Testnet and Devnet, which all have the amendment.
+  - Checked against a sample of 60 `LoanSet`s applied on Devnet, each with a
+    counterparty signature (59 single, 1 multi-signed): each verifies, none
+    under the old rules.
+- **`Wallet::sign_as_counterparty` and `Wallet::sign_for_counterparty`**,
+  and `xrpl_sdk::loan`.
+- **`Client::counterparty_signing_rules`**: which rules a network follows,
+  read from its validated ledger's `Amendments` entry, which every server
+  serves (Clio answers `feature` with `badFeature` for an amendment newer
+  than its release, even an enabled one: `fixCleanup3_4_0` on Clio 2.8.0).
+- **`hashes::amendment_id`**: an amendment's ID from its name, as the
+  `Amendments` entry and validators' votes list it.
+- **Cookbook: `vault` and `lending`**, on Devnet. `vault`: a deposit for
+  shares, a withdrawal by amount, a redemption of every share, the vault
+  deleted. `lending`: a closed-ended vault and a loan broker, a `LoanSet` the
+  broker's owner co-signs, both installments repaid, and everything wound
+  down. Since `LendingProtocolV1_1` a new loan broker can be created only on a
+  closed-ended vault (`VaultKind` 1, with a `SubscriptionDate` and a
+  `RedemptionDate` at least 180 seconds apart); the recipe explains its three
+  phases.
+
+### Changed
+- **`verify_transaction` also checks a `LoanSet`'s `CounterpartySignature`**,
+  under `SigningRules::Current`, as it checks a `Batch`'s `BatchSigners`:
+  `rippled` refuses a transaction whose counterparty signature does not
+  verify, so `verify_transaction` no longer says it is signed. On a network
+  without `fixCleanup3_4_0`, or for a `LoanSet` from before it was enabled,
+  check it with `verify_counterparty_signature` and
+  `SigningRules::BeforeFixCleanup3_4_0`. A transaction other than a `LoanSet`
+  that carries a `CounterpartySignature` is now an error.
+
 ### Security
 - **The lockfile moves `url` to 2.5.9 for
   [RUSTSEC-2026-0592](https://rustsec.org/advisories/RUSTSEC-2026-0592.html)**

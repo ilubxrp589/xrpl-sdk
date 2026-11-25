@@ -36,6 +36,7 @@ and the fuzzers, offline, in well under a minute.
 | Signatures (secp256k1 and Ed25519) | `rippled` 3.4.1 `sign` and `sign_for` | Byte for byte, both key types | `crypto/signing.rs`, `xrpl-sdk/src/wallet.rs` |
 | Payment channel claims | `rippled` 3.4.1 `channel_authorize` | Byte for byte | `crypto/channel.rs` |
 | Batch signing data | Batches `rippled` accepted | 6 of 6 verify; tampering fails | `transaction/batch.rs` |
+| Loan counterparty signing data | `LoanSet`s applied on Devnet (a sample) | 60 of 60 verify (59 single, 1 multi-signed); none under the old rules; tampering fails | `transaction/loan.rs` |
 | Ledger entry IDs (keylets) | Mainnet entries' `index`, and `rippled` 3.4.1 `ledger_entry` | 14 entries, 12 types; 9 more IDs of 6 more kinds | `hashes.rs` |
 | Ledger entries: typed and back | Mainnet ledger #107827070 | 20 entries, 15 types, exact JSON | `crates/xrpl-core/tests/ledger_objects.rs` |
 | Every typed response | Recorded `rippled` 3.4.1 and Clio responses | 42 methods (45 recordings), no field lost | `crates/xrpl-client/tests/rippled_responses.rs` |
@@ -176,6 +177,15 @@ refused without the sequence).
   recorded set, which `rippled` accepted, verify against the SDK's batch
   signing data (`rippled` 3.4.1's layout, which includes the outer account
   and sequence). A single changed byte makes all of them fail.
+- **Loan counterparty signatures.** A sample of 60 `LoanSet`s with a
+  `CounterpartySignature` applied on Devnet (59 signed by
+  one key, 1 by a signer list of two; `tesSUCCESS` or a `tec` result, both
+  past the signature check), on a network with `fixCleanup3_4_0`, verify
+  against the SDK's counterparty signing data (`"CPT\0"` / `"CPM\0"` and the
+  transaction's signed fields), and every sender's own signature verifies
+  too. Under the rules before the fix (`"STX\0"` / `"SMT\0"`) none of them
+  verifies, and each fails once its `Sequence` changes. Each hashes to the
+  ID the ledger recorded (`crates/xrpl-core/tests/fixtures/loan_set_devnet.jsonl`).
 
 ## 3. Hashes and IDs
 
