@@ -94,8 +94,9 @@ let ok = verify_payment_channel_claim(&channel, 1_000_000, &signature, &public_k
 ## Cookbook
 
 Runnable recipes in [`crates/xrpl-sdk/examples`](https://github.com/ilubxrp589/xrpl-sdk/tree/main/crates/xrpl-sdk/examples). Each one makes its own
-funded Testnet wallets, so `cargo run --example <name>` works with nothing to set up. Every recipe
-below was run against Testnet (and `watch_streams` against mainnet) before release.
+funded Testnet wallets (Devnet wallets for `vault` and `lending`, whose amendments are only on
+Devnet so far), so `cargo run --example <name>` works with nothing to set up. Every recipe
+below was run against its network (and `watch_streams` against mainnet) before release.
 
 | Recipe | What it does |
 |--------|--------------|
@@ -111,6 +112,8 @@ below was run against Testnet (and `watch_streams` against mainnet) before relea
 | `remote_signer` | sign and submit with a key held elsewhere (a stand-in for a KMS), through `AsyncSigningKey` |
 | `batch` | two accounts' payments in one all-or-nothing Batch, co-signed |
 | `mpt` | create a Multi-Purpose Token, opt in, send it |
+| `vault` | a single-asset vault (XLS-65): deposit XRP for shares, withdraw by amount, redeem every share, delete it (Devnet) |
+| `lending` | a loan (XLS-66) from start to finish: a closed-ended vault and a loan broker, a `LoanSet` the broker's owner co-signs, both installments repaid, everything wound down (Devnet) |
 | `blocking` | the same, with no async: `BlockingClient` |
 | `watch_streams` | live mainnet ledgers, order-book trading and validations over WebSocket |
 | `check_balance`, `decode_blob`, `subscribe_ledger` | an account's spendable balance; decoding a blob; the ledger stream |
@@ -215,6 +218,11 @@ fn main() -> Result<(), xrpl_core::CoreError> {
   `new` with the required ones, and every flag as a constant (`Payment::TF_PARTIAL_PAYMENT`)
 - **Batch (XLS-56)**: inner transactions, `BatchSigners` from other accounts (single or multi-signed),
   the batch fee, and `autofill` that numbers and prices a batch
+- **Lending (XLS-66)**: the counterparty's `CounterpartySignature` on a `LoanSet` (single or
+  multi-signed, local or remote key), under the signing rules of `fixCleanup3_4_0` or before it,
+  `Client::counterparty_signing_rules` to read which a network follows, and `autofill` that prices
+  the counterparty's signatures; vaults (XLS-65) through the typed models, `vault_info` and
+  `keylet::vault`
 - `validate` on every transaction: the rules rippled checks before applying that need no ledger (AMM
   mode flags, signer lists, TickSize, TransferRate, clawback holders, …), run before signing
 - Transaction hashes (`hash_signed_tx`, `hash_signed_tx_blob`) and ledger entry IDs for every entry
@@ -288,6 +296,7 @@ itself. [docs/PARITY.md](https://github.com/ilubxrp589/xrpl-sdk/blob/main/docs/P
 | Transaction models | 186 real transactions (51 types) round-trip to the same JSON, bytes and ID; an example of every other type, signed by rippled 3.4.1, encodes to its exact `tx_blob`: all 82 types |
 | Edge cases of the format: `Number`, amounts, token values, paths, issues, object structure | 94 binary forms, 80 JSON values and 42 token values put to rippled 3.4.1's `simulate`: the SDK writes and shows each as rippled does, and refuses what rippled refuses instead of rounding or guessing |
 | Batch | signatures verify against real batches rippled accepted; two batches (one from the typed models, approved by a second account) run on Testnet |
+| Loan co-signing | a sample of 60 `LoanSet`s applied on Devnet (59 counterparty signatures by one key, 1 by a signer list): each verifies against the SDK's signing data, none under the old rules; a loan co-signed by the SDK was accepted on Devnet and repaid |
 | Typed responses | 45 responses (42 methods) recorded from rippled 3.4.1, Clio and Testnet in API version 2 (`scripts/record_fixtures.py` re-records them): each must parse, and serializing it back must keep all 2,605 field paths |
 | End to end | `RUSTFLAGS="--cfg xrpl_live_tests" cargo test -p halcyon-xrpl-sdk --test live_testnet`: two faucet wallets create a Ticket, Check, Escrow, PayChannel (and redeem a claim), NFToken and offer, DID, Oracle, MPT issuance and holding, Credential, PermissionedDomain, DepositPreauth, Delegate and trust line on Testnet, and send a multi-signed transaction; every ID, hash and balance change must be what the network recorded, and the typed queries for what they made must parse the answers |
 | Robustness | 9 fuzz targets with AddressSanitizer, seeded with all of the above (about 86 million inputs in the final run before 0.5.0; a minute each on every pull request, 15 minutes each weekly): nothing panics, and decode → encode → decode is stable |

@@ -20,7 +20,7 @@
 //! | [`codec`] | JSON ↔ binary for transactions and ledger entries, driven by `rippled` 3.4.1's definitions |
 //! | [`hashes`] | transaction IDs, and [`hashes::keylet`]: the ID of every kind of ledger entry |
 //! | [`types`] | [`Amount`] (XRP, token, MPT), [`AccountId`], [`Currency`], hashes, and [`LedgerObject`]: all 31 ledger entry types, typed |
-//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); [`transaction::cost`]: what `rippled` charges |
+//! | [`transaction`] | [`transaction::models`]: a typed struct for each of `rippled`'s 82 transaction types, with its flags; [`transaction::batch`]: `Batch` (XLS-56); [`transaction::loan`]: co-signing a `LoanSet` (XLS-66); [`transaction::cost`]: what `rippled` charges |
 //! | [`utils`] | XRP ↔ drops, ledger time, text ↔ hex, rates, NFTokenIDs, balance changes, reserves |
 //! | [`error`] | [`CoreError`] |
 //!
@@ -133,6 +133,8 @@
 //!
 //! [`transaction::batch`] builds and signs `Batch` transactions: inner
 //! transactions, `BatchSigners` from other accounts, and the fee.
+//! [`transaction::loan`] adds the counterparty's signature to a `LoanSet`,
+//! the second signature every new loan needs.
 //!
 //! ## Without `std`
 //!
@@ -154,7 +156,9 @@
 //! `rippled`: 186 real transactions (51 types) round-trip through their typed
 //! models to the same bytes and ID, and an example of each of the other types,
 //! signed by `rippled` 3.4.1, encodes to `rippled`'s exact `tx_blob`. Batch
-//! signatures verify against real batches `rippled` accepted. Ledger entry IDs match real mainnet entries
+//! signatures verify against real batches `rippled` accepted, and loan
+//! counterparty signatures against a sample of 60 `LoanSet`s applied on Devnet.
+//! Ledger entry IDs match real mainnet entries
 //! and a live Testnet run. The utilities pass xrpl.js's own fixtures.
 //!
 //! Where the format has edge cases (`Number`, amounts, token values, payment paths), each case

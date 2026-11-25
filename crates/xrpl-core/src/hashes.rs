@@ -68,6 +68,23 @@ pub fn hash_signed_tx(tx: &Value) -> Result<Hash256, CoreError> {
     Ok(transaction_id(&encode_transaction_json(tx)?))
 }
 
+/// The ID of an amendment: SHA-512Half of its name (`rippled`'s
+/// `feature` table). This is how the ledger's `Amendments` entry
+/// ([`keylet::amendments`]) lists the ones enabled, and how `feature`,
+/// `EnableAmendment` and validators' votes name them.
+///
+/// ```
+/// use xrpl_core::hashes::amendment_id;
+///
+/// assert_eq!(amendment_id("MultiSign").to_string(),
+///     "4C97EBA926031A7CF7D7B36FDE3ED66DDA5421192D63DE53FFB46E43B9DC8373");
+/// assert_eq!(amendment_id("LendingProtocol").to_string(),
+///     "565B90CA1AB2B9D42208ED10884188C64F9E19083DECB9634AAF06EB03299509");
+/// ```
+pub fn amendment_id(name: &str) -> Hash256 {
+    Hash256(sha512_half(name.as_bytes()))
+}
+
 /// The ID of a signed transaction blob (hex, as `submit` takes it).
 ///
 /// `rippled` hashes the transaction as it re-serializes it (canonical field

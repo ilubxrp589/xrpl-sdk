@@ -1296,6 +1296,76 @@ pub trait Client: Transport {
         }
     }
 
+    /// The rules a `LoanSet`'s counterparty signs under on this server's
+    /// network
+    /// ([`loan::SigningRules`](xrpl_core::transaction::loan::SigningRules)):
+    /// [`Current`](xrpl_core::transaction::loan::SigningRules::Current) if
+    /// the latest validated ledger has `fixCleanup3_4_0` enabled, else
+    /// [`BeforeFixCleanup3_4_0`](xrpl_core::transaction::loan::SigningRules::BeforeFixCleanup3_4_0).
+    ///
+    /// It reads the ledger's `Amendments` entry
+    /// ([`keylet::amendments`](xrpl_core::hashes::keylet::amendments)), which
+    /// every server serves, rather than the `feature` method: Clio answers
+    /// `feature` with `badFeature` for an amendment newer than its release,
+    /// even an enabled one (`fixCleanup3_4_0` on Clio 2.8.0). A network with no enabled amendment at all
+    /// has no such entry, and so follows the old rules.
+    ///
+    /// ```no_run
+    /// # async fn run(client: impl xrpl_client::Client) -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_core::transaction::loan::SigningRules;
+    ///
+    /// // Mainnet, Testnet and Devnet: SigningRules::Current.
+    /// let rules = client.counterparty_signing_rules().await?;
+    /// assert_eq!(rules, SigningRules::Current);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Client::raw_request`], and
+    /// [`ClientError::UnexpectedResponse`] for an answer with no `node`, or
+    /// an `Amendments` list that is not an array of strings.
+    fn counterparty_signing_rules(
+        &self,
+    ) -> impl Future<Output = Result<xrpl_core::transaction::loan::SigningRules, ClientError>> + MaybeSend
+    {
+        use xrpl_core::transaction::loan::SigningRules;
+        async move {
+            let params = json!({
+                "index": xrpl_core::hashes::keylet::amendments().to_string(),
+                "ledger_index": "validated",
+            });
+            let reply = match self.raw_request("ledger_entry", params).await {
+                Ok(reply) => reply,
+                Err(ClientError::RpcError { code, .. }) if code == "entryNotFound" => {
+                    return Ok(SigningRules::BeforeFixCleanup3_4_0)
+                }
+                Err(e) => return Err(e),
+            };
+            let node = reply.get("node").ok_or_else(|| {
+                ClientError::UnexpectedResponse("ledger_entry returned no node".into())
+            })?;
+            // An entry that holds only majorities has no Amendments list yet.
+            let enabled = match node.get("Amendments") {
+                None => Vec::new(),
+                Some(list) => list
+                    .as_array()
+                    .and_then(|ids| {
+                        ids.iter()
+                            .map(|id| id.as_str().and_then(|s| s.parse().ok()))
+                            .collect::<Option<Vec<xrpl_core::types::Hash256>>>()
+                    })
+                    .ok_or_else(|| {
+                        ClientError::UnexpectedResponse(
+                            "the Amendments entry's list is not an array of IDs".into(),
+                        )
+                    })?,
+            };
+            Ok(SigningRules::from_enabled_amendments(&enabled))
+        }
+    }
+
     /// Get server information.
     ///
     /// ```no_run
@@ -2580,6 +2650,59 @@ mod tests {
         assert_eq!(tx["Sequence"], 0);
         assert_eq!(tx["RawTransactions"][0]["RawTransaction"]["Sequence"], 5);
         assert_eq!(tx["RawTransactions"][1]["RawTransaction"]["Sequence"], 6);
+    }
+
+    /// The counterparty's signing rules come from the validated ledger's
+    /// Amendments entry: fixCleanup3_4_0 listed, not listed, or no entry.
+    #[tokio::test]
+    async fn counterparty_signing_rules_read_the_amendments_entry() {
+        use xrpl_core::hashes::amendment_id;
+        use xrpl_core::transaction::loan::{SigningRules, FIX_CLEANUP_3_4_0};
+        let fix = amendment_id(FIX_CLEANUP_3_4_0).to_string();
+        let other = amendment_id("MultiSign").to_string();
+        let entry =
+            |ids: Value| json!({"node": {"LedgerEntryType": "Amendments", "Amendments": ids}});
+        let mock = Mock::default()
+            .reply("ledger_entry", entry(json!([other, fix.to_lowercase()])))
+            .reply("ledger_entry", entry(json!([other])))
+            .reply(
+                "ledger_entry",
+                json!({"node": {"LedgerEntryType": "Amendments", "Majorities": []}}),
+            )
+            .reply(
+                "ledger_entry",
+                json!({"status": "error", "error": "entryNotFound"}),
+            )
+            .reply("ledger_entry", entry(json!([7])))
+            .reply(
+                "ledger_entry",
+                json!({"status": "error", "error": "noNetwork"}),
+            );
+        assert_eq!(
+            mock.counterparty_signing_rules().await.unwrap(),
+            SigningRules::Current
+        );
+        for _ in 0..3 {
+            assert_eq!(
+                mock.counterparty_signing_rules().await.unwrap(),
+                SigningRules::BeforeFixCleanup3_4_0
+            );
+        }
+        assert!(matches!(
+            mock.counterparty_signing_rules().await,
+            Err(ClientError::UnexpectedResponse(_))
+        ));
+        assert!(matches!(
+            mock.counterparty_signing_rules().await,
+            Err(ClientError::RpcError { code, .. }) if code == "noNetwork"
+        ));
+        let (method, params) = &mock.calls()[0];
+        assert_eq!(method, "ledger_entry");
+        assert_eq!(
+            params["index"],
+            xrpl_core::hashes::keylet::amendments().to_string()
+        );
+        assert_eq!(params["ledger_index"], "validated");
     }
 
     #[tokio::test]
