@@ -10,8 +10,9 @@ may break the API, and says so under "Changed (breaking)").
 ## [v0.8.3] (2026-11-24)
 
 Lending (XLS-66) and vaults (XLS-65): the counterparty's signature on a
-`LoanSet`, and a cookbook recipe for each; and `url` 2.5.9 in the lockfile
-for a new advisory. Code that builds against 0.8.2 builds against 0.8.3
+`LoanSet`, and a cookbook recipe for each; and, in the lockfile, `url` 2.5.9
+for a new advisory and `crypto-bigint` 0.7.11 in place of a yanked 0.7.6.
+Code that builds against 0.8.2 builds against 0.8.3
 (checked with cargo-semver-checks); one behaviour changes
 (`verify_transaction`, below). Update with `cargo update`.
 
@@ -75,7 +76,15 @@ for a new advisory. Code that builds against 0.8.2 builds against 0.8.3
   feature's transport; the SDK's own code never calls `Url::origin()`. The
   lockfile matters for `cargo install halcyon-xrpl-cli --locked`; a project
   that depends on the SDK resolves `url` itself, and gets the fix with
-  `cargo update -p url`.
+  `cargo update -p url`. Neither `reqwest` 0.12.28 nor `tower-http` 0.6.11,
+  the two crates that use `url`, calls `Url::origin()` either.
+- **The lockfile moves `crypto-bigint` to 0.7.11** (from 0.7.6, and
+  `ctutils` 0.4.5 to 0.4.8). RustCrypto yanked 0.7.2 to 0.7.8 because 0.7.9
+  removed an API ([#1373](https://github.com/RustCrypto/crypto-bigint/pull/1373)),
+  not for a security problem: 0.7.6 has the fixes for RUSTSEC-2026-0387.
+  0.7.11 adds constant-time fixes for Thumb-1 (Cortex-M0-class ARM) targets.
+  A project that adds the SDK today already gets 0.7.11, since Cargo skips
+  yanked versions; the tests, signatures included, pass on it.
 
 ## [v0.8.2] (2026-10-24)
 
