@@ -7,10 +7,13 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+## [v0.8.3] (2026-11-24)
+
 Lending (XLS-66) and vaults (XLS-65): the counterparty's signature on a
 `LoanSet`, and a cookbook recipe for each; and `url` 2.5.9 in the lockfile
-for a new advisory. No API breaks against 0.8.2; one behaviour changes
-(`verify_transaction`, below).
+for a new advisory. Code that builds against 0.8.2 builds against 0.8.3
+(checked with cargo-semver-checks); one behaviour changes
+(`verify_transaction`, below). Update with `cargo update`.
 
 ### Added
 - **`transaction::loan`: the counterparty's signature on a `LoanSet`.** A
@@ -60,6 +63,9 @@ for a new advisory. No API breaks against 0.8.2; one behaviour changes
   check it with `verify_counterparty_signature` and
   `SigningRules::BeforeFixCleanup3_4_0`. A transaction other than a `LoanSet`
   that carries a `CounterpartySignature` is now an error.
+- **Each crate requires 0.8.3 of the others** (it was 0.8.2): the SDK's
+  `Wallet` and the client's `counterparty_signing_rules` use
+  `halcyon-xrpl-core`'s new `transaction::loan`.
 
 ### Security
 - **The lockfile moves `url` to 2.5.9 for
@@ -1100,7 +1106,8 @@ Initial release.
 - Full re-exports from xrpl-core and xrpl-client
 - 5 example programs: send_payment, subscribe_ledger, place_offer, check_balance, decode_blob, mint_nft
 
-[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.3...HEAD
+[v0.8.3]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.2...v0.8.3
 [v0.8.2]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.1...v0.8.2
 [v0.8.1]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.8.0...v0.8.1
 [v0.8.0]: https://github.com/ilubxrp589/xrpl-sdk/compare/v0.7.0...v0.8.0

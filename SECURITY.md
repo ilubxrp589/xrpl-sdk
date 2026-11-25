@@ -77,6 +77,17 @@ This section states what the code does; each claim is covered by tests.
 
 ## Known advisories
 
+- **[RUSTSEC-2026-0592](https://rustsec.org/advisories/RUSTSEC-2026-0592.html)**
+  (`url`, published 2026-11-20): `Url::origin()` can overflow the stack on
+  nested `blob:` URLs.
+  - **Not affected:** `url` reaches the SDK only through `reqwest` and its
+    `tower-http`, the `http` feature's transport, and neither they nor the
+    SDK call `Url::origin()` (checked in `reqwest` 0.12.28 and `tower-http`
+    0.6.11).
+  - **Lockfile on 2.5.9 from 0.8.3,** so `cargo audit` is clean and
+    `cargo install halcyon-xrpl-cli --locked` builds with the fixed `url`.
+    A project that depends on the SDK resolves `url` itself:
+    `cargo update -p url`.
 - **[RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)**
   (`crypto-bigint`, published 2026-10-23): operations meant to be
   constant-time could branch on secret values, depending on the compiler
