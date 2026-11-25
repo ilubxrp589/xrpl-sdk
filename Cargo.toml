@@ -39,7 +39,7 @@ bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
 tokio = { version = "1", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+ed25519-dalek = { version = "3", features = ["rand_core"] }
 k256 = { version = "0.14", features = ["ecdsa"] }
 # The ECDSA crate k256 builds on: its hazmat signing (k256 does not re-export it).
 ecdsa = { version = "0.17", default-features = false, features = ["algorithm"] }
