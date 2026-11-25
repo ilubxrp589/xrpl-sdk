@@ -7,6 +7,16 @@ may break the API, and says so under "Changed (breaking)").
 
 ## [Unreleased]
 
+### Security
+- **The lockfile moves `url` to 2.5.9 for
+  [RUSTSEC-2026-0592](https://rustsec.org/advisories/RUSTSEC-2026-0592.html)**
+  (published 2026-11-20: a stack overflow in `Url::origin()` on nested
+  `blob:` URLs). `url` reaches the SDK only through `reqwest`, the `http`
+  feature's transport; the SDK's own code never calls `Url::origin()`. The
+  lockfile matters for `cargo install halcyon-xrpl-cli --locked`; a project
+  that depends on the SDK resolves `url` itself, and gets the fix with
+  `cargo update -p url`.
+
 ## [v0.8.2] (2026-10-24)
 
 A security release: secp256k1 keys are derived and signed on RustCrypto's
