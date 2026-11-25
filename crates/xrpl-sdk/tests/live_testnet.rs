@@ -272,11 +272,24 @@ async fn keylets_and_helpers_match_testnet() {
         if let Some(auth) = submit(&client, &bob, json!({"TransactionType": "MPTokenAuthorize", "Account": b, "MPTokenIssuanceID": id})).await {
             check(&mut checked, "mptoken", keylet::mptoken(&id, b).unwrap().to_string(), created(&auth, "MPToken"));
             // Clio answers mpt_holders once it has ingested the ledger.
+            // Testnet's public Clio sometimes stops ingesting for hours (on
+            // 2026-11-24 it was ~21,700 ledgers behind); then the token cannot
+            // be there yet, and this one check is skipped, saying why. A
+            // current Clio that answers wrongly still fails the test.
             let clio = XrplHttpClient::new(TESTNET_CLIO).unwrap();
             for attempt in 0..10 {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 let holders: Result<Value, _> = clio.raw_request("mpt_holders", json!({"mpt_issuance_id": id})).await;
-                if holders.as_ref().is_ok_and(|h| h["mptokens"].as_array().is_some_and(|m| !m.is_empty())) || attempt == 9 {
+                let found = holders.as_ref().is_ok_and(|h| h["mptokens"].as_array().is_some_and(|m| !m.is_empty()));
+                if !found && attempt == 9 {
+                    let info = clio.raw_request("server_info", json!({})).await.unwrap();
+                    let age = info["info"]["validated_ledger"]["age"].as_u64();
+                    if age.is_none_or(|age| age > 60) {
+                        println!("  mpt_holders (Clio) skipped: Testnet Clio's latest validated ledger is {age:?} s old");
+                        break;
+                    }
+                }
+                if found || attempt == 9 {
                     let holders = query(&clio, &MptHoldersRequest::new(id.clone()), "mpt_holders").await;
                     assert_eq!(holders.mptokens[0].account, b);
                     checked.push("mpt_holders (Clio)".into());

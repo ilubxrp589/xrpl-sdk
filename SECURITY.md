@@ -77,6 +77,17 @@ This section states what the code does; each claim is covered by tests.
 
 ## Known advisories
 
+- **[RUSTSEC-2026-0592](https://rustsec.org/advisories/RUSTSEC-2026-0592.html)**
+  (`url`, published 2026-11-20): `Url::origin()` can overflow the stack on
+  nested `blob:` URLs.
+  - **Not affected:** `url` reaches the SDK only through `reqwest` and its
+    `tower-http`, the `http` feature's transport, and neither they nor the
+    SDK call `Url::origin()` (checked in `reqwest` 0.12.28 and `tower-http`
+    0.6.11).
+  - **Lockfile on 2.5.9 from 0.8.3,** so `cargo audit` is clean and
+    `cargo install halcyon-xrpl-cli --locked` builds with the fixed `url`.
+    A project that depends on the SDK resolves `url` itself:
+    `cargo update -p url`.
 - **[RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)**
   (`crypto-bigint`, published 2026-10-23): operations meant to be
   constant-time could branch on secret values, depending on the compiler
@@ -84,7 +95,7 @@ This section states what the code does; each claim is covered by tests.
   - **Affected:** 0.8.1 and older, for secp256k1 keys. They derive keys and
     sign with `k256` 0.13, whose scalar arithmetic is `crypto-bigint` 0.5's.
     Ed25519 keys (the default) are not affected.
-  - **Fixed in 0.8.2,** which uses `k256` 0.14 on `crypto-bigint` 0.7.6 and
-    needs Rust 1.88. Update with `cargo update -p halcyon-xrpl-core` (the
+  - **Fixed in 0.8.2,** which uses `k256` 0.14 on `crypto-bigint` 0.7.6 or
+    later (0.8.3's lockfile has 0.7.11) and needs Rust 1.88. Update with `cargo update -p halcyon-xrpl-core` (the
     crate with the fix; the others need it from 0.8.2 on). Signatures are the
     same as before.
