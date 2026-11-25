@@ -466,6 +466,32 @@ impl<C: Client> BlockingClient<C> {
         self.call(|c| c.server_info())
     }
 
+    /// [`Client::counterparty_signing_rules`]: the rules a `LoanSet`'s
+    /// counterparty signs under on this server's network.
+    ///
+    /// ```no_run
+    /// # fn run() -> Result<(), xrpl_client::ClientError> {
+    /// use xrpl_client::blocking::BlockingClient;
+    /// use xrpl_core::transaction::loan::SigningRules;
+    ///
+    /// let client = BlockingClient::new("https://s.devnet.rippletest.net:51234")?;
+    /// assert_eq!(client.counterparty_signing_rules()?, SigningRules::Current);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::InsideAsyncRuntime`] when called inside a Tokio runtime;
+    /// otherwise the errors of [`Client::counterparty_signing_rules`]:
+    /// [`ClientError::UnexpectedResponse`] for an `Amendments` entry that does
+    /// not parse, and a [`ClientError`] when the request fails.
+    pub fn counterparty_signing_rules(
+        &self,
+    ) -> Result<xrpl_core::transaction::loan::SigningRules, ClientError> {
+        self.call(|c| c.counterparty_signing_rules())
+    }
+
     /// [`Client::tx`].
     ///
     /// ```no_run

@@ -104,8 +104,8 @@
 //! [`SigningKey`] for a key you reach synchronously (an HSM, a hardware
 //! wallet) or [`AsyncSigningKey`] for a remote one (a cloud KMS, a signing
 //! service), and pass it wherever a [`Wallet`] goes: [`sign`],
-//! [`sign_async`], [`sign_and_submit`], [`sign_for_multisigning`], batch and
-//! channel-claim signing. A secp256k1 signature with a high S (as AWS KMS
+//! [`sign_async`], [`sign_and_submit`], [`sign_for_multisigning`], batch,
+//! loan co-signing and channel-claim signing. A secp256k1 signature with a high S (as AWS KMS
 //! returns half the time) is turned into the low-S form `rippled` requires,
 //! and a remote key's signature is checked against its public key before
 //! anything is submitted. `examples/remote_signer.rs` signs and submits
@@ -199,6 +199,34 @@
 //!     let applied = client.tx(&id.to_string()).await.is_ok();
 //!     println!("inner transaction {id}: {}", if applied { "applied" } else { "not applied" });
 //! }
+//! # Ok(()) }
+//! ```
+//!
+//! ### Lending: a loan both parties sign
+//!
+//! A `LoanSet` (XLS-66) opens a loan between a borrower and the owner of the
+//! loan broker that lends from a vault. One of them sends it; the other, the
+//! counterparty, approves it inside the same transaction with a
+//! `CounterpartySignature` ([`Wallet::sign_as_counterparty`], or
+//! [`Wallet::sign_for_counterparty`] and [`loan::add_counterparty_signers`]
+//! for a counterparty with a signer list). The counterparty signs the final
+//! `Sequence`, `Fee` and the sender's `SigningPubKey`, so autofill first.
+//! [`loan`] explains the signing rules (the prefixes `fixCleanup3_4_0`
+//! introduced) and `examples/lending.rs` runs a loan from start to finish on
+//! Devnet.
+//!
+//! ```no_run
+//! use xrpl_sdk::*;
+//!
+//! # async fn run(client: &XrplHttpClient, alice: &Wallet, carol: &Wallet, broker_id: Hash256) -> Result<(), Box<dyn std::error::Error>> {
+//! // Carol borrows 10 XRP from the broker Alice owns.
+//! let mut tx = models::LoanSet::new(carol.classic_address(), broker_id, "10000000").to_json()?;
+//! client.autofill(&mut tx).await?;                            // the Fee includes Alice's signature
+//! tx["SigningPubKey"] = serde_json::json!(carol.public_key_hex()); // Alice signs it too
+//! let rules = client.counterparty_signing_rules().await?;     // SigningRules::Current on public networks
+//! let approved = alice.sign_as_counterparty(&tx, rules)?;     // Alice approves
+//! let signed = carol.sign(&approved)?;                        // Carol signs, and sends it
+//! client.submit_and_wait(&signed.tx_blob).await?;
 //! # Ok(()) }
 //! ```
 //!
@@ -345,9 +373,10 @@
 //!
 //! ## Cookbook
 //!
-//! Runnable recipes, each with its own funded Testnet wallets
-//! (`cargo run --example <name>` in the repository), each run on Testnet
-//! before release:
+//! Runnable recipes, each with its own funded Testnet wallets (Devnet
+//! wallets for `vault` and `lending`, whose amendments are only on Devnet so
+//! far; `cargo run --example <name>` in the repository), each run on its
+//! network before release:
 //!
 //! | Recipe | Shows |
 //! |---|---|
@@ -362,6 +391,8 @@
 //! | `multisign` | a signer list and a multi-signed transaction |
 //! | `batch` | two accounts' payments in one all-or-nothing Batch |
 //! | `mpt` | a Multi-Purpose Token: create, opt in, send |
+//! | `vault` | a single-asset vault: deposit for shares, withdraw, redeem, delete (Devnet) |
+//! | `lending` | a loan from start to finish, co-signed by the broker's owner (Devnet) |
 //! | `blocking` | all of it without async |
 //! | `watch_streams` | live mainnet ledgers, trading and validations |
 //!
@@ -471,7 +502,8 @@
 //! - **Transaction models**: 186 real transactions (51 types) round-trip
 //!   through their typed models to the same JSON, bytes and ID; an example of
 //!   every other type, signed by `rippled` 3.4.1, encodes to its exact
-//!   `tx_blob`: all 82 types. Batch signatures verify against real batches.
+//!   `tx_blob`: all 82 types. Batch signatures verify against real batches,
+//!   and loan counterparty signatures against 60 loans applied on Devnet.
 //! - **Utilities**: xrpl.js's own fixtures and expected results.
 //! - **Typed responses**: 45 responses (42 methods) recorded from `rippled`
 //!   3.4.1, Clio and Testnet; each must parse, and serializing it back must
@@ -524,7 +556,7 @@
 // docs.rs labels each feature- or platform-gated item with what it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-/// Wallets: keys and address, signing, multi-signing, batches and channel claims.
+/// Wallets: keys and address, signing, multi-signing, batches, loan co-signing and channel claims.
 pub mod wallet;
 
 /// The client crate (`halcyon-xrpl-client`), in full.
@@ -543,6 +575,7 @@ pub use xrpl_core::crypto::{
 };
 pub use xrpl_core::hashes::{self, hash_signed_tx, hash_signed_tx_blob, keylet};
 pub use xrpl_core::transaction::batch;
+pub use xrpl_core::transaction::loan;
 pub use xrpl_core::transaction::models::{self, Tx, TxModel};
 pub use xrpl_core::types::*;
 pub use xrpl_core::utils;

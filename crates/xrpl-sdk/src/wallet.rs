@@ -474,6 +474,91 @@ impl Wallet {
         xrpl_core::transaction::batch::sign_batch_for(batch, batch_signer, &self.address, self)
     }
 
+    /// Approve a `LoanSet` as its counterparty (the borrower, or the loan
+    /// broker's owner: whichever of the two did not send it) with this
+    /// wallet's key, the counterparty's master key or regular key. Returns the
+    /// transaction with its `CounterpartySignature` set; the sender then signs
+    /// it with [`Wallet::sign`] and submits it.
+    ///
+    /// The `LoanSet` must be final first (`Client::autofill` in
+    /// `xrpl-client`: `Sequence`, `Fee` with the counterparty's share, and
+    /// `LastLedgerSequence`), with the sender's `SigningPubKey` set, since the
+    /// counterparty's signature covers all of them. `rules` is
+    /// [`SigningRules::Current`](xrpl_core::transaction::loan::SigningRules::Current)
+    /// on Mainnet, Testnet and Devnet; see
+    /// [`transaction::loan`](xrpl_core::transaction::loan) for the bytes.
+    ///
+    /// ```
+    /// use xrpl_sdk::{loan, Wallet};
+    /// use xrpl_sdk::loan::SigningRules;
+    ///
+    /// // Alice borrows from the broker Bob owns; Alice sends the LoanSet.
+    /// let alice = Wallet::from_seed("sEdSKaCy2JT7JaM7v95H9SxkhP9wS2r")?;
+    /// let bob = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// let tx = serde_json::json!({"TransactionType": "LoanSet", "Account": alice.classic_address(),
+    ///     "LoanBrokerID": "92230C14371FE613C3080DE0C78FDC76EF39078722D592DBFF89E6B59115F3B6",
+    ///     "PrincipalRequested": "1000000", "Sequence": 7, "Fee": "20",
+    ///     "LastLedgerSequence": 7155889, "SigningPubKey": alice.public_key_hex()});
+    /// let approved = bob.sign_as_counterparty(&tx, SigningRules::Current)?;
+    /// assert!(loan::verify_counterparty_signature(&approved, SigningRules::Current)?);
+    /// let signed = alice.sign(&approved)?; // then submit signed.tx_blob
+    /// assert!(xrpl_sdk::verify_transaction(&signed.tx_json)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// The errors of
+    /// [`sign_as_counterparty`](xrpl_core::transaction::loan::sign_as_counterparty):
+    /// [`CoreError::ValidationError`] for a transaction that is not a
+    /// `LoanSet`, is inside a `Batch`, lacks its `SigningPubKey`, `Fee` or
+    /// `Sequence`, or already has a multi-signed `CounterpartySignature`; a
+    /// codec error for one that does not encode.
+    pub fn sign_as_counterparty(
+        &self,
+        tx: &serde_json::Value,
+        rules: xrpl_core::transaction::loan::SigningRules,
+    ) -> Result<serde_json::Value, CoreError> {
+        xrpl_core::transaction::loan::sign_as_counterparty(tx, &self.keypair, rules)
+    }
+
+    /// Sign a `LoanSet` for a counterparty that approves through its signer
+    /// list, as this wallet, a member of that list: one of the `Signers` of
+    /// the `CounterpartySignature`. Unlike [`Wallet::sign_batch_for`], it
+    /// takes no account to sign for: a counterparty multi-signature covers
+    /// the member's own account ID, not the counterparty's. Combine enough of them to meet the list's
+    /// quorum with
+    /// [`loan::add_counterparty_signers`](xrpl_core::transaction::loan::add_counterparty_signers).
+    ///
+    /// ```
+    /// use xrpl_sdk::{loan, Wallet};
+    /// use xrpl_sdk::loan::SigningRules;
+    ///
+    /// // The broker's owner signs through its signer list; Carol is on it.
+    /// let carol = Wallet::from_seed("sp5fghtJtpUorTwvof1NpDXAzNwf5")?;
+    /// let mut tx = serde_json::json!({"TransactionType": "LoanSet", "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    ///     "LoanBrokerID": "92230C14371FE613C3080DE0C78FDC76EF39078722D592DBFF89E6B59115F3B6",
+    ///     "PrincipalRequested": "1000000", "Sequence": 7, "Fee": "20",
+    ///     "SigningPubKey": "ED5F5AC8B98974A3CA843326D9B88CEBD0560177B973EE0B149F782CFAA06DC66A"});
+    /// let signature = carol.sign_for_counterparty(&tx, SigningRules::Current)?;
+    /// loan::add_counterparty_signers(&mut tx, vec![signature])?;
+    /// assert!(loan::verify_counterparty_signature(&tx, SigningRules::Current)?);
+    /// # Ok::<(), xrpl_sdk::CoreError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// As [`Wallet::sign_as_counterparty`], except that a single-signed
+    /// `CounterpartySignature` already there is left for
+    /// `add_counterparty_signers` to refuse.
+    pub fn sign_for_counterparty(
+        &self,
+        tx: &serde_json::Value,
+        rules: xrpl_core::transaction::loan::SigningRules,
+    ) -> Result<xrpl_core::transaction::models::Signer, CoreError> {
+        xrpl_core::transaction::loan::sign_for_counterparty(tx, &self.address, self, rules)
+    }
+
     /// Sign a payment channel claim for `amount_drops` (the channel's total
     /// paid out, not an increment) with this wallet's key.
     ///

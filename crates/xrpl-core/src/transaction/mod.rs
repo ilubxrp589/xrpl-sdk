@@ -5,6 +5,7 @@
 //!   `new` for the required fields and `with_…` for the rest, and
 //!   [`models::TxModel::validate`] for `rippled`'s checks that need no ledger.
 //! - [`batch`]: `Batch` (XLS-56) — inner transactions, `BatchSigners`, the fee.
+//! - [`loan`]: `LoanSet` (XLS-66) — the counterparty's `CounterpartySignature`.
 //! - [`cost`]: what `rippled` charges for a transaction.
 //! - [`metadata`]: what a transaction in a ledger did ([`TransactionMetadata`]).
 //!
@@ -14,6 +15,8 @@
 pub mod batch;
 #[cfg(feature = "std")]
 pub mod cost;
+#[cfg(feature = "std")]
+pub mod loan;
 #[cfg(feature = "std")]
 pub mod metadata;
 #[cfg(feature = "std")]

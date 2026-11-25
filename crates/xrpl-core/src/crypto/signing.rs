@@ -894,7 +894,17 @@ pub async fn sign_for_multisigning_async<K: AsyncSigningKey + ?Sized>(
 /// (a repeat, the wrong order, too many signers or the account signing for
 /// itself is `false`, as `rippled` refuses each). A
 /// `Batch`'s `BatchSigners` are checked too
-/// ([`verify_batch_signers`](crate::transaction::batch::verify_batch_signers)).
+/// ([`verify_batch_signers`](crate::transaction::batch::verify_batch_signers)),
+/// and so is a `LoanSet`'s `CounterpartySignature`
+/// ([`verify_counterparty_signature`](crate::transaction::loan::verify_counterparty_signature))
+/// under [`SigningRules::Current`](crate::transaction::loan::SigningRules::Current),
+/// the rules of every public network; on a network without
+/// `fixCleanup3_4_0`, or for a `LoanSet` from before the amendment was
+/// enabled, check it with `verify_counterparty_signature` and
+/// [`SigningRules::BeforeFixCleanup3_4_0`](crate::transaction::loan::SigningRules::BeforeFixCleanup3_4_0)
+/// instead. A `LoanSet` with no `CounterpartySignature` is not refused here
+/// (`rippled` refuses one outside a `Batch` as malformed, `temBAD_SIGNER`, not
+/// for its signature).
 ///
 /// This checks the cryptography only. Whether the key may sign for the
 /// account (its master key, its regular key, or its signer list with enough
@@ -920,7 +930,9 @@ pub async fn sign_for_multisigning_async<K: AsyncSigningKey + ?Sized>(
 /// [`CoreError::ValidationError`] for a transaction with no signature (no
 /// `TxnSignature` and no `Signers`) or with both, [`CoreError::InvalidHex`]
 /// for a key or signature that is not hex, and a codec error when the
-/// transaction does not encode.
+/// transaction does not encode; for a `CounterpartySignature`, the errors of
+/// [`verify_counterparty_signature`](crate::transaction::loan::verify_counterparty_signature)
+/// (one on a transaction other than a `LoanSet` among them).
 #[cfg(feature = "std")]
 pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
     use crate::codec::encode_for_multisigning;
@@ -986,6 +998,14 @@ pub fn verify_transaction(tx: &serde_json::Value) -> Result<bool, CoreError> {
             }
             all
         }
+    };
+    let signed = if signed && tx.get("CounterpartySignature").is_some() {
+        crate::transaction::loan::verify_counterparty_signature(
+            tx,
+            crate::transaction::loan::SigningRules::Current,
+        )?
+    } else {
+        signed
     };
     if signed && tx.get("BatchSigners").is_some() {
         return crate::transaction::batch::verify_batch_signers(tx);
